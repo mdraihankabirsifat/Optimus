@@ -11,11 +11,23 @@ config_version=5
 [application]
 
 config/name="Project DOF"
+run/main_scene="res://scenes/ui/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+GameManager="*res://scripts/autoload/game_manager.gd"
+SettingsManager="*res://scripts/autoload/settings_manager.gd"
+SaveManager="*res://scripts/autoload/save_manager.gd"
+NetworkManager="*res://scripts/autoload/network_manager.gd"
+
 [display]
 
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
@@ -23,8 +35,25 @@ window/stretch/aspect="expand"
 
 3d/physics_engine="Jolt Physics"
 
+[input]
+
+p1_left={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":65)]}
+p1_right={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":68)]}
+p1_up={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":87)]}
+p1_down={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":83)]}
+p1_rotate_left={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":81)]}
+p1_rotate_right={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":69)]}
+p2_left={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":4194311)]}
+p2_right={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":4194313)]}
+p2_up={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":4194320)]}
+p2_down={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":4194322)]}
+p2_rotate_left={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":44)]}
+p2_rotate_right={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":46)]}
+pause={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":4194305)]}
+
 [rendering]
 
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
