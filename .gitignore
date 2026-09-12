@@ -3,3 +3,5 @@
 /android/
 /builds/
 *.tmp
+/.test_user/
+/test-output.log

@@ -138,7 +138,7 @@ func _finish_game(reason: String) -> void:
 	for player: DOFPlayer in players:
 		player.input_enabled = false
 	var total_score := scores[0] + scores[1]
-	var is_new := SaveManager.record_result(GameManager.selected_difficulty, GameManager.selected_level, total_score)
+	var is_new := SaveManager.record_result(GameManager.selected_difficulty, GameManager.selected_level, total_score, reason == "TEST WINDOW COMPLETE")
 	_show_results(reason, total_score, is_new)
 
 func _show_results(reason: String, total_score: int, is_new: bool) -> void:

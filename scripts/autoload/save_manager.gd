@@ -44,12 +44,12 @@ func save_data() -> void:
 func get_high_score(difficulty: String, level: int) -> int:
 	return int(high_scores.get(_score_key(difficulty, level), 0))
 
-func record_result(difficulty: String, level: int, score: int) -> bool:
+func record_result(difficulty: String, level: int, score: int, completed: bool = true) -> bool:
 	var key := _score_key(difficulty, level)
 	var is_new := score > int(high_scores.get(key, 0))
 	if is_new:
 		high_scores[key] = score
-	if level < 3:
+	if completed and level < 3:
 		unlocked_level_count = maxi(unlocked_level_count, level + 1)
 	last_selected_difficulty = difficulty
 	last_selected_level = clampi(level, 1, unlocked_level_count)
