@@ -104,8 +104,12 @@ def to_normal(height, strength=2.6):
     return out
 
 
-def to_albedo(height, tint, contrast=0.45):
-    """Greyscale-leaning albedo so the material can tint it per surface at runtime."""
+def to_albedo(height, tint, contrast=0.22):
+    """Near-flat albedo so the per-surface tint carries the read, not the noise.
+
+    A stylised game needs the colour to do the talking. High-contrast grunge here fights
+    the tint and turns every surface into the same brown mush.
+    """
     base = height.point(lambda v: int(128 + (v - 128) * contrast))
     r, g, b = tint
     rgb = Image.merge("RGB", (
@@ -144,9 +148,10 @@ def main():
     print("Generating stone texture set at %dx%d" % (SIZE, SIZE))
     # Three surfaces, deliberately different in character so a racer who has just rotated
     # their gravity can still tell floor from wall from ceiling at a glance.
-    build("stone_floor", 1337, (1.02, 0.98, 0.94), crack_strength=0.40, normal_strength=2.2)
-    build("stone_wall", 4242, (1.00, 1.00, 1.00), crack_strength=0.70, normal_strength=3.2)
-    build("stone_ceiling", 8888, (0.96, 0.99, 1.04), crack_strength=0.55, normal_strength=2.8)
+    # Gentle cracks and shallow relief: enough to catch light, not enough to muddy colour.
+    build("stone_floor", 1337, (1.0, 1.0, 1.0), crack_strength=0.20, normal_strength=1.3)
+    build("stone_wall", 4242, (1.0, 1.0, 1.0), crack_strength=0.30, normal_strength=1.7)
+    build("stone_ceiling", 8888, (1.0, 1.0, 1.0), crack_strength=0.22, normal_strength=1.4)
     print("Wrote to %s" % os.path.normpath(OUT))
 
 

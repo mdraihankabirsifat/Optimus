@@ -21,12 +21,12 @@ It is deliberately short — it points at the real documents rather than duplica
 
 ## Environment
 
-- Godot 4.7.2, GDScript, **Forward+ renderer**
+- Godot 4.7.2, GDScript, **GL Compatibility renderer**
 
-  Switched from GL Compatibility on 16 Sep by team decision, to get SSAO, volumetric fog
-  and glow. **This breaks the HTML5 export** — Forward+ needs WebGPU, which browsers do
-  not broadly support. Windows is now the only viable build target, and nobody on the
-  team can test a Windows build from the dev Mac. See `docs/MVP_SCOPE.md`.
+  Briefly on Forward+ (16 Sep) to chase realistic lighting, then reverted once the art
+  direction went stylised: a flat, colour-coded look needs none of Forward+'s expensive
+  features, and GL Compatibility keeps the **web export** viable. Do not switch back
+  without re-reading `docs/MVP_SCOPE.md` — it costs the browser build.
 - Deadline: 17 September 2026, 11:59 PM
 
 ```bash

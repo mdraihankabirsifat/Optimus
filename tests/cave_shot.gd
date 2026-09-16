@@ -20,7 +20,10 @@ func _ready() -> void:
 	await _wait(50)
 	_shot("cave_02_midway")
 
-	_teleport(_cave.graph.finish_cell)
+	# Stand on the cell a racer actually arrives from, facing the exit.
+	var approach: Vector3i = spine[spine.size() - 2] if spine.size() > 1 else _cave.graph.finish_cell
+	_teleport(approach)
+	_player.look_at(CaveBuilder.cell_to_world(_cave.graph.finish_cell), Vector3.UP)
 	await _wait(50)
 	_shot("cave_03_finish")
 	get_tree().quit()

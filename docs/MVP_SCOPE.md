@@ -204,9 +204,31 @@ Consequence:        THE WEB EXPORT IS GONE. Forward+ needs WebGPU and browsers d
 Also:               Forward+ costs more GPU. The dev machine is an M4 and will hide any
                     performance problem this creates. Test on a modest laptop before
                     submitting (SHIP-008).
-Fallback:           The renderer is one line in project.godot. If the Windows build
-                    cannot be produced or tested in time, switching back to
-                    gl_compatibility restores the web path at the cost of the lighting.
+Fallback:           The renderer is one line in project.godot.
+RESOLVED 16 Sep:    Reverted to GL Compatibility. The art direction changed from realistic
+                    to stylised, and a flat colour-coded look needs none of Forward+'s
+                    expensive features - so the web export is back, performance is better,
+                    and the game reads more clearly than it ever did on Forward+. The
+                    realistic direction was fighting the game: a brown cave makes it hard
+                    to tell floor from wall, which is exactly what a player must know after
+                    rotating their own gravity.
+```
+
+### 8. Art direction: stylised, and colour-coded by axis
+
+```
+Original idea:  Stone Age realism - "ancient, enclosed, mysterious".
+Problem:        A realistic brown cave actively fights this game. The core mechanic asks a
+                player to reorient themselves constantly, and a uniformly brown rock
+                corridor gives them nothing to reorient against. It also read as muddy and
+                unfinished no matter how much texture and lighting went into it.
+Recommended:    Stylised, flat-lit, with every surface tinted by the WORLD AXIS it faces:
+                floors sand, X-facing walls teal, Z-facing walls violet, ceilings indigo.
+Why:            It does three jobs at once. Orientation becomes readable at a glance, which
+                is the single biggest playability problem the game had. The theme - degrees
+                of freedom along X, Y and Z - becomes visible in the level itself rather
+                than explained on an About screen. And it looks deliberate, which a
+                half-finished realistic cave never will in a jam timeframe.
 ```
 
 ## Priority order when two things conflict

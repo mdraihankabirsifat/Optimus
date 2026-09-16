@@ -16,12 +16,18 @@ const WALL_THICKNESS := 1.0
 ## Physics layers: 1 is cave geometry, 2 is racers.
 const LAYER_WORLD := 1
 const LAYER_RACERS := 2
-## Stand-on-able surfaces get a warm tone and overheads a cool one, so a racer who has
-## just rotated their gravity still has an absolute reference for which way world-up is.
-const COLOUR_FLOOR := Color(0.58, 0.47, 0.36)
-const COLOUR_CEILING := Color(0.34, 0.39, 0.52)
-const COLOUR_WALL := Color(0.46, 0.45, 0.43)
-const COLOUR_FINISH := Color(1.0, 0.68, 0.22)
+## Surfaces are tinted by the WORLD AXIS they face, not by how they look in isolation.
+##
+## The theme is degrees of freedom along X, Y and Z, so the cave states it directly: every
+## floor is sand, every X-facing wall is teal, every Z-facing wall is violet. After a
+## gravity shift a racer can read their new orientation off the colours around them without
+## a single HUD element, which is the difference between the mechanic feeling clever and
+## feeling disorienting.
+const COLOUR_FLOOR := Color(0.82, 0.64, 0.42)
+const COLOUR_CEILING := Color(0.24, 0.26, 0.40)
+const COLOUR_WALL_X := Color(0.40, 0.58, 0.57)
+const COLOUR_WALL_Z := Color(0.52, 0.46, 0.60)
+const COLOUR_FINISH := Color(1.0, 0.72, 0.26)
 
 ## Slabs bucketed by "kind|level". One MultiMesh per bucket rather than three spanning
 ## the whole cave: the GL Compatibility renderer picks lights PER OBJECT, so a single
@@ -59,7 +65,7 @@ func build(graph: CaveGraph, parent: Node3D) -> void:
 		var kind := parts[0]
 		root.add_child(_make_batch(
 			"Batch_%s" % key.replace("|", "_"), _buckets[key],
-			"stone_%s" % kind, _surface_colour(kind), _surface_uv_scale(kind)))
+			_texture_set(kind), _surface_colour(kind), _surface_uv_scale(kind)))
 	root.add_child(_make_collision())
 	root.add_child(_make_finish(graph))
 	_add_lights(graph, root)
@@ -81,7 +87,7 @@ func _collect_slabs(graph: CaveGraph) -> void:
 				+ Vector3(CaveGraph.DIRS[dir_index]) * (CELL_SIZE * 0.5)
 			var xform := Transform3D(Basis().scaled(size), centre)
 
-			var kind := "wall"
+			var kind := "wallx" if dir_index <= CaveGraph.DIR_MINUS_X else "wallz"
 			match dir_index:
 				CaveGraph.DIR_DOWN:
 					kind = "floor"
@@ -110,13 +116,21 @@ func _surface_colour(kind: String) -> Color:
 	match kind:
 		"floor": return COLOUR_FLOOR
 		"ceiling": return COLOUR_CEILING
-		_: return COLOUR_WALL
+		"wallx": return COLOUR_WALL_X
+		_: return COLOUR_WALL_Z
+
+
+func _texture_set(kind: String) -> String:
+	match kind:
+		"floor": return "stone_floor"
+		"ceiling": return "stone_ceiling"
+		_: return "stone_wall"
 
 
 ## Higher numbers tile the texture more often, so detail reads instead of smearing across
 ## a whole 8-unit slab.
 func _surface_uv_scale(kind: String) -> float:
-	return 0.42 if kind == "wall" else 0.45
+	return 0.45 if kind == "floor" or kind == "ceiling" else 0.42
 
 
 func _slab_size(dir_index: int) -> Vector3:
@@ -165,7 +179,7 @@ func _stone_material(texture_set: String, colour: Color, uv_scale: float) -> Sta
 	if normal != null:
 		mat.normal_enabled = true
 		mat.normal_texture = normal
-		mat.normal_scale = 2.2
+		mat.normal_scale = 0.85
 
 	var rough := _load_texture(texture_set, "rough")
 	if rough != null:
@@ -178,9 +192,9 @@ func _stone_material(texture_set: String, colour: Color, uv_scale: float) -> Sta
 		mat.ao_texture = ao
 		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
 		# Cavity shading should darken the creases without flattening the lighting.
-		mat.ao_light_affect = 0.35
+		mat.ao_light_affect = 0.15
 
-	mat.roughness = 0.92
+	mat.roughness = 0.85
 	mat.metallic = 0.0
 	mat.uv1_scale = Vector3(uv_scale, uv_scale, uv_scale)
 	mat.uv1_triplanar = true
@@ -232,23 +246,44 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 	mat.albedo_color = COLOUR_FINISH
 	mat.emission_enabled = true
 	mat.emission = COLOUR_FINISH
-	mat.emission_energy_multiplier = 6.0
+	mat.emission_energy_multiplier = 4.5
 
-	# A pillar standing on the cell floor rather than a cube floating at its centre, so it
-	# reads as a landmark down a corridor instead of swallowing the camera on arrival.
-	var mesh := MeshInstance3D.new()
+	# The exit is hidden by design, but once it is in line of sight it has to be
+	# unmistakable. A short pillar read as scenery; this is a full-height column plus a
+	# beam running to the ceiling, so it is visible down a corridor and through a shaft
+	# from another level rather than only when you are standing on it.
+	var column := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(2.0, 4.0, 2.0)
-	mesh.mesh = box
-	mesh.material_override = mat
-	mesh.position = Vector3(0.0, -CELL_SIZE * 0.5 + 2.0, 0.0)
-	area.add_child(mesh)
+	box.size = Vector3(1.6, CELL_SIZE * 0.55, 1.6)
+	column.mesh = box
+	column.material_override = mat
+	column.position = Vector3(0.0, -CELL_SIZE * 0.5 + CELL_SIZE * 0.275, 0.0)
+	area.add_child(column)
+
+	var beam := MeshInstance3D.new()
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 0.35
+	shaft.bottom_radius = 0.9
+	shaft.height = CELL_SIZE
+	shaft.radial_segments = 8
+	beam.mesh = shaft
+	var beam_mat := StandardMaterial3D.new()
+	beam_mat.albedo_color = Color(COLOUR_FINISH.r, COLOUR_FINISH.g, COLOUR_FINISH.b, 0.28)
+	beam_mat.emission_enabled = true
+	beam_mat.emission = COLOUR_FINISH
+	beam_mat.emission_energy_multiplier = 5.0
+	beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam.mesh.material = beam_mat
+	beam.position = Vector3.ZERO
+	area.add_child(beam)
 
 	var light := OmniLight3D.new()
 	light.light_color = COLOUR_FINISH
 	light.light_energy = 9.0
 	light.omni_range = CELL_SIZE * 3.6
-	light.light_volumetric_fog_energy = 3.0
 	light.position = Vector3(0.0, -CELL_SIZE * 0.5 + 4.5, 0.0)
 	area.add_child(light)
 	return area
@@ -260,11 +295,14 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 ## pale and cold. In a game about moving vertically that gives a racer an instant read on
 ## how high they are without a single HUD element, and it stops 50-odd stone cells from
 ## looking like one continuous corridor.
+## Near-white with only a slight bias per level. The surfaces already carry a strong
+## colour code by axis; saturated lights on top of that would be two colour systems
+## fighting over the same read, and orientation is the one that matters.
 const LEVEL_LIGHT: Array[Color] = [
-	Color(1.00, 0.62, 0.28),
-	Color(1.00, 0.86, 0.52),
-	Color(0.68, 0.88, 1.00),
-	Color(0.55, 0.82, 1.10),
+	Color(1.00, 0.90, 0.78),
+	Color(1.00, 0.95, 0.88),
+	Color(0.92, 0.96, 1.00),
+	Color(0.88, 0.94, 1.00),
 ]
 
 
@@ -277,7 +315,7 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 	flame.albedo_color = Color(1.0, 0.72, 0.34)
 	flame.emission_enabled = true
 	flame.emission = Color(1.0, 0.66, 0.28)
-	flame.emission_energy_multiplier = 8.0
+	flame.emission_energy_multiplier = 4.0
 	flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
 	var cells: Array = graph.cells.keys()
@@ -300,13 +338,12 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 		var light := OmniLight3D.new()
 		light.position = base
 		light.light_color = tint
-		light.light_energy = 6.5 if junction else 5.0
+		light.light_energy = 5.0 if junction else 3.8
 		light.omni_range = CELL_SIZE * 2.6
 		light.omni_attenuation = 1.5
 		# Feeds the volumetric fog so each torch throws a visible shaft of light rather
 		# than just brightening the stone around it.
-		light.light_volumetric_fog_energy = 0.9
-		light.light_specular = 0.6
+		light.light_specular = 0.25
 		# Shadows only at junctions: they are the expensive part and the places worth
 		# spending it, since that is where geometry overlaps and depth needs reading.
 		light.shadow_enabled = junction and placed % 3 == 0
@@ -395,7 +432,8 @@ func _add_detail(graph: CaveGraph, root: Node3D) -> void:
 				var right := fwd.cross(up).normalized()
 				var b := Basis(right, up, -fwd).rotated(up, rng.randf_range(0.0, TAU))
 				var sc := rng.randf_range(1.4, 2.6)
-				_bucket(panels, rng.randi() % PANEL_VARIANTS,
+				var axis := "wallx" if dir_index <= CaveGraph.DIR_MINUS_X else "wallz"
+				_bucket(panels, "%s|%d" % [axis, rng.randi() % PANEL_VARIANTS],
 					Transform3D(b.scaled(Vector3(sc, rng.randf_range(0.6, 1.2), sc)), p4))
 
 	var detail := Node3D.new()
@@ -404,10 +442,32 @@ func _add_detail(graph: CaveGraph, root: Node3D) -> void:
 	_emit_props(detail, boulders, "boulder", "stone_floor", COLOUR_FLOOR)
 	_emit_props(detail, rubble, "rubble", "stone_floor", COLOUR_FLOOR)
 	_emit_props(detail, spikes, "stalactite", "stone_ceiling", COLOUR_CEILING)
-	_emit_props(detail, panels, "wall_panel", "stone_wall", COLOUR_WALL)
+	_emit_panels(detail, panels)
 
 
-func _bucket(store: Dictionary, variant: int, xform: Transform3D) -> void:
+## Panels are keyed "axis|variant" so each one is emitted in its own wall's colour.
+func _emit_panels(parent: Node3D, store: Dictionary) -> void:
+	for key: String in store:
+		var parts := key.split("|")
+		var axis := parts[0]
+		var mesh := _prop_mesh("wall_panel_%02d" % int(parts[1]))
+		if mesh == null:
+			continue
+		var items: Array[Transform3D] = store[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = items.size()
+		for i in items.size():
+			mm.set_instance_transform(i, items[i])
+		var node := MultiMeshInstance3D.new()
+		node.name = "panel_%s" % key.replace("|", "_")
+		node.multimesh = mm
+		node.material_override = _stone_material("stone_wall", _surface_colour(axis), 0.8)
+		parent.add_child(node)
+
+
+func _bucket(store: Dictionary, variant: Variant, xform: Transform3D) -> void:
 	if not store.has(variant):
 		store[variant] = [] as Array[Transform3D]
 	store[variant].append(xform)
