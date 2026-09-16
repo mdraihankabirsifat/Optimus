@@ -31,6 +31,38 @@ var finish_cell := Vector3i.ZERO
 ## The guaranteed spawn-to-finish route. Solvability is proven on this, by construction.
 var spine: Array[Vector3i] = []
 
+## Placement data decided by the generator and consumed by the builder. Pure data:
+## the builder never chooses where anything goes.
+## Fire patches: {"cell": Vector3i, "side": int 0-3}. `side` leaves one edge of the cell
+## clear so a fire is a cost, never a wall.
+var hazards: Array[Dictionary] = []
+## Mystery boxes: {"cell": Vector3i, "corner": int 0-3, "index": int}
+var boxes: Array[Dictionary] = []
+## Set dressing: {"cell": Vector3i, "kind": String, "variant": int}
+## kinds: stalagmite, stalactite, crystal, moss, torch, ember
+var decor: Array[Dictionary] = []
+
+
+## Number of open faces at a cell (its degree in the graph).
+func degree(c: Vector3i) -> int:
+	if not cells.has(c):
+		return 0
+	return _popcount(int(cells[c]))
+
+
+func has_vertical_link(c: Vector3i) -> bool:
+	return is_linked(c, DIR_UP) or is_linked(c, DIR_DOWN)
+
+
+## Cells in a stable order, so anything iterating them is deterministic across machines.
+func sorted_cells() -> Array:
+	var keys: Array = cells.keys()
+	keys.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		if a.x != b.x: return a.x < b.x
+		if a.y != b.y: return a.y < b.y
+		return a.z < b.z)
+	return keys
+
 
 static func opposite(dir_index: int) -> int:
 	return dir_index ^ 1

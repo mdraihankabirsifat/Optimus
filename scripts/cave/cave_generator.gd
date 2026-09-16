@@ -13,7 +13,15 @@ extends RefCounted
 ## the number of charges a racer needs to finish, and it is capped below the starting five.
 
 ## Bump when generation logic changes. Peers with different versions cannot race together.
-const VERSION := 1
+const VERSION := 2
+
+## Set dressing and pickups. Dead ends are rewarded with boxes far more often than
+## corridors are, so exploring a wrong turn is a gamble rather than a pure loss.
+var dead_end_box_chance := 0.7
+var max_boxes := 12
+var max_fires := 9
+var max_torches := 10
+var crystal_colours := 4
 
 var size := Vector3i(6, 4, 6)
 ## Racers start with 5 charges; the guaranteed route may use at most this many, leaving
@@ -58,7 +66,75 @@ func _build() -> bool:
 		return false
 	_add_branches()
 	_add_loops()
+	_place_hazards_and_boxes()
+	_place_decor()
 	return true
+
+
+## Fire and mystery boxes, from the same seeded RNG as the cave itself.
+##
+## Fire never appears near spawn, never in a shaft cell (landing in flames after a forced
+## drop reads as unfair), and always leaves one edge of the cell clear. Boxes favour dead
+## ends so a wrong turn can still pay off.
+func _place_hazards_and_boxes() -> void:
+	var distances := _graph.distances_from(_graph.spawn_cell)
+	var taken := {_graph.spawn_cell: true, _graph.finish_cell: true}
+	var fires := 0
+	var box_count := 0
+
+	for c: Vector3i in _graph.sorted_cells():
+		if taken.has(c) or fires >= max_fires:
+			continue
+		var hops: int = int(distances.get(c, 0))
+		if hops < AppConfig.HAZARD_MIN_SPAWN_DISTANCE:
+			continue
+		if _graph.has_vertical_link(c):
+			continue
+		if _rng.randf() < AppConfig.FIRE_DENSITY:
+			_graph.hazards.append({"cell": c, "side": _rng.randi_range(0, 3)})
+			taken[c] = true
+			fires += 1
+
+	for c: Vector3i in _graph.sorted_cells():
+		if taken.has(c) or box_count >= max_boxes:
+			continue
+		var hops: int = int(distances.get(c, 0))
+		if hops < AppConfig.BOX_MIN_SPAWN_DISTANCE:
+			continue
+		var chance: float = dead_end_box_chance if _graph.degree(c) == 1 \
+			else AppConfig.BOX_DENSITY * 0.5
+		if _rng.randf() < chance:
+			_graph.boxes.append({"cell": c, "corner": _rng.randi_range(0, 3), "index": box_count})
+			taken[c] = true
+			box_count += 1
+
+
+## Landmarks so no two chambers read alike, plus a soft environmental cue: cells within
+## two hops of the finish carry ember crystals. Warmth near the exit rewards attention
+## without ever marking the exit itself.
+func _place_decor() -> void:
+	var near_exit := _graph.distances_from(_graph.finish_cell)
+	var torches := 0
+	for c: Vector3i in _graph.sorted_cells():
+		if c == _graph.finish_cell:
+			continue
+		var exit_hops: int = int(near_exit.get(c, 99))
+		if exit_hops <= 2 and c != _graph.spawn_cell:
+			_graph.decor.append({"cell": c, "kind": "ember", "variant": _rng.randi_range(0, 3)})
+
+		if _graph.degree(c) >= 3 and torches < max_torches and _rng.randf() < 0.55:
+			_graph.decor.append({"cell": c, "kind": "torch", "variant": _rng.randi_range(0, 3)})
+			torches += 1
+
+		var roll := _rng.randf()
+		if roll < 0.30:
+			_graph.decor.append({"cell": c, "kind": "stalagmite", "variant": _rng.randi_range(0, 7)})
+		elif roll < 0.52:
+			_graph.decor.append({"cell": c, "kind": "stalactite", "variant": _rng.randi_range(0, 7)})
+		elif roll < 0.70:
+			_graph.decor.append({"cell": c, "kind": "crystal", "variant": _rng.randi_range(0, crystal_colours - 1)})
+		elif roll < 0.82:
+			_graph.decor.append({"cell": c, "kind": "moss", "variant": _rng.randi_range(0, 3)})
 
 
 ## Walk from spawn to finish in legs: wander horizontally, climb, wander, climb, wander.

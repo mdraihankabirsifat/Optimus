@@ -53,25 +53,20 @@ These came from the team's design document. Do not alter them without an explici
 
 ## Current state
 
-**Phase 1 is complete.** The gravity frame works and is verified: `scenes/game/test_chamber.tscn`
-is playable, and `tests/test_gravity.gd` passes 150 assertions covering every 90° and 180° shift
-from all six cardinal orientations, chained-rotation drift, and charge accounting.
+**Tier 1 and Tier 2 are playable end to end** (17 Sept). Splash → menu → lobby → race →
+results → rematch, with no editor. Seeded cave with fire, mystery boxes and decor; 1-4
+non-omniscient bots at three skill levels; full HUD with DOF readout and gravity preview;
+pause menu; settings persisted; synthesised audio; How to Play, About and Credits screens.
+Title is **Six Ways Down** (`AppConfig.GAME_TITLE`).
 
-Nothing else exists yet — no cave generation, no match rules, no bots, no menus, no audio.
+Not done: exported builds verified on Windows/web, video, screenshots for itch.io, submission.
+Online multiplayer (Tier 3) was never started and is out.
 
-Check `docs/TASK_BOARD.md` for what is actually done. That board is the authority on progress,
-not this file.
+Check `docs/TASK_BOARD.md` for detail. That board is the authority on progress.
 
 ## Current priority
 
-**Phase 2 onward, in parallel.** The gravity frame is stable, so the other three workstreams
-are unblocked:
-
-- Cave generation (LEVEL-001 →) — the longest pole, start it first
-- Match rules and health (MATCH-001, HEALTH-001 →)
-- HUD and menus (UI-001 →), replacing the prototype `debug_hud.gd`
-
-Treat `gravity_controller.gd` as read-only unless you are the person who owns it.
+Ship: export Windows + web, play-test by a human, record the video, submit.
 
 ## Time reality — read before planning anything
 

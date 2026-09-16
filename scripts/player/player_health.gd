@@ -8,10 +8,14 @@ extends Node
 signal damaged(amount: float, source: String)
 signal hearts_changed(hearts: float)
 signal eliminated()
+signal shield_changed(active: bool)
+signal shield_absorbed()
 
 var hearts: float = 5.0
 var is_eliminated: bool = false
 var is_invulnerable: bool = false
+## A mystery-box shield soaks the next hit entirely. Never stacks.
+var has_shield: bool = false
 
 ## Per-source cooldowns. Prevents a single hazard draining hearts every physics frame.
 var _source_cooldowns: Dictionary = {}
@@ -48,19 +52,31 @@ func apply_damage(amount: float, source: String = "unknown", cooldown: float = 0
 	if _source_cooldowns.has(source):
 		return false
 
-	hearts = maxf(0.0, hearts - amount)
 	if cooldown > 0.0:
 		_source_cooldowns[source] = cooldown
-
 	is_invulnerable = true
 	_invuln_timer = AppConfig.INVULNERABILITY_TIME
 
+	if has_shield:
+		has_shield = false
+		shield_changed.emit(false)
+		shield_absorbed.emit()
+		return true
+
+	hearts = maxf(0.0, hearts - amount)
 	damaged.emit(amount, source)
 	hearts_changed.emit(hearts)
 
 	if hearts <= 0.0:
 		eliminate()
 	return true
+
+
+func grant_shield() -> void:
+	if is_eliminated:
+		return
+	has_shield = true
+	shield_changed.emit(true)
 
 
 ## Heart Refill. Restores hearts up to the cap.

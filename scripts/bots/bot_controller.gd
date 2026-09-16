@@ -17,9 +17,15 @@ extends Node
 @export var think_interval: float = 0.25
 ## How close to a cell centre counts as "lined up" before dropping down a shaft.
 const CENTRE_TOLERANCE := 1.2
+const BOX_REACH := 3.2
+const EASY_JUNCTION_PAUSE := 1.6
 
 var knowledge := BotKnowledge.new()
 var display_name: String = "Bot"
+## 0 Easy: walks everywhere and hesitates. 1 Normal: sprints only on longer runs.
+## 2 Hard: always sprints. Movement rules are identical at every level -- skill only
+## changes choices a human could also make.
+var skill: int = 2
 
 var _planner := BotPlanner.new()
 var _graph: CaveGraph
@@ -27,21 +33,24 @@ var _body: PlayerController
 var _path: Array[Vector3i] = []
 var _think_timer: float = 0.0
 var _exit_was_known: bool = false
+var _hesitate: float = 0.0
 
 
-func setup(graph: CaveGraph, bot_name: String, colour: Color, personality: int) -> void:
+func setup(graph: CaveGraph, bot_name: String, colour: Color, personality: int, p_skill: int = 2) -> void:
+	skill = clampi(p_skill, 0, 2)
 	_graph = graph
 	display_name = bot_name
 	# Stable per-bot route preference and reaction speed, so four bots do not run the
 	# same line and cross the finish line together.
 	_planner.personality = personality
 	_planner.frontier_jitter = 3.0
-	think_interval = 0.18 + 0.07 * float(personality % 4)
-	var visual := get_parent().get_node_or_null("Visual") as MeshInstance3D
-	if visual != null:
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = colour
-		visual.set_surface_override_material(0, mat)
+	think_interval = 0.18 + 0.07 * float(personality % 4) + (0.35 if skill == 0 else 0.0)
+	var body := get_parent() as PlayerController
+	body.display_name = bot_name
+	body.set_racer_colour(colour)
+	var label := body.get_node_or_null("NameLabel") as Label3D
+	if label != null:
+		label.text = bot_name
 
 
 func _ready() -> void:
@@ -62,6 +71,11 @@ func _physics_process(delta: float) -> void:
 
 	var cell := CaveBuilder.world_to_cell(_body.global_position)
 	_observe(cell)
+	_open_nearby_box()
+	if _hesitate > 0.0:
+		_hesitate -= delta
+		_body.move_input = Vector2.ZERO
+		return
 
 	_think_timer -= delta
 	if _path.is_empty() or _think_timer <= 0.0:
@@ -75,11 +89,23 @@ func _physics_process(delta: float) -> void:
 	_execute_step(cell, _path[0])
 
 
+## A box within arm's reach is something the bot can plainly see, so opening it breaks no
+## information boundary. Bots never path toward boxes; they only take what they pass.
+func _open_nearby_box() -> void:
+	for box: MysteryBox in get_tree().get_nodes_in_group("mystery_boxes"):
+		if not box.is_open and box.global_position.distance_to(_body.global_position) < BOX_REACH:
+			box.interact(_body)
+			return
+
+
 ## Feed the knowledge model exactly what is visible from this cell and nothing more.
 func _observe(cell: Vector3i) -> void:
 	if not _graph.has_cell(cell):
 		return
 	var finish_here := cell == _graph.finish_cell
+	# Easy bots stop to look around at every junction they have not seen before.
+	if skill == 0 and not knowledge.has_seen(cell) and _graph.degree(cell) >= 3:
+		_hesitate = EASY_JUNCTION_PAUSE
 	knowledge.observe(cell, int(_graph.cells[cell]), finish_here)
 
 	# Spotting the exit invalidates whatever it was exploring toward.
@@ -113,7 +139,7 @@ func _execute_step(cell: Vector3i, target: Vector3i) -> void:
 		_execute_vertical(cell, dir_index)
 	else:
 		_steer_towards(CaveBuilder.cell_to_world(target))
-		_body.sprint_input = true
+		_body.sprint_input = skill >= 2 or (skill == 1 and _path.size() >= 3)
 
 
 ## Vertical moves are made by gravity, not by walking. Line up under the shaft first, then

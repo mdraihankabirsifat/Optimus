@@ -5,6 +5,8 @@ extends Node
 
 @export var cave_seed: int = 4242
 @export var bots: int = 4
+## Pass `-- skill=0` to watch Easy bots.
+@export var skill: int = 2
 
 var _world: Node3D
 var _t := 0.0
@@ -14,6 +16,10 @@ func _ready() -> void:
 	_world.randomise_seed = false
 	_world.fixed_seed = cave_seed
 	_world.bot_count = bots
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("skill="):
+			skill = int(arg.trim_prefix("skill="))
+	_world.bot_skill = skill
 	add_child(_world)
 	await get_tree().process_frame
 

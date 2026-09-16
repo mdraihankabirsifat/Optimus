@@ -1,8 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_controller"]
 [ext_resource type="Script" path="res://scripts/player/gravity_controller.gd" id="2_gravity"]
 [ext_resource type="Script" path="res://scripts/player/player_health.gd" id="3_health"]
+[ext_resource type="Script" path="res://scripts/player/camera_controller.gd" id="4_camera"]
+[ext_resource type="Script" path="res://scripts/player/player_interaction.gd" id="5_interact"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.4
@@ -14,6 +16,15 @@ height = 1.8
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_racer"]
 albedo_color = Color(0.29, 0.72, 0.98, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_visor"]
+size = Vector3(0.5, 0.16, 0.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_visor"]
+albedo_color = Color(0.08, 0.08, 0.1, 1)
+emission_enabled = true
+emission = Color(0.6, 0.9, 1, 1)
+emission_energy_multiplier = 1.5
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
@@ -28,13 +39,38 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
 
 [node name="Camera3D" type="Camera3D" parent="Head"]
 fov = 80.0
+script = ExtResource("4_camera")
+
+[node name="InteractRay" type="RayCast3D" parent="Head/Camera3D"]
+target_position = Vector3(0, 0, -3.6)
+collision_mask = 4
+collide_with_areas = true
+collide_with_bodies = false
 
 [node name="Visual" type="MeshInstance3D" parent="."]
 mesh = SubResource("CapsuleMesh_body")
 surface_material_override/0 = SubResource("StandardMaterial3D_racer")
+
+[node name="Visor" type="MeshInstance3D" parent="Visual"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.62, -0.32)
+mesh = SubResource("BoxMesh_visor")
+surface_material_override/0 = SubResource("StandardMaterial3D_visor")
+
+[node name="NameLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.45, 0)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = false
+fixed_size = false
+text = ""
+font_size = 40
+outline_size = 10
 
 [node name="GravityController" type="Node" parent="."]
 script = ExtResource("2_gravity")
 
 [node name="PlayerHealth" type="Node" parent="."]
 script = ExtResource("3_health")
+
+[node name="Interaction" type="Node" parent="."]
+script = ExtResource("5_interact")

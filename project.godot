@@ -11,19 +11,25 @@ config_version=5
 [application]
 
 config/name="Optimus"
-run/main_scene="res://scenes/game/game_world.tscn"
+run/main_scene="res://scenes/ui/splash.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
 AppConfig="*res://autoload/app_config.gd"
+GameState="*res://autoload/game_state.gd"
+SettingsManager="*res://autoload/settings_manager.gd"
+AudioManager="*res://autoload/audio_manager.gd"
+SceneRouter="*res://autoload/scene_router.gd"
+NetManager="*res://autoload/net_manager.gd"
 
 [display]
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
 [input]
 
@@ -72,6 +78,16 @@ pause={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194305,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
+spectate_next={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194306,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+skip_wait={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194309,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
 
 [physics]
 
@@ -81,6 +97,12 @@ pause={
 
 [rendering]
 
+textures/vram_compression/import_etc2_astc=true
+
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+; Cave geometry is batched into chunks; each chunk may sit near several torches and
+; crystals, so the per-object light cap is raised from the default 8.
+limits/opengl/max_lights_per_object=16
+anti_aliasing/quality/msaa_3d=1

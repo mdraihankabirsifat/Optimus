@@ -81,6 +81,15 @@ func add_charges(amount: int) -> void:
 	charges_changed.emit(charges)
 
 
+## Remove charges, never below zero. Used by the mystery-box penalty. Returns how many
+## were actually taken so the caller can describe it honestly.
+func remove_charges(amount: int) -> int:
+	var taken: int = mini(amount, charges)
+	charges -= taken
+	charges_changed.emit(charges)
+	return taken
+
+
 ## Called by the player controller when an out-of-bounds condition is detected.
 ## Returns the damage to apply, or -1.0 if the racer should be eliminated instead.
 func handle_out_of_bounds() -> float:

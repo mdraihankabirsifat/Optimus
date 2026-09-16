@@ -45,7 +45,9 @@ static func floor_position(c: Vector3i) -> Vector3:
 	return cell_to_world(c) + Vector3(0.0, -CELL_SIZE * 0.5 + 1.0, 0.0)
 
 
-func build(graph: CaveGraph, parent: Node3D) -> void:
+## `match_seed` fixes mystery box outcomes. Pass -1 to build bare geometry with no
+## hazards, boxes or decor (the gravity test chamber and some harnesses want that).
+func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 	_collect_slabs(graph)
 
 	var root := Node3D.new()
@@ -58,6 +60,163 @@ func build(graph: CaveGraph, parent: Node3D) -> void:
 	root.add_child(_make_collision())
 	root.add_child(_make_finish(graph))
 	_add_lights(graph, root)
+	if match_seed >= 0:
+		_add_features(graph, root, match_seed)
+
+
+## Fire, boxes and set dressing, exactly where the generator put them. Offsets are derived
+## from the stored variant, never rolled here, so every machine builds the same cave.
+func _add_features(graph: CaveGraph, root: Node3D, match_seed: int) -> void:
+	var holder := Node3D.new()
+	holder.name = "Features"
+	root.add_child(holder)
+
+	for i in graph.hazards.size():
+		var h: Dictionary = graph.hazards[i]
+		var fire := FireHazard.create(i, int(h["side"]))
+		fire.position += cell_to_world(h["cell"])
+		holder.add_child(fire)
+
+	var finish_pos := cell_to_world(graph.finish_cell)
+	for b: Dictionary in graph.boxes:
+		var box := MysteryBox.create(int(b["index"]), match_seed, int(b["corner"]), finish_pos)
+		box.position += cell_to_world(b["cell"])
+		holder.add_child(box)
+
+	var kit := _decor_kit()
+	for d: Dictionary in graph.decor:
+		var node := _make_decor(graph, d, kit)
+		if node != null:
+			holder.add_child(node)
+
+
+func _decor_kit() -> Dictionary:
+	var rock := StandardMaterial3D.new()
+	rock.albedo_color = Color(0.40, 0.34, 0.28)
+	rock.roughness = 1.0
+	var moss := StandardMaterial3D.new()
+	moss.albedo_color = Color(0.25, 0.42, 0.18)
+	moss.emission_enabled = true
+	moss.emission = Color(0.2, 0.5, 0.15)
+	moss.emission_energy_multiplier = 0.25
+	var ember := _glow(Color(1.0, 0.42, 0.1), 2.4)
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color(0.3, 0.18, 0.09)
+	var crystals: Array[StandardMaterial3D] = [
+		_glow(Color(0.35, 0.8, 1.0), 1.8), _glow(Color(0.7, 0.4, 1.0), 1.8),
+		_glow(Color(0.4, 1.0, 0.6), 1.6), _glow(Color(1.0, 0.45, 0.7), 1.6),
+	]
+	return {"rock": rock, "moss": moss, "ember": ember, "wood": wood,
+		"flame": _glow(Color(1.0, 0.6, 0.15), 3.0), "crystals": crystals}
+
+
+func _glow(colour: Color, energy: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = colour
+	m.emission_enabled = true
+	m.emission = colour
+	m.emission_energy_multiplier = energy
+	return m
+
+
+func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
+	var c: Vector3i = d["cell"]
+	var v: int = int(d["variant"])
+	var kind: String = d["kind"]
+	var centre := cell_to_world(c)
+	var floor_y := -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5
+	var ceil_y := CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5
+	# Hug a wall so decor never blocks the corridor centre or a box corner.
+	var side := v % 4
+	var along := (float((v * 37 + c.x * 11 + c.z * 7) % 5) - 2.0) * 0.8
+	var edge := CELL_SIZE * 0.5 - 1.1
+	var offsets := [Vector3(edge, 0, along), Vector3(-edge, 0, along),
+		Vector3(along, 0, edge), Vector3(along, 0, -edge)]
+	var off: Vector3 = offsets[side]
+	var has_floor := not graph.is_linked(c, CaveGraph.DIR_DOWN)
+	var has_ceiling := not graph.is_linked(c, CaveGraph.DIR_UP)
+
+	var root := Node3D.new()
+	match kind:
+		"stalagmite", "stalactite":
+			var hanging := kind == "stalactite"
+			if (hanging and not has_ceiling) or (not hanging and not has_floor):
+				return null
+			var h := 1.2 + float(v % 4) * 0.45
+			var mesh := CylinderMesh.new()
+			mesh.top_radius = 0.0 if not hanging else 0.35 + float(v % 3) * 0.1
+			mesh.bottom_radius = 0.35 + float(v % 3) * 0.1 if not hanging else 0.0
+			mesh.height = h
+			mesh.radial_segments = 7
+			root.add_child(_mesh(mesh, kit["rock"], Vector3(0, h * 0.5 if not hanging else -h * 0.5, 0)))
+			root.position = centre + off + Vector3(0, ceil_y if hanging else floor_y, 0)
+		"crystal":
+			if not has_floor:
+				return null
+			var crystals: Array = kit["crystals"]
+			var mat: StandardMaterial3D = crystals[v % crystals.size()]
+			for k in 3:
+				var prism := PrismMesh.new()
+				prism.size = Vector3(0.35, 0.9 + 0.35 * k, 0.35)
+				var shard := _mesh(prism, mat, Vector3(0.3 * (k - 1), prism.size.y * 0.5, 0.2 * (k % 2)))
+				shard.rotation = Vector3(0.0, float(k) * 1.1, 0.25 * float(k - 1))
+				root.add_child(shard)
+			root.position = centre + off + Vector3(0, floor_y, 0)
+		"moss":
+			if not has_floor:
+				return null
+			var patch := CylinderMesh.new()
+			patch.top_radius = 1.1 + 0.2 * float(v)
+			patch.bottom_radius = patch.top_radius
+			patch.height = 0.06
+			patch.radial_segments = 10
+			root.add_child(_mesh(patch, kit["moss"], Vector3(0, 0.03, 0)))
+			root.position = centre + off * 0.8 + Vector3(0, floor_y, 0)
+		"ember":
+			if not has_floor:
+				return null
+			for k in 4:
+				var pebble := SphereMesh.new()
+				pebble.radius = 0.16 + 0.05 * float((v + k) % 3)
+				pebble.height = pebble.radius * 1.4
+				root.add_child(_mesh(pebble, kit["ember"],
+					Vector3(0.45 * cos(k * 1.7), 0.08, 0.45 * sin(k * 1.7))))
+			root.position = centre + off + Vector3(0, floor_y, 0)
+		"torch":
+			# A torch on a wall that actually exists, at head height.
+			var wall_dirs := [CaveGraph.DIR_PLUS_X, CaveGraph.DIR_MINUS_X,
+				CaveGraph.DIR_PLUS_Z, CaveGraph.DIR_MINUS_Z]
+			var wall := -1
+			for k in 4:
+				var candidate: int = wall_dirs[(v + k) % 4]
+				if not graph.is_linked(c, candidate):
+					wall = candidate
+					break
+			if wall == -1:
+				return null
+			var n := Vector3(CaveGraph.DIRS[wall])
+			var stick := CylinderMesh.new()
+			stick.top_radius = 0.09
+			stick.bottom_radius = 0.06
+			stick.height = 0.8
+			root.add_child(_mesh(stick, kit["wood"], Vector3.ZERO))
+			var flame := SphereMesh.new()
+			flame.radius = 0.2
+			flame.height = 0.5
+			root.add_child(_mesh(flame, kit["flame"], Vector3(0, 0.55, 0)))
+			root.position = centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.25) \
+				+ Vector3(0, floor_y + 2.4, 0)
+		_:
+			return null
+	return root
+
+
+func _mesh(mesh: Mesh, mat: Material, pos: Vector3) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	return mi
 
 
 func _collect_slabs(graph: CaveGraph) -> void:

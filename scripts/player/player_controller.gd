@@ -5,6 +5,12 @@ extends CharacterBody3D
 ##
 ## This file must not own gravity direction or health. See docs/ARCHITECTURE.md.
 
+signal landed(impact_speed: float)
+signal jumped()
+signal footstep()
+signal pause_requested()
+signal speed_effect_changed(multiplier: float, remaining: float)
+
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var gravity: GravityController = $GravityController
@@ -12,6 +18,8 @@ extends CharacterBody3D
 
 var mouse_sensitivity: float = AppConfig.MOUSE_SENSITIVITY
 var is_local_player: bool = true
+var display_name: String = "You"
+var racer_colour: Color = Color(0.29, 0.72, 0.98)
 ## Cleared by MatchController during countdown, after finishing, and on elimination.
 ## Looking around stays allowed while this is false -- only movement is frozen, so a racer
 ## can orient themselves before GO.
@@ -24,9 +32,18 @@ var move_input: Vector2 = Vector2.ZERO
 var sprint_input: bool = false
 var jump_requested: bool = false
 
+## Temporary speed modifier from a mystery box (boost above 1, slow below 1).
+var speed_multiplier: float = 1.0
+var _speed_effect_timer: float = 0.0
+
 ## True while the G chord is held, which suppresses ordinary WASD movement so the
-## keypress can be read as a gravity command instead.
-var _gravity_armed: bool = false
+## keypress can be read as a gravity command instead. Read by the HUD for the preview.
+var gravity_armed: bool = false
+
+var _was_on_floor: bool = false
+var _coyote_timer: float = 0.0
+var _step_accumulator: float = 0.0
+var _last_vertical_speed: float = 0.0
 
 
 func _ready() -> void:
@@ -38,6 +55,10 @@ func _ready() -> void:
 		add_to_group("local_player")
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		$Visual.visible = false
+		mouse_sensitivity = AppConfig.MOUSE_SENSITIVITY * SettingsManager.sensitivity
+		SettingsManager.changed.connect(func() -> void:
+			mouse_sensitivity = AppConfig.MOUSE_SENSITIVITY * SettingsManager.sensitivity)
+	add_to_group("racers")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -45,8 +66,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event.is_action_pressed("pause"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if \
-			Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
+		pause_requested.emit()
+		return
 
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		# Look is locked during a shift so the slerp is not fought by mouse input.
@@ -67,13 +88,21 @@ func _physics_process(delta: float) -> void:
 		move_input = Vector2.ZERO
 		sprint_input = false
 		jump_requested = false
-		_gravity_armed = false
+		gravity_armed = false
+
+	_tick_speed_effect(delta)
 
 	var up := gravity.local_up()
 	up_direction = up
 
 	var vertical := up * velocity.dot(up)
 	var planar := velocity - vertical
+	var on_floor := is_on_floor()
+
+	if on_floor:
+		_coyote_timer = AppConfig.COYOTE_TIME
+	else:
+		_coyote_timer = maxf(0.0, _coyote_timer - delta)
 
 	if gravity.is_transitioning or not input_enabled:
 		# Movement is locked mid-rotation and outside the racing phase, but the racer
@@ -81,11 +110,14 @@ func _physics_process(delta: float) -> void:
 		planar = Vector3.ZERO
 	else:
 		planar = _apply_planar_movement(planar, up, delta)
-		if jump_requested and is_on_floor() and not _gravity_armed:
+		if jump_requested and _coyote_timer > 0.0 and not gravity_armed:
 			vertical = up * AppConfig.JUMP_VELOCITY
+			_coyote_timer = 0.0
+			on_floor = false
+			jumped.emit()
 	jump_requested = false
 
-	if is_on_floor() and vertical.dot(up) <= 0.0:
+	if on_floor and vertical.dot(up) <= 0.0:
 		# Small downward bias keeps floor snapping stable on slopes and corners.
 		vertical = gravity.gravity_dir * 0.1
 	else:
@@ -93,9 +125,11 @@ func _physics_process(delta: float) -> void:
 		if vertical.length() > AppConfig.TERMINAL_VELOCITY:
 			vertical = vertical.normalized() * AppConfig.TERMINAL_VELOCITY
 
+	_last_vertical_speed = vertical.dot(up)
 	velocity = planar + vertical
 	move_and_slide()
 	_check_world_bounds()
+	_emit_feel_events(planar, delta)
 
 
 func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vector3:
@@ -104,10 +138,26 @@ func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vecto
 	wish = wish - up * wish.dot(up)
 
 	var speed: float = AppConfig.SPRINT_SPEED if sprint_input else AppConfig.WALK_SPEED
+	speed *= speed_multiplier
 
 	if wish.length_squared() > 0.001:
 		return planar.lerp(wish.normalized() * speed, AppConfig.ACCELERATION * delta)
 	return planar.lerp(Vector3.ZERO, AppConfig.FRICTION * delta)
+
+
+## Landing thuds and footsteps. Purely notifications; nothing here changes movement.
+func _emit_feel_events(planar: Vector3, delta: float) -> void:
+	var on_floor := is_on_floor()
+	if on_floor and not _was_on_floor:
+		landed.emit(absf(_last_vertical_speed))
+		_step_accumulator = 0.0
+	_was_on_floor = on_floor
+
+	if on_floor and planar.length() > 1.0:
+		_step_accumulator += planar.length() * delta
+		if _step_accumulator >= AppConfig.FOOTSTEP_DISTANCE:
+			_step_accumulator = 0.0
+			footstep.emit()
 
 
 ## Local player only. Bots never touch Input.
@@ -115,7 +165,7 @@ func _gather_local_input() -> void:
 	if not input_enabled:
 		return
 	_read_gravity_chord()
-	if _gravity_armed:
+	if gravity_armed:
 		move_input = Vector2.ZERO
 		return
 	move_input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
@@ -125,8 +175,8 @@ func _gather_local_input() -> void:
 
 
 func _read_gravity_chord() -> void:
-	_gravity_armed = Input.is_action_pressed("gravity_mod")
-	if not _gravity_armed:
+	gravity_armed = Input.is_action_pressed("gravity_mod")
+	if not gravity_armed:
 		return
 
 	if Input.is_action_just_pressed("move_forward"):
@@ -143,6 +193,7 @@ func _read_gravity_chord() -> void:
 
 ## Convert a camera-space direction into a world vector lying in the current walk plane.
 ## Gravity commands are camera-relative, never world-axis-relative.
+## Public so the HUD preview can show exactly what each key would do.
 func _camera_relative(local_dir: Vector3) -> Vector3:
 	var up := gravity.local_up()
 	var fwd := -head.global_basis.z
@@ -155,9 +206,33 @@ func _camera_relative(local_dir: Vector3) -> Vector3:
 	return (fwd * -local_dir.z + right * local_dir.x).normalized()
 
 
+func preview_shift_direction(local_dir: Vector3) -> Vector3:
+	return GravityController.snap_to_cardinal(_camera_relative(local_dir))
+
+
+## Mystery box effects. Positive multipliers are boosts, below 1 is a slow.
+func apply_speed_effect(multiplier: float, seconds: float) -> void:
+	speed_multiplier = multiplier
+	_speed_effect_timer = seconds
+	speed_effect_changed.emit(speed_multiplier, _speed_effect_timer)
+
+
+func _tick_speed_effect(delta: float) -> void:
+	if _speed_effect_timer <= 0.0:
+		return
+	_speed_effect_timer -= delta
+	if _speed_effect_timer <= 0.0:
+		speed_multiplier = 1.0
+		speed_effect_changed.emit(1.0, 0.0)
+
+
+func speed_effect_remaining() -> float:
+	return maxf(0.0, _speed_effect_timer)
+
+
 ## GravityController decides whether this is recoverable. The protected vacuum-180 case
 ## always returns damage; only a genuinely unrecoverable violation returns -1.
-## Damage is applied here exactly once — vacuum_recovered is a notification signal for
+## Damage is applied here exactly once -- vacuum_recovered is a notification signal for
 ## HUD and audio, not a second damage path.
 func _check_world_bounds() -> void:
 	if global_position.length() < AppConfig.WORLD_BOUNDS:
@@ -173,3 +248,26 @@ func _check_world_bounds() -> void:
 ## representations of this player.
 func current_gravity() -> Vector3:
 	return gravity.gravity_dir
+
+
+## Applies a racer colour to the visible body. Bots and remote players are told apart by it.
+func set_racer_colour(colour: Color) -> void:
+	racer_colour = colour
+	var visual := $Visual as MeshInstance3D
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = colour
+	mat.emission_enabled = true
+	mat.emission = colour
+	mat.emission_energy_multiplier = 0.35
+	visual.set_surface_override_material(0, mat)
+	var visor := get_node_or_null("Visual/Visor") as MeshInstance3D
+	if visor != null:
+		var vm := StandardMaterial3D.new()
+		vm.albedo_color = Color(0.08, 0.08, 0.1)
+		vm.emission_enabled = true
+		vm.emission = colour.lightened(0.5)
+		vm.emission_energy_multiplier = 1.5
+		visor.set_surface_override_material(0, vm)
+	var label := get_node_or_null("NameLabel") as Label3D
+	if label != null:
+		label.modulate = colour.lightened(0.3)

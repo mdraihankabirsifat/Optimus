@@ -137,6 +137,12 @@ func _check_for_end() -> void:
 	_end_match()
 
 
+## Ends the race now. Used when the local racer is done and nobody should wait on bots.
+func force_end() -> void:
+	if phase == Phase.RACING:
+		_end_match()
+
+
 func _end_match() -> void:
 	if phase == Phase.ENDED:
 		return

@@ -32,6 +32,8 @@ godot
 godot --headless res://tests/test_gravity.tscn   # 150 assertions
 godot --headless res://tests/test_cave.tscn      # 200 seeds
 godot --headless res://tests/test_match.tscn     # 29 assertions
+godot --headless res://tests/test_bot.tscn       # 60 caves
+godot --headless res://tests/test_flow.tscn      # every screen + a full race
 ```
 
 Run the relevant test after any change. Gravity and cave code especially — both have

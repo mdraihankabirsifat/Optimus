@@ -193,6 +193,18 @@ Completed 16 September 2026.
 | BOT-004 | Bots invert gravity to climb, and cannot when out of charges |
 | BOT-005 | 1-4 bots, distinct colours, per-bot route personalities |
 | — | `tests/test_bot.gd` — **15 assertions, 60/60 caves solved** |
+| AXIS-008 | G-held preview: HUD labels what each key would make your floor |
+| LEVEL-009 | Stalagmites, stalactites, crystals, moss, wall torches; ember stones within 2 hops of the exit |
+| HAZ-001 | Fire patches, one edge always clear, 0.5 heart/tick with per-source cooldown |
+| BOX-001..003 | Seeded one-time boxes; heart, move, speed, shield, slow, lose-move, rare coarse clue. Bots open boxes they pass |
+| MATCH-004 | Rematch same seed / new cave / main menu from results; restart from pause |
+| UI-001..010 | Splash, menu, lobby (bots, skill, seed), HUD, results, pause with in-place settings, settings, How to Play, About, Credits, DOF readout |
+| ART-002 | Racer colours, visors and name labels |
+| AUDIO-001/002 | Music/SFX buses; all sound synthesised at startup, wired to every event, positional for bots |
+| SPEC-001 | Chase-camera spectating after finish or elimination, Tab cycles, Enter ends race |
+| — | Bot skill levels. Seed 4242 with 4 bots: Easy 1:21–1:39, Normal 0:50–1:01, Hard 0:36–0:44 |
+| — | `tests/test_flow.gd` — **30 assertions**: every screen, lobby → race → box → pause → results |
+| SHIP-003/004 | README, CREDITS.md, AI_DISCLOSURE.md |
 
 ### How to run what exists
 
@@ -212,14 +224,18 @@ godot --headless res://tests/test_match.tscn
 # Bot knowledge isolation and exploration over 60 caves
 godot --headless res://tests/test_bot.tscn
 
-# Watch a full 4-bot race and print finishing order
-godot --headless res://tests/race_diag.tscn
+# Every screen, and lobby -> race -> results
+godot --headless res://tests/test_flow.tscn
+
+# Watch a full 4-bot race and print finishing order (skill 0 Easy, 1 Normal, 2 Hard)
+godot --headless res://tests/race_diag.tscn -- skill=0
 
 # Regenerate screenshots
 godot res://tests/screenshot.tscn      # gravity prototype chamber
 godot res://tests/cave_shot.tscn       # generated cave
 godot res://tests/match_shot.tscn      # countdown and racing HUD
 godot res://tests/bot_shot.tscn        # bots racing
+godot res://tests/ui_shot.tscn         # menus, HUD, fire, boxes, spectating, results
 ```
 
 > **After adding any script with a new `class_name`, run this once before any
@@ -247,9 +263,9 @@ godot res://tests/bot_shot.tscn        # bots racing
 |---|---|---|
 | Capsule dips ~0.34 units into the floor mid-rotation | Low | The capsule sweeps through horizontal during a 180°, briefly reducing its vertical extent. Self-corrects on completion and reads as weight rather than a glitch. Revisit only if it causes clipping in tight corridors. |
 | `is_local_player` captures the mouse in `_ready()` | Low | Fine for one local player. Needs a guard once bots and remote players instantiate the same scene. |
-| No audio, no VFX on shift | Expected | AUDIO-002 and UI-004, not yet started. |
+| Child `_ready` runs before the racer's own | Fixed | `CameraController` and `PlayerInteraction` read `gravity`/`is_local_player` before they existed, so bots also listened for E. Both now `await _player.ready`. |
+| Bots walk through fire | Low | They never route around hazards and can occasionally be eliminated by one. |
 | Never count `process_frame` to measure time | Low | The dev Mac has a 120 Hz display, so frame counts are half the wall time you expect. Use `get_tree().create_timer()`. Cost two wrong screenshot runs. |
-| Results only print to Output and the centre label | Expected | UI-005 replaces this with a real results screen. |
 | Bots use only 180-degree inversions, never 90-degree shifts | By design | The cave's vertical structure is Y-axis only, so inversion is always the right tool. 90-degree wall-walk pathing costs far more than it buys. |
 
 ### Balance findings from bot simulation
