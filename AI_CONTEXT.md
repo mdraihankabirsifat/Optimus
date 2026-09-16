@@ -9,7 +9,7 @@ context, this plus `docs/CORE_MECHANICS.md` is enough to continue work.
 - **Team:** Team Optimus — Md. Raihan Kabir Sifat, Estiak Zaman Atul, Sadman Sakib, Ashraf Hossain Chowdhury
 - **Event:** BUET Robotics Society GameJam, Intra BUET Robo Challenge 2026
 - **Theme:** Degree of Freedom
-- **Engine:** Godot 4.7, GDScript, **GL Compatibility renderer** (do not switch to Forward+; web export and student laptops depend on it)
+- **Engine:** Godot 4.7, GDScript, **Forward+ renderer** (switched 16 Sep for SSAO, volumetric fog and glow; this costs the web export)
 - **Deadline:** 17 September 2026, 11:59 PM. Showcase 18 September, 10:00 AM.
 
 ## The game in four sentences
@@ -50,6 +50,7 @@ These came from the team's design document. Do not alter them without an explici
 | Networking | Godot `WebSocketMultiplayerPeer`, server-authoritative, headless Godot on Render |
 | Offline mode | Must run with zero network code paths active. This is the judging fallback. |
 | Art | Stone Age only. Jungle / Dark Cave / City Drain are out of scope for the jam. |
+| Renderer | **Forward+**. Web export is no longer viable; Windows is the submission build. |
 
 ## Current state
 

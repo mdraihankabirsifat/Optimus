@@ -186,6 +186,29 @@ Why:           Theme Integration is 20% of the score. This one readout converts 
 
 ---
 
+### 7. Renderer, and the cost of the visual pass
+
+```
+Original decision:  GL Compatibility, so the web build works and the game runs on
+                    ordinary student laptops.
+Problem:            It has no ambient occlusion, no volumetric fog and no glow. The cave
+                    read as flat untextured boxes, and no amount of geometry or texture
+                    work fixed it, because the lighting had nothing to work with.
+Changed to:         Forward+, by team decision on 16 September, after seeing the GL
+                    Compatibility ceiling directly.
+Consequence:        THE WEB EXPORT IS GONE. Forward+ needs WebGPU and browsers do not
+                    broadly support it. SHIP-002 is no longer achievable as specified.
+                    Windows becomes the only submission build - and nobody on this team
+                    can test a Windows build from the dev Mac, so a teammate with a
+                    Windows machine is now on the critical path for submission.
+Also:               Forward+ costs more GPU. The dev machine is an M4 and will hide any
+                    performance problem this creates. Test on a modest laptop before
+                    submitting (SHIP-008).
+Fallback:           The renderer is one line in project.godot. If the Windows build
+                    cannot be produced or tested in time, switching back to
+                    gl_compatibility restores the web path at the cost of the lighting.
+```
+
 ## Priority order when two things conflict
 
 ```

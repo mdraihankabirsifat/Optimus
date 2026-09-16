@@ -232,7 +232,7 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 	mat.albedo_color = COLOUR_FINISH
 	mat.emission_enabled = true
 	mat.emission = COLOUR_FINISH
-	mat.emission_energy_multiplier = 2.5
+	mat.emission_energy_multiplier = 6.0
 
 	# A pillar standing on the cell floor rather than a cube floating at its centre, so it
 	# reads as a landmark down a corridor instead of swallowing the camera on arrival.
@@ -246,8 +246,9 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 
 	var light := OmniLight3D.new()
 	light.light_color = COLOUR_FINISH
-	light.light_energy = 4.0
-	light.omni_range = CELL_SIZE * 2.5
+	light.light_energy = 7.0
+	light.omni_range = CELL_SIZE * 3.0
+	light.light_volumetric_fog_energy = 3.0
 	light.position = Vector3(0.0, -CELL_SIZE * 0.5 + 4.5, 0.0)
 	area.add_child(light)
 	return area
@@ -276,7 +277,7 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 	flame.albedo_color = Color(1.0, 0.72, 0.34)
 	flame.emission_enabled = true
 	flame.emission = Color(1.0, 0.66, 0.28)
-	flame.emission_energy_multiplier = 3.0
+	flame.emission_energy_multiplier = 8.0
 	flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
 	var cells: Array = graph.cells.keys()
@@ -299,12 +300,17 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 		var light := OmniLight3D.new()
 		light.position = base
 		light.light_color = tint
-		light.light_energy = 4.4 if junction else 3.3
-		light.omni_range = CELL_SIZE * 1.7
-		light.omni_attenuation = 1.4
+		light.light_energy = 6.0 if junction else 4.4
+		light.omni_range = CELL_SIZE * 2.1
+		light.omni_attenuation = 1.5
+		# Feeds the volumetric fog so each torch throws a visible shaft of light rather
+		# than just brightening the stone around it.
+		light.light_volumetric_fog_energy = 1.4
+		light.light_specular = 0.6
 		# Shadows only at junctions: they are the expensive part and the places worth
 		# spending it, since that is where geometry overlaps and depth needs reading.
-		light.shadow_enabled = junction and placed % 3 == 0
+		light.shadow_enabled = junction
+		light.shadow_blur = 1.4
 		holder.add_child(light)
 
 		var bulb := MeshInstance3D.new()

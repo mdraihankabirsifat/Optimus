@@ -120,7 +120,7 @@ everything above is complete and committed, and it is bound by the abort gate in
 | ID | Task | Pri | Deps | Definition of Done |
 |---|---|---|---|---|
 | SHIP-001 | Windows export | P0 | Tier 2 | Runs on a Windows machine without Godot |
-| SHIP-002 | Web export | P0 | Tier 2 | Loads and plays in a current browser |
+| SHIP-002 | ~~Web export~~ **BLOCKED** | P0 | — | Not achievable on Forward+ (needs WebGPU). Either ship Windows only, or revert the renderer. |
 | SHIP-003 | README: controls, run instructions, structure, known bugs | P0 | — | A stranger can run the game from it |
 | SHIP-004 | `CREDITS.md` + `AI_DISCLOSURE.md` | P0 | — | Every external asset and AI use recorded |
 | SHIP-005 | Screenshots | P0 | Tier 2 | Include one shot of two racers on different surfaces |
@@ -192,6 +192,9 @@ Completed 16 September 2026.
 | BOT-003 | `bot_controller.gd` — fills the same `move_input` a human fills, so identical movement code |
 | BOT-004 | Bots invert gravity to climb, and cannot when out of charges |
 | BOT-005 | 1-4 bots, distinct colours, per-bot route personalities |
+| ART-001 | Generated stone texture set with normal maps; per-level light tinting |
+| ART-003 | 16 Blender-generated rock props, placed deterministically, no collision |
+| VFX-013 | Volumetric light shafts from torches (Forward+) |
 | — | `tests/test_bot.gd` — **15 assertions, 60/60 caves solved** |
 
 ### How to run what exists
