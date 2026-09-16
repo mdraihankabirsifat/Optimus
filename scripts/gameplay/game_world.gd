@@ -135,6 +135,20 @@ func _ready() -> void:
 	AudioManager.stop_music()
 	AudioManager.play_ambience()
 	match_controller.begin_countdown()
+	_prewarm_effects()
+
+
+## SHIP-008: GL Compatibility compiles a shader the first time something is drawn with it.
+## The first dust puff after GO used to cost a 120 ms hitch. Draw each effect once in view
+## during the countdown, when a stutter is invisible, instead.
+func _prewarm_effects() -> void:
+	await get_tree().process_frame
+	var up := _player.gravity.local_up()
+	var ahead := _player.global_position - _player.camera.global_basis.z * 2.0
+	Vfx.dust_puff(self, ahead, up, 0.3)
+	visited_cells[graph.spawn_cell] = true
+	_last_cell = graph.spawn_cell
+	_drop_breadcrumb()
 
 
 ## Bots spawn in a ring around the shared starting chamber so nobody begins inside
