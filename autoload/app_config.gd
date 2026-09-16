@@ -17,6 +17,11 @@ const GRAVITY_TRANSITION_TIME := 0.35
 const GRAVITY_STRENGTH := 24.0
 const TERMINAL_VELOCITY := 45.0
 
+# --- Match flow ---
+const MATCH_COUNTDOWN_SECONDS := 3
+## Hard cap so a lost racer cannot stall the whole lobby. Judges play once, briefly.
+const MATCH_TIME_LIMIT := 300.0
+
 # --- Health -------------------------------------------------------------------
 const HEARTS_MAX := 5.0
 const INVULNERABILITY_TIME := 1.5

@@ -25,14 +25,33 @@ It is deliberately short — it points at the real documents rather than duplica
 - Deadline: 17 September 2026, 11:59 PM
 
 ```bash
-# Play
-godot res://scenes/game/test_chamber.tscn
+# Play — main scene is the procedural cave race
+godot
 
-# Gravity verification — 150 assertions, exits non-zero on failure
-godot --headless res://tests/test_gravity.tscn
+# Tests. Each exits non-zero on failure.
+godot --headless res://tests/test_gravity.tscn   # 150 assertions
+godot --headless res://tests/test_cave.tscn      # 200 seeds
+godot --headless res://tests/test_match.tscn     # 29 assertions
 ```
 
-Run the gravity test after any change to the player or gravity code.
+Run the relevant test after any change. Gravity and cave code especially — both have
+failure modes that are invisible by eye.
+
+**After adding any script with a new `class_name`, run this once or headless tests will
+hang with no output at all:**
+
+```bash
+godot --headless --editor --quit
+```
+
+Headless scene runs resolve global classes through the editor's cache. A stale cache means
+the script never loads, `_ready` never fires, and the process idles forever.
+
+Two more traps worth knowing:
+- `get_tree().quit()` is ignored if called before the tree reaches its main loop. Start
+  test scripts with `await get_tree().process_frame`.
+- Do not measure time by counting `process_frame`. This machine has a 120 Hz display, so
+  frame counts mean half the wall time you expect. Use `get_tree().create_timer()`.
 
 ## Working style
 

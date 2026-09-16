@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
-[ext_resource type="Script" path="res://scripts/cave/cave_test.gd" id="1_cave"]
+[ext_resource type="Script" path="res://scripts/gameplay/game_world.gd" id="1_cave"]
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
 [ext_resource type="PackedScene" path="res://scenes/ui/debug_hud.tscn" id="3_hud"]
+[ext_resource type="Script" path="res://scripts/gameplay/match_controller.gd" id="4_match"]
 
 [sub_resource type="Environment" id="Environment_cave"]
 background_mode = 1
@@ -14,12 +15,15 @@ fog_enabled = true
 fog_light_color = Color(0.12, 0.1, 0.11, 1)
 fog_density = 0.008
 
-[node name="CaveTest" type="Node3D"]
+[node name="GameWorld" type="Node3D"]
 script = ExtResource("1_cave")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_cave")
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
+
+[node name="MatchController" type="Node" parent="."]
+script = ExtResource("4_match")
 
 [node name="DebugHUD" parent="." instance=ExtResource("3_hud")]

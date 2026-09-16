@@ -1,10 +1,11 @@
 extends Node3D
-## Playable procedural cave. Generates from a seed, builds geometry, drops the racer at
-## the spawn chamber. This is the Phase 2 harness -- match rules, hazards and bots are not
-## here yet. MatchController replaces this scene under MATCH-001.
+## The race. Generates a seeded cave, builds it, places the racers, runs the match.
+##
+## Bots and remote players are not here yet; MatchController is already written for 2-5
+## racers so they register alongside the local one without a rewrite.
 
-## Leave true to get a different cave every launch. Set false and pick a seed to reproduce
-## a specific cave when chasing a bug.
+## Leave true for a different cave every launch. Set false and pick a seed to reproduce a
+## specific cave when chasing a bug.
 @export var randomise_seed := true
 @export var fixed_seed := 12345
 
@@ -12,6 +13,7 @@ var graph: CaveGraph
 var seed_value: int
 
 @onready var _player: PlayerController = $Player
+@onready var match_controller: MatchController = $MatchController
 
 
 func _ready() -> void:
@@ -38,6 +40,28 @@ func _ready() -> void:
 		graph.spine_climb_cost(),
 		graph.cycle_count(),
 	])
+
+	match_controller.register_racer(_player, "You")
+	match_controller.racer_finished.connect(_on_racer_finished)
+	match_controller.match_ended.connect(_on_match_ended)
+	match_controller.begin_countdown()
+
+
+func _on_racer_finished(racer_name: String, place: int, time: float) -> void:
+	print("%s finished #%d in %s" % [racer_name, place, MatchController.format_time(time)])
+
+
+func _on_match_ended(results: Array) -> void:
+	print("--- results ---")
+	for entry: Dictionary in results:
+		if entry["finished"]:
+			print("  #%d  %s  %s"
+				% [entry["place"], entry["name"], MatchController.format_time(entry["finish_time"])])
+		elif entry["eliminated"]:
+			print("  --  %s  ELIMINATED at %s"
+				% [entry["name"], MatchController.format_time(entry["elimination_time"])])
+		else:
+			print("  --  %s  DNF" % entry["name"])
 
 
 ## Degrees of Freedom at the racer's current cell: how many axes offer travel here.

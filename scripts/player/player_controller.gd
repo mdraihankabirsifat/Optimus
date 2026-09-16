@@ -12,6 +12,10 @@ extends CharacterBody3D
 
 var mouse_sensitivity: float = AppConfig.MOUSE_SENSITIVITY
 var is_local_player: bool = true
+## Cleared by MatchController during countdown, after finishing, and on elimination.
+## Looking around stays allowed while this is false -- only movement is frozen, so a racer
+## can orient themselves before GO.
+var input_enabled: bool = true
 
 ## True while the G chord is held, which suppresses ordinary WASD movement so the
 ## keypress can be read as a gravity command instead.
@@ -45,8 +49,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if is_local_player:
+	if is_local_player and input_enabled:
 		_read_gravity_chord()
+	elif not input_enabled:
+		_gravity_armed = false
 
 	var up := gravity.local_up()
 	up_direction = up
@@ -54,8 +60,9 @@ func _physics_process(delta: float) -> void:
 	var vertical := up * velocity.dot(up)
 	var planar := velocity - vertical
 
-	if gravity.is_transitioning:
-		# Movement is locked mid-rotation, but the racer still falls.
+	if gravity.is_transitioning or not input_enabled:
+		# Movement is locked mid-rotation and outside the racing phase, but the racer
+		# still falls -- gravity never stops applying.
 		planar = Vector3.ZERO
 	else:
 		planar = _apply_planar_movement(planar, up, delta)

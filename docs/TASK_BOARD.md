@@ -179,6 +179,14 @@ Completed 16 September 2026.
 | LEVEL-006 | Spawn chamber and glowing finish pillar, min 8 hops apart |
 | LEVEL-007 | Spine climb cost asserted ≤ 3 of 5 charges |
 | LEVEL-008 | `tests/test_cave.gd` — **200 seeds, 0 failures** |
+| MATCH-001 | Countdown 3-2-1-GO, movement and damage frozen until GO, match timer |
+| MATCH-002 | Finish trigger, placements 1st-5th in arrival order, finish times |
+| MATCH-003 | Results: placements, times, eliminated, DNF, seed shown |
+| HEALTH-001 | 5 hearts with half-heart support |
+| HEALTH-002 | Per-source damage cooldowns + 1.5 s invulnerability |
+| HEALTH-003 | Elimination at zero hearts, input lockout, Heart Refill cannot resurrect |
+| HEALTH-004 | No damage possible before GO |
+| — | `tests/test_match.gd` — **29 assertions, 0 failures** |
 
 ### How to run what exists
 
@@ -192,9 +200,13 @@ godot --headless res://tests/test_gravity.tscn
 # Cave generation over 200 seeds
 godot --headless res://tests/test_cave.tscn
 
+# Match rules, health, elimination, results ordering
+godot --headless res://tests/test_match.tscn
+
 # Regenerate screenshots
 godot res://tests/screenshot.tscn      # gravity prototype chamber
 godot res://tests/cave_shot.tscn       # generated cave
+godot res://tests/match_shot.tscn      # countdown and racing HUD
 ```
 
 > **After adding any script with a new `class_name`, run this once before any
@@ -223,3 +235,5 @@ godot res://tests/cave_shot.tscn       # generated cave
 | Capsule dips ~0.34 units into the floor mid-rotation | Low | The capsule sweeps through horizontal during a 180°, briefly reducing its vertical extent. Self-corrects on completion and reads as weight rather than a glitch. Revisit only if it causes clipping in tight corridors. |
 | `is_local_player` captures the mouse in `_ready()` | Low | Fine for one local player. Needs a guard once bots and remote players instantiate the same scene. |
 | No audio, no VFX on shift | Expected | AUDIO-002 and UI-004, not yet started. |
+| Never count `process_frame` to measure time | Low | The dev Mac has a 120 Hz display, so frame counts are half the wall time you expect. Use `get_tree().create_timer()`. Cost two wrong screenshot runs. |
+| Results only print to Output and the centre label | Expected | UI-005 replaces this with a real results screen. |

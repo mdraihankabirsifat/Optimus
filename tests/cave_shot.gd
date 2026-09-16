@@ -5,7 +5,7 @@ var _cave: Node3D
 var _player: PlayerController
 
 func _ready() -> void:
-	_cave = load("res://scenes/game/cave_test.tscn").instantiate()
+	_cave = load("res://scenes/game/game_world.tscn").instantiate()
 	_cave.randomise_seed = false
 	_cave.fixed_seed = 4242
 	add_child(_cave)
