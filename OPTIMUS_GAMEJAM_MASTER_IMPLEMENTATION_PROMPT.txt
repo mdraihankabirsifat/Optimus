@@ -1,0 +1,1107 @@
+MASTER IMPLEMENTATION PROMPT FOR CODEX / CLAUDE
+Project: Team Optimus - BUET Robotics Society GameJam 2026
+Theme: Degree of Freedom
+
+======================================================================
+0. HOW TO USE THIS PROMPT
+======================================================================
+
+You are the lead Godot engineer, multiplayer engineer, game designer, technical artist,
+QA engineer, and documentation writer for a time-limited GameJam project. Build the
+complete game described below inside the current workspace. Do not merely give advice,
+pseudocode, or a tutorial. Inspect the repository, create or modify the actual project,
+run available validation checks, and leave a playable, documented build-ready project.
+
+Work autonomously and incrementally. Do not delete or overwrite valid existing work.
+Before making changes:
+
+1. Inspect all files, existing scenes, scripts, assets, project settings, Git state, and
+   documentation.
+2. Read AGENTS.md if it already exists and follow it.
+3. Preserve user-created assets and unrelated changes.
+4. If this is an empty directory, initialize a clean Godot 4.x project structure.
+5. Use small, cohesive components and test after every major subsystem.
+6. Keep the default branch playable at the end of every phase.
+7. Never hide a broken feature. Use a clear feature flag or safe fallback if a subsystem
+   cannot be completed reliably.
+8. Do not ask unnecessary questions. Where this prompt explicitly marks a value as
+   configurable, implement a sensible exported/config setting and document it.
+9. Do not silently change any non-negotiable gameplay rule in this prompt.
+10. Do not stop after scaffolding. Continue through implementation, integration,
+    documentation, tests, and build instructions.
+
+The actual game title has not been chosen by the team. Use GAME_TITLE_TBD as a temporary
+display title in one centralized configuration value so the team can replace it once.
+Do not present GAME_TITLE_TBD as the final public title.
+
+
+======================================================================
+1. EVENT AND TEAM CONTEXT
+======================================================================
+
+Competition: BUET Robotics Society GameJam, Intra BUET Robo Challenge 2026
+Team name: Optimus
+Theme: Degree of Freedom
+
+Team members:
+- Md. Raihan Kabir Sifat
+- Estiak Zaman Atul
+- Sadman Sakib
+- Ashraf Hossain Chowdhury
+
+Official development window:
+- Begins: 10 September 2026, 12:00 AM
+- Submission deadline: 17 September 2026, 11:59 PM
+- Showcase and judging: 18 September 2026, 10:00 AM, ECE Building, BUET
+
+Relevant competition requirements:
+- The game must be a new project created for this GameJam.
+- A fresh GitHub repository is mandatory.
+- Initial and final development commits must fall within the official development window.
+- Commit history must honestly represent development; never rewrite or falsify history.
+- Final submission is through the official itch.io jam page.
+- Provide at least a self-contained Windows build or stable web build.
+- A mandatory 60-90 second gameplay presentation video must show the title, representative
+  submitted gameplay, the core loop, major mechanics, and theme connection.
+- Submission must include screenshots, GitHub link, engine/tools, controls, run
+  instructions, credits, significant AI disclosure, known bugs, team and game details.
+- The submitted build and final commit are frozen after submission.
+- All third-party assets, code, audio, fonts, plugins, and significant AI-generated
+  materials must be lawful and credited.
+
+Judging weights:
+- Gameplay and Fun: 30%
+- Creativity and Innovation: 25%
+- Theme Integration: 20%
+- Polish and Presentation: 15%
+- Technical Achievement: 10%
+
+Optimize first for a responsive, understandable, stable, enjoyable game. Technical
+complexity is valuable only when it improves the player experience.
+
+
+======================================================================
+2. HIGH-LEVEL GAME VISION
+======================================================================
+
+Build a simple-to-understand but mechanically original 3D competitive cave-racing game.
+Two to five racers enter the same procedurally generated block-shaped cave. The racers
+do not know the exit location. They explore the cave, survive hazards, open mystery
+boxes, interpret rare clues, manage health, and use a limited gravity-changing power to
+walk on walls or ceilings. The first racer to reach the hidden destination wins; later
+finishers receive second, third, fourth, and fifth place in arrival order. Racers whose
+hearts reach zero are eliminated.
+
+The defining visual moment is that multiple racers can occupy different frames of
+reference in the same world. One player may run on the normal floor while another player
+is visibly walking on a wall or on the ceiling. A gravity change affects only the racer
+who activated it; it never rotates the world or changes gravity for other racers.
+
+The cave should resemble a Minecraft-like, block-built, vacuous square tunnel network.
+Use a configurable tunnel cross-section whose initial target is approximately 8 x 8
+world/block units. The cave is not a natural smooth spline. It is a cubic/grid-aligned
+network built block by block, with corridors, turns, junctions, vertical shafts, loops,
+dead ends, chambers, upper/lower passages, hazards, mystery boxes, spawn area, and a
+hidden finish area.
+
+The first complete visual mode is Stone Age / Stone Cave. Additional environment modes
+are, in this order:
+1. Stone Age mode - mandatory first polished mode.
+2. Jungle mode - vegetation, roots, damp stone, natural ambience.
+3. Dark Cave mode - low visibility, stronger atmospheric horror, restrained light.
+4. City Drain mode - concrete/sewer/drain visual treatment.
+
+All modes use the same core mechanics and generator interfaces. Implement the Stone Age
+mode completely first. Structure themes as data/resources so Jungle, Dark Cave, and City
+Drain can be added sequentially without duplicating gameplay logic. If time allows,
+implement them in the order above. Never delay a stable Stone Age build merely to add a
+partially working visual mode.
+
+
+======================================================================
+3. THEME INTEGRATION: DEGREE OF FREEDOM
+======================================================================
+
+The theme must be part of the rules, not merely the story or title.
+
+Spatial interpretation:
+- A straight tunnel where the racer can primarily move forward/backward represents one
+  translational degree of freedom.
+- A junction allowing travel along two independent axes represents two translational
+  degrees of freedom.
+- A junction or chamber with horizontal and vertical routes represents three
+  translational degrees of freedom.
+- Camera look and the Gravity Move introduce rotational freedom and a player-specific
+  frame of reference.
+- Different racers may simultaneously have different local up vectors, making freedom
+  personal rather than global.
+
+Communicate this during play:
+- Display a compact current-orientation/gravity indicator in the HUD.
+- At suitable junctions, optionally show a subtle contextual indicator such as DOF 1,
+  DOF 2, or DOF 3, calculated from meaningful traversable axes. Do not clutter the HUD.
+- The tutorial must explain in one or two short panels that greater degrees of freedom
+  create more routes but require spending limited Gravity Moves.
+- Include a concise About/Theme screen explaining this interpretation for judges.
+- Make the core mechanic demonstrable within the first 30-60 seconds of a match.
+
+
+======================================================================
+4. PLAYER COUNT AND GAME MODES
+======================================================================
+
+Every match must contain at least 2 and at most 5 total racers. At least one racer must
+be human.
+
+Required configurations:
+
+A. Bot Race / offline-safe mode
+- 1 local human plus 1-4 bots.
+- No remote server or internet connection required.
+- This is the guaranteed judging/demo fallback.
+
+B. Online Race
+- 2-5 human players.
+- Create-room and join-room flow.
+- Show a short room code or equivalent simple join mechanism.
+
+C. Mixed Race
+- Any mixture of human players and bots, with 2-5 total racers and at least one human.
+- Examples: 2 humans + 2 bots, 3 humans + 2 bots, 4 humans + 1 bot, 2 humans + 3 bots.
+- The lobby host chooses total slots, reserves/fills human slots, and adds/removes bots.
+- Include a Fill Empty Slots With Bots action.
+
+Lobby rules:
+- Host may set total racer count from 2 to 5.
+- Host may add/remove bots before the match.
+- Host may reserve slots for online players.
+- Match can start only when at least two total racers are present.
+- Show each slot's name, human/bot status, ready status, color/avatar, and connection state.
+- Prevent duplicate player colors where practical.
+- Handle a client disconnect gracefully. Do not crash or freeze the match.
+- For a GameJam-safe fallback, allow the server/host to replace a disconnected human with
+  a bot if configured, or mark the racer disconnected and continue.
+
+
+======================================================================
+5. CORE MATCH LOOP
+======================================================================
+
+1. Player launches game and reaches a polished home screen.
+2. Player chooses Bot Race, Online Race, or Mixed Race.
+3. Lobby is configured for 2-5 racers.
+4. Host chooses or randomizes a seed and starts the match.
+5. All racers spawn in a safe shared starting chamber.
+6. A short synchronized countdown plays: 3, 2, 1, GO.
+7. The overall match timer starts.
+8. Racers explore the same hidden-exit cave.
+9. Racers walk/run, look 360 degrees, change personal gravity, avoid hazards, manage
+   hearts and Gravity Moves, collect mystery boxes, and use rare clues.
+10. The first racer to touch/enter the validated finish trigger is first. Continue
+    assigning second through fifth place as racers finish.
+11. A racer at zero hearts is eliminated and enters spectator mode.
+12. End the match when all non-eliminated racers finish, only one unresolved racer
+    remains after placements are determined, or a configurable time limit expires.
+13. Show results with placements, finish times, eliminated/DNF status, mystery boxes
+    opened, damage taken, and Gravity Moves used.
+14. Offer Rematch With Same Seed, New Generated Cave, Return to Lobby, and Main Menu.
+
+The exit must not be shown on the initial map or HUD. Do not provide a full minimap that
+reveals unexplored geometry or the exit. The game may show a discovered-only breadcrumb
+map later if it is visually and technically safe, but the core version should rely on
+spatial exploration, environmental cues, and clue rewards.
+
+
+======================================================================
+6. PLAYER CONTROLLER AND CAMERA
+======================================================================
+
+Use Godot CharacterBody3D and GDScript. Build gravity-relative movement; never assume
+Vector3.UP is the player's permanent up direction.
+
+Required movement:
+- Walk and run/sprint through the cave.
+- Camera can look around 360 degrees, Minecraft/FPS style.
+- Local human uses a first-person or close immersive camera while other racers have
+  visible full character representations. Keep camera perspective modular.
+- Remote players and bots must visibly orient to their own gravity and appear to walk on
+  floors, walls, or ceilings.
+- Movement input is projected onto the plane perpendicular to the player's current
+  gravity vector.
+- Ground detection, floor snapping, acceleration, friction, jumping if included, and
+  collision must all respect the current local up vector.
+- Avoid physics tunneling, clipping through tunnel blocks, and jitter on corners.
+- Keep player speed fair and identical for equivalent states.
+- Include configurable mouse sensitivity, invert-Y option if easy, run toggle/hold, and
+  remappable actions through Godot InputMap where practical.
+
+Recommended default bindings, centralized and configurable:
+- W/A/S/D: normal gravity-relative movement.
+- Mouse: 360-degree look.
+- Shift: sprint/run.
+- E: interact/open mystery box.
+- G: default Gravity Move modifier/action key.
+- G + W/A/S/D: choose a 90-degree gravity rotation in a player/camera-relative direction.
+- G + Space: choose a 180-degree inversion toward the player's current ceiling.
+- Escape: pause/menu.
+
+When G is held, suppress ordinary movement caused by the accompanying W/A/S/D command
+long enough to interpret the chord as a gravity command. Give clear on-screen feedback
+for the selected gravity direction and remaining Move count.
+
+
+======================================================================
+7. GRAVITY MOVE - NON-NEGOTIABLE CORE MECHANIC
+======================================================================
+
+Terminology:
+- The special ability may be displayed as Gravity Move or Freedom Shift.
+- Its consumable resource is called Move or Move Charge.
+- Every racer begins with exactly 5 Move charges.
+
+Rules:
+- A racer may spend a Move anywhere at any time, not only at marked zones.
+- Each gravity change costs exactly one Move charge.
+- Gravity is private per racer.
+- A gravity change never rotates the cave/world and never alters another racer's gravity.
+- Controls are relative to the player's/camera's current local frame, not fixed world axes.
+- Both a 90-degree rotation and a 180-degree inversion cost one Move.
+- G + W/A/S/D produces a 90-degree gravity turn toward the corresponding local/camera-
+  relative forward/left/back/right direction.
+- G + Space produces a 180-degree inversion so the former ceiling can become the new
+  walking base.
+- A player can use a gravity shift to enter an upper chamber, move through it, and later
+  spend another Move to return to a previous orientation.
+- Other racers must see this player correctly walking on the ceiling or wall.
+
+Implementation requirements:
+- Represent gravity as a normalized vector chosen from the six grid-aligned cardinal
+  directions whenever possible: +/-X, +/-Y, +/-Z.
+- Maintain a stable orthonormal local basis: local_up = -gravity_direction; local_forward
+  is camera forward projected onto the plane perpendicular to local_up; local_right is
+  derived consistently.
+- Resolve near-degenerate camera projections safely.
+- On a gravity command, validate only that a charge exists and the racer is not already
+  rotating/eliminated/finished. Do not require a nearby target surface.
+- Deduct the charge authoritatively exactly once.
+- Temporarily lock movement while transitioning.
+- Rotate the player body and camera smoothly, approximately 0.3-0.5 seconds by default.
+- Use quaternion/basis interpolation or another method that avoids Euler gimbal lock.
+- Preserve a predictable forward direction so the camera does not randomly roll.
+- Apply the new gravity continuously after the transition.
+- Provide audio, a restrained screen effect, and HUD animation for successful shifts.
+- Reject inputs cleanly with feedback when no charges remain.
+- Replicate gravity direction, orientation, transition time/state, and charge count.
+
+Unsafe/vacuous behavior:
+- Changing gravity toward empty space is allowed.
+- The player should move/fall in the newly selected gravity direction until contacting a
+  valid surface or reaching a hazard/out-of-bounds condition.
+- Special correction supplied by the game designers: if a player uses a 180-degree Move
+  while the upper area is vacuous, this must NOT immediately kill/eliminate the player.
+  It damages hearts instead. After applying the configured damage, recover the player to
+  the last safe grounded transform so play can continue if hearts remain.
+- Retain a short history of safe grounded transforms for reliable recovery.
+- A general unrecoverable world-boundary violation may eliminate the racer, but the
+  protected 180-degree-vacuous case above takes precedence and must cause heart damage,
+  not instant elimination.
+- Make all boundary/fall damage values configurable and avoid rapid repeated damage.
+
+
+======================================================================
+8. HEALTH, DAMAGE, ELIMINATION, AND SPECTATING
+======================================================================
+
+Terminology and rules:
+- Every player starts with 5 full hearts.
+- Hearts are the visible health representation.
+- Refill/revive means restoring lost hearts. It does NOT resurrect an eliminated racer.
+- When all hearts are gone, the racer is eliminated for the remainder of that match.
+- The design must avoid eliminating players too quickly.
+
+Recommended damage balance, implemented as configurable data:
+- Fire contact/tick: 0.5 heart.
+- Spider successful attack: 1 heart.
+- Unsafe gravity fall/impact or protected vacuous 180-degree failure: 1 heart.
+- Strong trap: at most 1.5 hearts.
+- After taking damage, grant approximately 1.5 seconds of invulnerability.
+- Do not apply repeated damage every physics frame while touching one hazard.
+- Use per-source cooldowns and clear audiovisual hit feedback.
+- Starting chamber and immediate spawn route must be hazard-free.
+- Prevent unfair damage during countdown, gravity transition, loading, or initial spawn.
+
+Optional but approved safety mechanic:
+- A rare Second Chance status can prevent fatal damage once and leave the racer with
+  0.5 heart. It does not revive a racer after elimination.
+
+Elimination:
+- At zero hearts, stop movement/interactions, record elimination time/order, and switch
+  the local player to spectator mode.
+- Spectator can cycle through active racers without affecting them.
+- Clearly mark eliminated racers in HUD/results.
+- Never allow health-refill boxes to resurrect an eliminated racer.
+
+
+======================================================================
+9. HAZARDS AND OBSTACLES
+======================================================================
+
+Required initial hazards:
+
+A. Fire
+- Clearly visible and readable from a reasonable distance.
+- Animated using particles, sprite/VFX, or simple mesh animation.
+- Uses server-authoritative damage with a cooldown.
+- May block part of a corridor but must not permanently invalidate all solutions.
+
+B. Spider
+- Simple readable enemy with idle/patrol/chase/attack states.
+- Use lightweight navigation on the logical cave graph or local NavigationRegion3D only
+  where reliable.
+- It can reduce hearts, but must not repeatedly stun-lock or instantly eliminate racers.
+- Keep animation/model replaceable; use a legal placeholder if final art is unavailable.
+
+Generator hazard constraints:
+- No hazard in the starting safety region.
+- No unavoidable lethal chain on the only valid route.
+- Limit hazard density using exported/config values.
+- Ensure hazard placement is deterministic from the shared match seed.
+- Avoid overlapping hazards, boxes, finish trigger, or spawn points.
+- Validate each placement against walkable geometry and gravity orientations.
+
+
+======================================================================
+10. MYSTERY BOX SYSTEM
+======================================================================
+
+Mystery boxes are placed throughout the cave. A player may interact with a box once.
+Opening results are authoritative and synchronized. Prevent two racers from receiving
+the same single-use box unless the configured design explicitly supports per-player loot.
+
+Possible rewards and penalties:
+- Heart Refill: restore 0.5, 1, or 2 hearts without exceeding 5.
+- Move Refill: add one or more Move charges, with a configurable cap.
+- Temporary speed boost.
+- Temporary shield or damage protection.
+- Second Chance status.
+- Penalty such as temporary slow, short disorientation, harmless scare, or loss of a Move.
+- Rare destination clue.
+
+Clue behavior:
+- Destination clues must be rare relative to ordinary outcomes.
+- A clue may indicate a coarse direction, relative vertical level, approximate graph
+  distance, environmental symbol, or temporary directional pulse.
+- It must not permanently reveal the full map.
+- Human players and bots receive equivalent clue information.
+- Bots may use only clues they personally obtain or legitimately observe.
+- Make loot weights data-driven. Use balanced defaults with clue probability clearly low
+  (for example around 5%, then tune in playtesting).
+
+Use Heart Refill in player-facing text rather than Revive to avoid implying resurrection.
+
+
+======================================================================
+11. PROCEDURAL 3D CAVE GENERATION
+======================================================================
+
+The first map must be fully procedurally generated, not a single handcrafted maze.
+However, use modular grid-aligned tunnel/chamber pieces for stability and speed. Fully
+procedural means the topology, connections, spawn-to-exit structure, loops, hazards,
+boxes, and selected room pieces are generated from a seed; it does not require expensive
+runtime marching cubes or smooth terrain meshing.
+
+Generator model:
+- Maintain a logical 3D integer lattice/grid.
+- A logical cell can connect in six directions: +/-X, +/-Y, +/-Z.
+- Generate a connected graph containing corridors, turns, T-junctions, cross-junctions,
+  vertical shafts, upper/lower transitions, chambers, dead ends, branches, and self-loops.
+- Self-loop means the graph contains cycles, allowing racers to return to earlier regions
+  by a different path.
+- Use an algorithm such as randomized DFS/Prim/Kruskal for a connected base maze, then
+  intentionally braid the maze by adding validated edges/loops and vertical connections.
+- Instantiate reusable modular meshes/scenes based on each cell's connection mask.
+- Use MultiMesh/static batching/combined collision where appropriate, but favor
+  correctness over premature optimization.
+
+Determinism and multiplayer:
+- One seed defines the entire match.
+- The authoritative host/server chooses and records the seed.
+- All clients receive the seed and generator configuration.
+- Equivalent versions must generate identical logical maps. Include a generation version
+  number/hash in the handshake.
+- The server remains authoritative for spawn, finish, hazards, boxes, and important
+  interactions even if clients generate matching visuals locally.
+- Provide a visible seed on results/rematch screens for debugging and replay.
+
+Required topology invariants:
+- Exactly one safe starting chamber and one hidden finish region.
+- Spawn and finish must be sufficiently far apart by graph distance.
+- At least one guaranteed valid route from spawn to finish.
+- At least one meaningful loop/cycle.
+- Multiple branches and dead ends.
+- Multiple vertical sections requiring or rewarding gravity changes.
+- The cave must contain sections demonstrating 1, 2, and 3 translational degrees of
+  freedom.
+- Ensure no disconnected walkable island unless deliberately decorative and unreachable.
+- Avoid overlapping geometry and impossible cell connections.
+- Add outer bounds/kill volumes and robust navigation/collision.
+
+Gravity-aware solvability is mandatory:
+- Do not validate only ordinary cell connectivity.
+- Validate a state graph whose state contains at minimum:
+    (logical cave cell, gravity orientation, Move charges remaining)
+- Include supported transitions for normal traversal, 90-degree shift, 180-degree shift,
+  Move refill if required, and safe/unsafe passage rules.
+- Ensure the exit is reachable under the intended starting resource rules, preferably
+  within the initial 5 Move charges without relying on random loot.
+- Mystery-box Move refills may provide shortcuts but must not be the only unguaranteed way
+  to make the base map solvable.
+- If validation fails, repair/regenerate deterministically with a capped retry count.
+- Add debug output explaining failed generation invariants.
+- Provide developer visualization for cells, edges, main valid route, vertical routes,
+  spawn/finish, boxes, hazards, and bot knowledge when a debug flag is enabled.
+
+Gameplay readability:
+- Do not generate endless visually identical corridors.
+- Place landmarks, lighting variations, color accents, cracks, props, or chamber shapes
+  without revealing the exit directly.
+- The hidden exit may have subtle increasingly noticeable environmental signals such as
+  airflow, sound, light, particles, or thematic markings.
+- Clues should accelerate informed search; ordinary ambience should prevent completely
+  directionless frustration.
+- Target a short, replayable match rather than a huge cave. Keep dimensions, branch
+  factor, loop count, verticality, and target match duration configurable.
+
+
+======================================================================
+12. OPTIMAL BUT NON-OMNISCIENT BOT AI
+======================================================================
+
+Bots play competitively and intelligently, but they must explore without knowing the
+exit. They are optimal with respect to legitimately discovered information, not
+omniscient.
+
+Strict information boundary:
+- The procedural generator/server knows the complete cave.
+- A bot AI must not receive the exit coordinate, unexplored global topology, unseen
+  hazards, or unopened box contents.
+- Expose to each bot only its current observations, discovered cells/edges, remembered
+  hazards, opened/seen boxes, personal clues, health, Move charges, and visible racers.
+- Architect bot knowledge as a separate discovered-graph model so accidental cheating is
+  difficult.
+
+Bot abilities and restrictions:
+- Same movement speed and acceleration as humans.
+- Same 5 initial Move charges.
+- Same health, damage, gravity, collision, hazards, boxes, and elimination rules.
+- Can walk/run, choose paths, use 90/180 Gravity Moves, open mystery boxes, obtain clues,
+  take damage, finish, and be eliminated.
+- Bot gravity/orientation must be fully visible and synchronized.
+- Bot does not teleport, phase through geometry, ignore hazards, or query the hidden exit.
+
+Exploration behavior:
+- Observe current chamber and connected passages.
+- Add visible cells/edges to its personal discovered graph.
+- Remember visited cells, traversal costs, hazards, boxes, dead ends, gravity requirements,
+  and unsuccessful choices.
+- Prefer useful unexplored frontier nodes while penalizing repeated paths.
+- Backtrack intelligently when a branch is exhausted.
+- Evaluate whether spending a Move produces enough exploration/progress value.
+- Use obtained clues to update a probability/priority model without revealing exact exit.
+- Once the exit is actually observed/discovered, calculate the shortest safe valid known
+  route to it.
+
+Use a deterministic, testable utility model similar to:
+
+  utility = exploration_value
+          + clue_alignment_value
+          + expected_box_value
+          + progress/novelty_value
+          - travel_cost
+          - known_hazard_risk
+          - gravity_move_cost
+          - revisit_penalty
+
+Use A*, Dijkstra, frontier-based best-first exploration, or an equivalent graph search on
+states such as:
+
+  (cell, gravity_orientation, Moves_remaining, relevant_status)
+
+Do not build machine-learning AI. Use reliable graph/state planning. Add a small natural
+reaction delay and smooth physical steering, but do not intentionally make the bot
+irrational unless a future difficulty setting requests it. Server controls bots in
+online/mixed matches. Offline mode runs the same bot logic locally.
+
+
+======================================================================
+13. MULTIPLAYER AND NETWORK ARCHITECTURE
+======================================================================
+
+Target hosting: Render.
+Engine: Godot 4.x stable.
+Language: GDScript unless a tiny external deployment helper is truly necessary.
+
+Networking constraint:
+- Standard public ENet/UDP is not the intended Render path.
+- Use Godot WebSocketMultiplayerPeer / WebSocket-based networking compatible with a
+  public ws:// or wss:// Render Web Service.
+- Use a headless Godot authoritative server deployed via Docker on Render where feasible.
+- Render terminates TLS; configure the public client endpoint using environment/config,
+  not hardcoded secrets.
+- Keep offline Bot Race independent from Render and network availability.
+
+Authority model:
+- Server owns lobby membership, match seed/config, countdown, timer, bot decisions,
+  Move charge spending, health/damage, mystery-box state/outcomes, clue grants, finish
+  detection, placements, elimination, and results.
+- Clients may use local input/prediction/interpolation for responsive movement, while the
+  server validates plausible movement and periodically corrects drift.
+- Do not trust clients to award themselves health, Moves, loot, or placement.
+- Use reliable RPC/messages for state-changing events and suitable frequent updates for
+  transforms.
+- Include sender validation and reject RPCs from the wrong authority.
+
+Synchronization requirements:
+- Player ID, display name, avatar/color, human/bot flag.
+- Position, velocity, body orientation, local gravity vector, animation state.
+- Health/hearts, Move count, buffs/debuffs, eliminated/finished status.
+- Match seed, generation version/config checksum, countdown and timer.
+- Box opened state/result, hazards where stateful, clue ownership/effect.
+- Finish order and timestamps.
+
+Networking quality:
+- Smooth remote transforms using interpolation; do not directly snap every frame.
+- Handle late join only in lobby unless safe in-match spectating is implemented.
+- Time out dead connections and return clear UI errors.
+- Host/server should prevent starting with fewer than 2 total racers.
+- Room codes must map safely to active lobbies; document any Render/free-tier limitations.
+- Show Connecting, Connected, Ready, Reconnecting, and Failed states.
+- Avoid blocking the main thread during network operations.
+- Add a local debug server configuration for fast testing.
+
+Deployment files:
+- Dockerfile for headless Godot server.
+- Render configuration/instructions, optionally render.yaml if accurate and maintainable.
+- Environment example file with non-secret variables only.
+- Health/readiness behavior if practical.
+- Exact local server and Render deployment steps in README.md.
+
+
+======================================================================
+14. USER INTERFACE, MENUS, AND SETTINGS
+======================================================================
+
+Create a coherent, polished interface suitable for judges and visitors unfamiliar with
+the game.
+
+Required screens:
+
+1. Splash/title screen
+- Temporary centralized GAME_TITLE_TBD display.
+- Team Optimus credit.
+- Quick startup; no long unskippable intro.
+
+2. Home/Main Menu
+- Play
+- Settings
+- How to Play / Controls
+- About / Theme
+- Credits
+- Quit on desktop
+
+3. Play Mode Selection
+- Bot Race
+- Online Race
+- Mixed Race
+
+4. Bot Lobby
+- Select 1-4 bots, giving 2-5 total racers.
+- Choose/randomize seed.
+- Start.
+
+5. Online/Mixed Lobby
+- Create room, join room, room code.
+- 2-5 slot display.
+- Player/bot identity, ready state, add/remove/fill bots, host controls.
+- Start validation and clear connection feedback.
+
+6. Settings
+- Master volume.
+- Music volume.
+- Sound-effects volume.
+- Mouse sensitivity.
+- Fullscreen/windowed.
+- Resolution if appropriate.
+- Graphics-quality controls kept simple.
+- Key/control display and remapping if reliable.
+- Persist settings locally.
+
+7. How to Play
+- Movement and interaction controls.
+- Explain 5 Moves.
+- Explain G + WASD 90-degree turn and G + Space 180-degree inversion.
+- Explain hearts, hazards, boxes, clues, finish, elimination, and spectator mode.
+- Explain that each player has independent gravity.
+
+8. About / Theme
+- Concisely connect corridor axes, junctions, vertical travel, and rotational gravity to
+  Degree of Freedom.
+- List Team Optimus and members.
+
+9. In-game HUD
+- Five-heart display with half-heart support.
+- Remaining Move charges.
+- Overall timer.
+- Current gravity/orientation indicator.
+- Racer list with status/placement.
+- Temporary clue/loot/status notifications.
+- Interaction prompt.
+- Gravity selection feedback.
+- Do not reveal hidden exit coordinates.
+
+10. Pause Menu
+- Resume, settings, controls, leave match/main menu.
+- Online pause must not stop the authoritative match.
+
+11. Results
+- Ordered placements and finish times.
+- Eliminated/DNF markers.
+- Useful statistics.
+- Same-seed rematch, new cave, lobby, main menu.
+
+Accessibility/readability:
+- High contrast UI.
+- Do not communicate critical state by color alone.
+- Use readable fonts and scalable UI anchors.
+- Avoid excessive motion and provide restrained effects.
+- Make the first match understandable with minimal reading.
+
+
+======================================================================
+15. ART, AUDIO, ATMOSPHERE, AND CHARACTERS
+======================================================================
+
+Visual direction:
+- Stylized/low-poly or simple realistic block cave, chosen for coherence and performance.
+- Initial Stone Age mode should feel ancient, enclosed, mysterious, and readable.
+- Use modular stone walls, floors, ceilings, pillars, cracks, moss/dirt accents, torches or
+  restrained lighting, fog/particles where performant, and distinctive landmark rooms.
+- Do not make the entire cave so dark that navigation becomes unpleasant.
+- Clearly distinguish racers using colors, silhouettes, name labels, or outlines.
+- Multiple visible character variants are desired; at minimum provide distinct colors or
+  materials with a replaceable character scene.
+- Animate idle, walk/run, gravity transition, damage, elimination, and finish as resources
+  allow. Functional placeholders are acceptable before final assets.
+
+Audio:
+- Main-menu music.
+- Cave ambience.
+- Footsteps.
+- Gravity-shift sound.
+- Damage/fire/spider/mystery-box/clue/finish UI sounds.
+- Separate master/music/SFX volume settings.
+- Loop and transition audio cleanly.
+
+Assets:
+- Prefer self-created, CC0, permissively licensed, or properly purchased assets.
+- Record source URL, author, license, modification, and usage in CREDITS.md immediately
+  when adding an external asset.
+- Record significant AI-generated art/audio/code assistance in the AI disclosure.
+- Never add an asset without confirming legal use and credit requirements.
+
+
+======================================================================
+16. RECOMMENDED GODOT PROJECT ARCHITECTURE
+======================================================================
+
+Use a clean modular structure similar to the following, adapting to valid existing work:
+
+res://
+  project.godot
+  icon.svg
+  autoload/
+    app_config.gd
+    game_state.gd
+    settings_manager.gd
+    audio_manager.gd
+    network_manager.gd
+    scene_router.gd
+  scenes/
+    bootstrap/
+      bootstrap.tscn
+    ui/
+      splash.tscn
+      main_menu.tscn
+      mode_select.tscn
+      lobby.tscn
+      settings.tscn
+      how_to_play.tscn
+      about.tscn
+      credits.tscn
+      hud.tscn
+      pause_menu.tscn
+      results.tscn
+      spectator_ui.tscn
+    game/
+      game_world.tscn
+      match_controller.tscn
+      finish_area.tscn
+      spawn_area.tscn
+    player/
+      player.tscn
+      player_controller.gd
+      gravity_controller.gd
+      player_health.gd
+      player_interaction.gd
+      player_visual.gd
+      camera_controller.gd
+    bots/
+      bot_player.tscn
+      bot_controller.gd
+      bot_knowledge.gd
+      bot_planner.gd
+    cave/
+      cave_generator.gd
+      cave_graph.gd
+      cave_validator.gd
+      cave_theme.gd
+      cell_definition.gd
+      modules/
+      themes/
+    hazards/
+      fire_hazard.tscn
+      spider.tscn
+    pickups/
+      mystery_box.tscn
+      clue_effect.gd
+    networking/
+      headless_server.gd
+      lobby_state.gd
+      network_player_state.gd
+  scripts/
+    shared/
+    utilities/
+  assets/
+    models/
+    materials/
+    textures/
+    audio/
+    fonts/
+  tests/
+    test_cave_generation.gd
+    test_gravity_states.gd
+    test_bot_knowledge.gd
+    test_match_rules.gd
+  server/
+    Dockerfile or root Dockerfile as appropriate
+  docs/
+    architecture.md
+    networking.md
+    cave_generation.md
+    testing.md
+    submission_checklist.md
+
+Root documentation/files:
+- README.md
+- AGENTS.md
+- future_implementation_suggestion.txt
+- CREDITS.md
+- AI_DISCLOSURE.md
+- LICENSE if the team chooses one
+- .gitignore suitable for Godot 4
+- export_presets.cfg without secrets
+- Dockerfile for the Render headless server
+- render.yaml only if verified
+- .env.example without secrets
+
+Use typed GDScript where it improves safety. Prefer signals and explicit interfaces over
+hard global coupling. Put tunable game values in Resources/configuration rather than
+scattering magic numbers.
+
+
+======================================================================
+17. REQUIRED DOCUMENTATION CONTENT
+======================================================================
+
+README.md must include:
+- Temporary/final game title and concise pitch.
+- Team Optimus and all four member names.
+- Theme explanation.
+- Feature list.
+- Game modes and 2-5 racer rules.
+- Complete controls.
+- Local Bot Race instructions.
+- Online client/server instructions.
+- Render deployment instructions.
+- Godot version and major tools.
+- Windows/web export instructions.
+- Project structure overview.
+- Testing instructions.
+- Known limitations/bugs.
+- Credits and AI disclosure links.
+- GameJam submission checklist/link placeholders.
+
+AGENTS.md must guide future coding agents:
+- Read architecture/docs before editing.
+- Preserve existing work and Godot scene/script references.
+- Keep gravity relative; never reintroduce Vector3.UP assumptions.
+- Preserve deterministic generation.
+- Maintain bot information separation.
+- Keep server authority over critical state.
+- Run generation/gravity/rules tests after relevant changes.
+- Do not commit generated caches, secrets, builds, or imported artifacts unnecessarily.
+- Update documentation and credits with each feature/asset.
+- Keep offline Bot Race working even when online networking is unavailable.
+
+future_implementation_suggestion.txt must include at least:
+- Complete Jungle mode.
+- Complete Dark Cave mode.
+- Complete City Drain mode.
+- Additional procedural modules and landmarks.
+- Bot difficulty personalities while preserving fair information.
+- Matchmaking and persistent accounts only if ever justified.
+- More hazards, boxes, clues, abilities, characters, cosmetics, and accessibility.
+- Discovered-only minimap/breadcrumb system.
+- Controller support.
+- Additional game modes, ranked/time-trial/co-op possibilities.
+- Replay/spectator improvements.
+- Networking hardening, reconciliation, lag compensation, reconnect, server scaling.
+- Performance profiling and mobile/web optimization.
+
+CREDITS.md must track every external asset and dependency. AI_DISCLOSURE.md must honestly
+state substantial AI assistance used for coding, debugging, ideation, writing, art, or
+audio, without claiming the AI tool is a human team member.
+
+
+======================================================================
+18. IMPLEMENTATION PHASES - COMPLETE IN THIS ORDER
+======================================================================
+
+Phase 0 - Inspect and protect
+- Inspect repository and Git state.
+- Inventory existing assets and scripts.
+- Confirm/establish Godot 4 project.
+- Create architecture notes and a task checklist.
+- Do not erase useful work.
+
+Phase 1 - Vertical movement prototype
+- One test chamber.
+- Gravity-relative CharacterBody3D controller.
+- FPS camera.
+- 90-degree and 180-degree Gravity Move controls.
+- Five Move charges and HUD.
+- Smooth orientation changes.
+- Another dummy character visible on a different surface.
+- Test all six gravity directions repeatedly.
+
+Phase 2 - Procedural cave
+- Seeded logical 3D graph.
+- Modular geometry and collision.
+- Spawn, hidden finish, branches, dead ends, loops, and vertical paths.
+- Standard and gravity-aware solvability validation.
+- Debug visualization and automated multi-seed generation test.
+
+Phase 3 - Match rules and offline bot race
+- Countdown, timer, finish order, results.
+- Hearts, damage, elimination, spectator mode.
+- Fire, spider, boxes, refills, rare clues.
+- One human versus one fair non-omniscient bot.
+- Scale Bot Race to 1-4 bots.
+- This phase must produce a fully playable offline judging fallback.
+
+Phase 4 - UI and polish foundation
+- Main menu, mode selection, lobby, settings, how-to-play, about/theme, credits.
+- Audio buses and settings persistence.
+- Clear onboarding, HUD feedback, and visual landmarks.
+
+Phase 5 - Multiplayer
+- WebSocket client/server connection.
+- Headless authoritative server.
+- Online lobby and room code.
+- 2-5 human players.
+- Synchronize gravity, transforms, health, boxes, finish, timer, and results.
+- Test two local clients before Render deployment.
+
+Phase 6 - Mixed races and Render
+- Server-controlled bots.
+- Any valid 2-5 human/bot composition.
+- Fill-empty-slots behavior.
+- Dockerized Render deployment.
+- Clear reconnect/failure UI and offline fallback.
+
+Phase 7 - Content and presentation
+- Stone Age art pass, particles, audio, characters, animation, game feel.
+- Add Jungle, Dark Cave, City Drain only sequentially after Stone Age is stable.
+- Screenshots, video shot list, itch.io copy, credits, AI disclosure, known bugs.
+- Windows export and optional web export.
+
+At each phase:
+- Run the project and inspect runtime errors.
+- Test changed systems in isolation and integrated play.
+- Update README/docs.
+- Make a meaningful Git commit only if the user has authorized committing and repository
+  timing complies with the GameJam rules.
+- Never fabricate test success when the engine/runtime is unavailable.
+
+
+======================================================================
+19. TESTING AND VALIDATION
+======================================================================
+
+Automate what is practical and provide manual test scenes/checklists for the rest.
+
+Cave generation tests:
+- Generate at least hundreds of deterministic seeds in headless/debug testing.
+- Assert connected spawn/finish.
+- Assert spawn-finish minimum distance.
+- Assert at least one loop and required verticality.
+- Assert no invalid overlapping logical cells/connections.
+- Assert gravity-state reachability with 5 initial Moves without random loot dependence.
+- Assert the same seed/config produces the same graph hash.
+- Assert hazard/box placement constraints.
+
+Gravity tests:
+- Execute every 90-degree direction from every cardinal gravity orientation.
+- Execute 180-degree inversion from every orientation.
+- Chain many rotations without accumulated drift/gimbal lock.
+- Verify charge deduction exactly once.
+- Verify no shift with zero charges.
+- Verify movement and camera remain correct after rotation.
+- Verify remote visual orientation.
+- Verify protected vacuous 180-degree action damages rather than instantly eliminating.
+
+Health tests:
+- Half-heart and full-heart damage.
+- Damage cooldown prevents rapid drain.
+- Refill clamps to 5 hearts.
+- Zero hearts eliminates.
+- Heart Refill does not resurrect eliminated racers.
+- Second Chance triggers at most once when possessed.
+
+Bot tests:
+- Bot cannot access exit before discovery.
+- Bot knowledge includes only observed cells.
+- Bot backtracks from dead ends.
+- Bot uses gravity when valuable and cannot use it at zero Moves.
+- Bot reacts to its own clue.
+- Bot can finish and be eliminated under normal rules.
+
+Match/network tests:
+- Every total racer count from 2 through 5.
+- Bot, online, and mixed configurations including 2 humans + 2 bots.
+- Same seed/graph hash on server and all clients.
+- Box contention resolved once.
+- Damage and placement awarded only once.
+- Different players maintain independent gravity.
+- Disconnect does not crash match.
+- Offline Bot Race works with no network.
+- Results order ties deterministically using authoritative timestamps.
+
+Build QA:
+- Test Windows build on another Windows machine without Godot installed.
+- Test web build in a modern browser only if submitted.
+- Verify no secrets or private URLs in repository/build.
+- Verify settings and menus at common resolutions.
+- Verify fast restart for showcase visitors.
+- Record known bugs honestly.
+
+
+======================================================================
+20. PERFORMANCE AND SAFETY CONSTRAINTS
+======================================================================
+
+- Target stable performance on ordinary student Windows laptops.
+- Keep dynamic lights/shadows, particles, physics bodies, and navigation agents modest.
+- Use pooled/reused effects where valuable.
+- Cull/distance-disable expensive decorations and AI updates.
+- Use logical graph navigation for bots instead of expensive full-scene reasoning.
+- Keep generation bounded with maximum attempts and clear failure fallback.
+- Do not freeze the UI while generating; show seed/generation progress if generation is
+  noticeable.
+- Avoid unbounded RPCs, unvalidated client calls, or per-frame reliable messages.
+- Never commit secrets, API keys, private tokens, or credentials.
+- Sanitize player names and room input.
+- Gracefully handle missing audio/assets/server rather than crashing.
+
+
+======================================================================
+21. GAME FEEL AND FAIRNESS REQUIREMENTS
+======================================================================
+
+- Gravity shifting must feel responsive, intentional, and visually understandable.
+- Give a short preview/arrow of selected gravity before or during activation.
+- The camera transition must not be nauseating; keep it short and stable.
+- Players should understand damage sources immediately.
+- Procedural generation must create decisions, not only long identical corridors.
+- Rare clues help but do not make all other play irrelevant.
+- Random mystery-box outcomes must not produce unavoidable instant elimination.
+- Bots play optimally from discovered information but do not cheat.
+- Starting positions and initial route access must be fair.
+- A racer should not normally be eliminated in the opening moments.
+- Five Move charges must create meaningful scarcity while still guaranteeing a base
+  solution.
+- Use playtest telemetry/debug statistics to tune average match duration, deaths, Move
+  usage, box usage, and finish rate.
+
+
+======================================================================
+22. DEFINITION OF DONE / ACCEPTANCE CRITERIA
+======================================================================
+
+The project is considered feature-complete only when all of the following are true:
+
+Core:
+- A human can launch the game, navigate menus, and start a match without the editor.
+- A deterministic block-based 3D cave is generated with loops and vertical routes.
+- The hidden exit is reachable under gravity-aware validation.
+- Player can walk, run, and look 360 degrees.
+- G + WASD performs correct 90-degree gravity shifts.
+- G + Space performs correct 180-degree inversion.
+- Each shift costs one of five initial Moves.
+- Different racers visibly use independent gravity.
+- Protected vacuous 180-degree failure damages hearts instead of instant elimination.
+- Fire, spider, health, elimination, mystery boxes, Heart Refill, and rare clues function.
+- Timer and ordered placements function.
+
+Modes:
+- One human can race against 1-4 bots offline.
+- Bots explore optimally without hidden exit knowledge.
+- 2-5 online humans can create/join a room and race.
+- Mixed human/bot configurations work, including 2 humans + 2 bots.
+- Offline Bot Race remains available if Render/networking fails.
+
+Presentation:
+- Home, mode selection, lobby, settings, menu bar/navigation, about/theme, controls,
+  credits, pause, HUD, spectator, and results screens function.
+- Music and SFX settings work and persist.
+- Stone Age mode is coherent and readable.
+- Multiple characters/colors are visible.
+- README.md, AGENTS.md, future_implementation_suggestion.txt, CREDITS.md, and
+  AI_DISCLOSURE.md are complete.
+- Render deployment and local server instructions are documented.
+- A Windows build can be exported and run independently.
+- Submission checklist, screenshot list, and 60-90 second video shot list are prepared.
+
+
+======================================================================
+23. FINAL DELIVERY FROM THE CODING AGENT
+======================================================================
+
+When implementation work is complete, report concisely:
+
+1. What was implemented.
+2. Exact scenes/scripts/files added or changed.
+3. How to open and run Bot Race locally.
+4. How to run a local multiplayer server and two clients.
+5. How to deploy the headless WebSocket server to Render.
+6. How to export the Windows build and optional web build.
+7. Tests/checks actually executed and their results.
+8. Remaining known bugs or incomplete optional modes.
+9. The safest next actions before submission.
+
+Do not claim that something works unless it was actually implemented and checked. Do not
+substitute a design document for the requested project. Build the complete game as far as
+the environment permits, preserve a stable offline judging mode, and make the central
+Degree of Freedom gravity mechanic the most polished and memorable part of the experience.
+
+END OF MASTER IMPLEMENTATION PROMPT

@@ -1,0 +1,194 @@
+# TASK_BOARD
+
+Reference the Task ID in every commit message and in every AI prompt. Update the status column
+when you start and when you finish — this board, not anyone's memory, is what tells the next
+person (or the next AI session) what is actually done.
+
+**Team:** Md. Raihan Kabir Sifat · Estiak Zaman Atul · Sadman Sakib · Ashraf Hossain Chowdhury
+
+Map yourselves to Developer A–D below and fill in the Owner column. The split is designed so
+that A, B and C touch almost no common files during the first day.
+
+| Slot | Focus | Primary files |
+|---|---|---|
+| **Developer A** | Player, gravity, camera — the critical path | `scripts/player/**` |
+| **Developer B** | Cave generation and level building | `scripts/cave/**`, `scenes/cave/**` |
+| **Developer C** | UI, HUD, menus, audio, settings | `scenes/ui/**`, `scripts/ui/**`, `autoload/settings_manager.gd`, `autoload/audio_manager.gd` |
+| **Developer D** | Match rules, hazards, boxes, then bots | `scripts/gameplay/**`, `scripts/bots/**` |
+
+Developer A is on the critical path. If A is blocked, B/C/D should unblock A before doing
+anything else — every other system consumes the gravity frame.
+
+---
+
+## Schedule
+
+Wall clock from 16 September, evening. Roughly 40 hours to the 17 September 11:59 PM deadline.
+
+| Block | A | B | C | D |
+|---|---|---|---|---|
+| **0–6 h** | Player controller + gravity shift | Cave graph generator (pure data) | Project skeleton, autoloads, main menu | Match controller, timer, finish |
+| **6–12 h** | Six-orientation testing, transition polish | Modular meshes, graph → geometry | HUD: hearts, moves, timer, DOF | Hearts, damage, elimination |
+| **12–20 h** | Camera feel, shift VFX/SFX hooks | Spawn/finish placement, validation | Settings, How to Play, About | Fire hazard, mystery boxes |
+| **20–28 h** | **Integration** — everyone merges, first full playable | | | Bot: discovered graph + frontier search |
+| **28–34 h** | Stone Age art pass, audio, game feel, results screen — all hands | | | |
+| **34–38 h** | Exports (Windows + web), QA, bug fixing, known-bugs list | | | |
+| **38–40 h** | Video, screenshots, itch.io page, submission. **Do not write code in this block.** | | | |
+
+Networking (NET-*) is Tier 3 and is not scheduled. It may only begin after hour 34 if
+everything above is complete and committed, and it is bound by the abort gate in
+`docs/MVP_SCOPE.md`.
+
+---
+
+## TODO
+
+### Core — Developer A
+
+| ID | Task | Pri | Deps | Definition of Done |
+|---|---|---|---|---|
+| CORE-001 | Project skeleton: folders, 6 autoloads, `AppConfig` tunables | P0 | — | Project runs, autoloads resolve, no errors |
+| MOVE-001 | `CharacterBody3D` gravity-relative walk + sprint | P0 | CORE-001 | Player walks in a test box, no `Vector3.UP` in file |
+| MOVE-002 | FPS camera: yaw on body, pitch on head, clamped ±89° | P0 | MOVE-001 | Full 360° look, no roll, sensitivity exported |
+| AXIS-001 | `gravity_controller.gd`: gravity_dir, local basis, custom gravity integration | P0 | MOVE-001 | Player falls along an arbitrary cardinal, floor check correct |
+| AXIS-002 | `G` chord input handling with movement suppression | P0 | AXIS-001 | Holding G stops walking, releases cleanly |
+| AXIS-003 | 90° shift: cardinal snap + basis slerp, 0.35 s | P0 | AXIS-002 | All four directions correct, no camera roll |
+| AXIS-004 | 180° inversion via `G+Space` | P0 | AXIS-003 | Ceiling becomes floor, forward preserved |
+| AXIS-005 | 5 Move charges, deduct once, deny at zero with feedback | P0 | AXIS-003 | Cannot shift at zero, distinct denied SFX/flash |
+| AXIS-006 | Safe-transform ring buffer + protected vacuum-180 recovery | P0 | AXIS-004 | 180° into vacuum costs 1 heart and recovers, never eliminates |
+| AXIS-007 | Test chamber: all six orientations, chained rotations, drift check | P0 | AXIS-004 | 20+ chained shifts, basis stays orthonormal |
+| AXIS-008 | Gravity direction preview arrow while G is held | P1 | AXIS-002 | Player can see the direction before committing |
+
+### Cave — Developer B
+
+| ID | Task | Pri | Deps | Definition of Done |
+|---|---|---|---|---|
+| LEVEL-001 | `cave_graph.gd` data structure + connection masks | P0 | CORE-001 | Cells add/query/serialise, unit-testable without scene |
+| LEVEL-002 | Seeded spine generation spawn → finish | P0 | LEVEL-001 | Deterministic; same seed = same spine |
+| LEVEL-003 | Braiding: loops, branches, dead ends, vertical shafts | P0 | LEVEL-002 | At least one cycle, at least two vertical sections |
+| LEVEL-004 | Modular meshes per connection mask | P0 | LEVEL-001 | Corridor, turn, T, cross, shaft, chamber, cap |
+| LEVEL-005 | `cave_builder.gd` graph → instantiated geometry + collision | P0 | LEVEL-004 | Walkable cave, no gaps, no overlaps |
+| LEVEL-006 | Spawn chamber (hazard-free) and hidden finish area | P0 | LEVEL-005 | Min graph distance enforced, finish not visible from spawn |
+| LEVEL-007 | Spine Move-cost assert ≤ 3 of 5 charges | P0 | LEVEL-003 | Generation retries deterministically on failure |
+| LEVEL-008 | 50-seed dev validation command | P1 | LEVEL-007 | All 50 connected and within Move budget |
+| LEVEL-009 | Landmarks and lighting variation so corridors differ | P1 | LEVEL-005 | No two chambers read identically |
+| LEVEL-010 | Outer bounds / kill volumes | P0 | LEVEL-005 | Falling out is caught, not infinite |
+
+### Gameplay — Developer D
+
+| ID | Task | Pri | Deps | Definition of Done |
+|---|---|---|---|---|
+| MATCH-001 | `match_controller.gd`: countdown 3-2-1-GO, match timer | P0 | CORE-001 | Countdown blocks input, timer starts on GO |
+| MATCH-002 | Finish trigger, placement order, finish times | P0 | MATCH-001, LEVEL-006 | 1st–5th assigned in arrival order |
+| MATCH-003 | Results screen data: placements, times, DNF, stats, seed | P0 | MATCH-002 | Seed shown for rematch |
+| MATCH-004 | Rematch same seed / new cave / main menu | P1 | MATCH-003 | All three paths work without restart |
+| HEALTH-001 | 5 hearts with half-heart support | P0 | CORE-001 | Damage of 0.5 and 1.0 both display correctly |
+| HEALTH-002 | Damage cooldown + 1.5 s invulnerability, per-source | P0 | HEALTH-001 | Standing in fire drains at a fair rate, not per-frame |
+| HEALTH-003 | Elimination at zero hearts, input lockout | P0 | HEALTH-001 | Eliminated racer stops, is marked in HUD |
+| HEALTH-004 | Spawn and countdown damage immunity | P0 | HEALTH-002 | No damage possible before GO |
+| HAZ-001 | Fire hazard: visible, animated, damage 0.5/tick with cooldown | P0 | HEALTH-002 | Readable from a distance, never instantly lethal |
+| BOX-001 | Mystery box: interact, one-time, authoritative outcome | P1 | HEALTH-001, AXIS-005 | Cannot be opened twice |
+| BOX-002 | Loot table: Heart Refill, Move Refill, speed, penalty, rare clue (~5%) | P1 | BOX-001 | Data-driven weights; Heart Refill clamps at 5 |
+| BOX-003 | Clue effect: coarse direction pulse, never full reveal | P2 | BOX-002 | Helps without trivialising the search |
+| BOT-001 | `bot_knowledge.gd` discovered graph, isolated from real graph | P1 | LEVEL-001 | No reference to the true graph exists in the file |
+| BOT-002 | `bot_planner.gd` frontier search + backtracking | P1 | BOT-001 | Bot explores, backtracks from dead ends |
+| BOT-003 | `bot_controller.gd` drives body with same rules as humans | P1 | BOT-002, MOVE-001 | Same speed, same 5 charges, no teleporting |
+| BOT-004 | Bot spends a Move when a frontier requires it | P1 | BOT-003, AXIS-005 | Visibly shifts gravity, cannot shift at zero |
+| BOT-005 | Scale to 1–4 bots | P1 | BOT-003 | 2–5 total racers all function |
+
+### UI & Presentation — Developer C
+
+| ID | Task | Pri | Deps | Definition of Done |
+|---|---|---|---|---|
+| UI-001 | Splash + main menu, `GAME_TITLE_TBD` from `AppConfig` | P0 | CORE-001 | Title changeable in exactly one place |
+| UI-002 | Mode select + bot lobby (racer count, seed, start) | P0 | UI-001 | 2–5 racers selectable, seed randomisable |
+| UI-003 | HUD: hearts, Move charges, timer, orientation indicator | P0 | AXIS-005, HEALTH-001 | All four update live and are readable at a glance |
+| UI-004 | Gravity shift HUD feedback + denied state | P0 | UI-003 | Charge animates on spend, denial is unmistakable |
+| UI-005 | Results screen | P0 | MATCH-003 | Placements, times, DNF, seed |
+| UI-006 | Pause menu | P1 | UI-001 | Resume, settings, quit to menu |
+| UI-007 | Settings: master/music/SFX volume, sensitivity, fullscreen, persisted | P1 | CORE-001 | Survives a restart |
+| UI-008 | How to Play — explains Moves, G chords, hearts, private gravity | P0 | UI-001 | A judge can play correctly after reading it once |
+| UI-009 | About / Theme screen for judges | P0 | UI-001 | States the DOF interpretation plainly, credits the team |
+| UI-010 | DOF 1/2/3 contextual readout at junctions | P1 | LEVEL-001, UI-003 | Counts real traversable axes at the current cell |
+| ART-001 | Stone Age materials, lighting, fog | P1 | LEVEL-005 | Reads as intentional, not greybox |
+| ART-002 | Racer colours, silhouettes, name labels | P1 | MOVE-001 | Racers distinguishable at distance and on walls |
+| AUDIO-001 | Buses + `AudioManager` | P1 | CORE-001 | Volume settings route correctly |
+| AUDIO-002 | Ambience, footsteps, gravity shift, damage, box, finish, menu music | P1 | AUDIO-001 | Gravity shift sound is the most satisfying one |
+
+### Ship — All hands
+
+| ID | Task | Pri | Deps | Definition of Done |
+|---|---|---|---|---|
+| SHIP-001 | Windows export | P0 | Tier 2 | Runs on a Windows machine without Godot |
+| SHIP-002 | Web export | P0 | Tier 2 | Loads and plays in a current browser |
+| SHIP-003 | README: controls, run instructions, structure, known bugs | P0 | — | A stranger can run the game from it |
+| SHIP-004 | `CREDITS.md` + `AI_DISCLOSURE.md` | P0 | — | Every external asset and AI use recorded |
+| SHIP-005 | Screenshots | P0 | Tier 2 | Include one shot of two racers on different surfaces |
+| SHIP-006 | 60–90 s gameplay video | P0 | Tier 2 | Title, core loop, gravity mechanic, theme connection |
+| SHIP-007 | itch.io submission | P0 | all SHIP | Submitted before 11:59 PM, 17 Sept |
+
+### Tier 3 — gated, unscheduled
+
+| ID | Task | Pri | Deps | Definition of Done |
+|---|---|---|---|---|
+| NET-001 | `WebSocketMultiplayerPeer` client/server connection | P3 | Tier 2 complete | Two local clients connect |
+| NET-002 | Headless authoritative server + lobby/room codes | P3 | NET-001 | Room code joins a live lobby |
+| NET-003 | Sync transforms, gravity, health, charges, finish | P3 | NET-002 | Two clients see each other's gravity correctly |
+| NET-004 | Dockerfile + Render deployment | P3 | NET-003 | Public endpoint reachable |
+| NET-005 | Mixed human/bot lobbies, fill-with-bots | P3 | NET-003, BOT-005 | 2 humans + 2 bots races correctly |
+| ENEMY-001 | Spider on a fixed corridor rail, no nav mesh | P3 | HAZ-001 | Patrols and lunges, cannot stun-lock |
+| SPEC-001 | Spectator camera cycling after elimination | P3 | HEALTH-003 | Cycles active racers, affects nothing |
+
+---
+
+## IN PROGRESS
+
+_(nothing yet)_
+
+## BLOCKED
+
+_(nothing yet)_
+
+## TESTING
+
+| ID | Note |
+|---|---|
+| AXIS-003/004 | Verified headless and visually. Still needs a human at a keyboard to judge whether 0.35 s *feels* right. Machine tests cannot answer that. |
+
+## DONE
+
+Completed 16 September 2026.
+
+| ID | Note |
+|---|---|
+| CORE-001 | Folders, `AppConfig` autoload, input map for all nine actions, GL Compatibility preserved. Global gravity set to 0 — nothing may rely on it. |
+| MOVE-001 | Gravity-relative walk + sprint, planar/vertical velocity decomposition, no `Vector3.UP` in the file |
+| MOVE-002 | Yaw on body about `local_up`, pitch on head clamped ±89°, basis re-orthonormalised each look |
+| AXIS-001 | `gravity_controller.gd` — gravity frame, custom integration, `up_direction` synced |
+| AXIS-002 | G chord suppresses WASD movement while held |
+| AXIS-003 | 90° shift, cardinal snap, eased basis slerp over 0.35 s |
+| AXIS-004 | 180° inversion, forward preserved |
+| AXIS-005 | 5 charges, deducts exactly once, denies at zero and on same-direction with signal feedback |
+| AXIS-006 | Safe-transform ring buffer + protected vacuum-180 recovery path |
+| AXIS-007 | `tests/test_gravity.gd` — **150 assertions, 0 failures** |
+
+### How to run what exists
+
+```bash
+# Play the prototype
+godot res://scenes/game/test_chamber.tscn
+
+# Gravity verification (exits non-zero on failure)
+godot --headless res://tests/test_gravity.tscn
+
+# Regenerate screenshots
+godot res://tests/screenshot.tscn
+```
+
+### Known issues
+
+| Issue | Severity | Note |
+|---|---|---|
+| Capsule dips ~0.34 units into the floor mid-rotation | Low | The capsule sweeps through horizontal during a 180°, briefly reducing its vertical extent. Self-corrects on completion and reads as weight rather than a glitch. Revisit only if it causes clipping in tight corridors. |
+| `is_local_player` captures the mouse in `_ready()` | Low | Fine for one local player. Needs a guard once bots and remote players instantiate the same scene. |
+| No audio, no VFX on shift | Expected | AUDIO-002 and UI-004, not yet started. |
