@@ -7,10 +7,14 @@ extends StaticBody3D
 ## real connection in the cave graph, so a collapse can only open the map, never close it.
 
 signal collapsed()
+## The server relays this so every client's copy of the tile crumbles too.
+signal crumbling_started()
 
 var _trigger: Area3D
 var _mesh: MeshInstance3D
 var _state := 0  # 0 intact, 1 cracking, 2 gone
+## Online client copy: only the server's tile decides when a touch starts the collapse.
+var net_client: bool = false
 var _timer := 0.0
 var _rest_y := 0.0
 
@@ -71,12 +75,15 @@ func _ready() -> void:
 	tcol.shape = tshape
 	_trigger.add_child(tcol)
 	add_child(_trigger)
-	_trigger.body_entered.connect(func(_b: Node3D) -> void: start_crumbling())
+	_trigger.body_entered.connect(func(_b: Node3D) -> void:
+		if not net_client:
+			start_crumbling())
 
 
 func start_crumbling() -> void:
 	if _state != 0:
 		return
+	crumbling_started.emit()
 	_state = 1
 	_timer = AppConfig.CRUMBLE_DELAY
 	AudioManager.play_sfx_3d("crumble", global_position, 0.0)

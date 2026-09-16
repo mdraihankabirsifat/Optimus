@@ -6,9 +6,13 @@ func _ready() -> void:
 	var results: Array = GameState.last_results
 	var col := UiKit.centre_column(self, 16)
 
+	var online := GameState.last_results_online
 	var you: Dictionary = {}
 	for entry: Dictionary in results:
-		if not entry.get("is_bot", false):
+		if online:
+			if String(entry["name"]) == GameState.net_local_name:
+				you = entry
+		elif not entry.get("is_bot", false):
 			you = entry
 	var headline := "Race Over"
 	var headline_colour := UiKit.EMBER
@@ -52,6 +56,8 @@ func _ready() -> void:
 		if entry["finished"]:
 			result_text = MatchController.format_time(float(entry["finish_time"]))
 			result_colour = UiKit.TEXT
+		elif entry.get("disconnected", false):
+			result_text = "DISCONNECTED"
 		elif entry["eliminated"]:
 			result_text = "ELIMINATED"
 			result_colour = UiKit.DANGER
@@ -63,7 +69,7 @@ func _ready() -> void:
 	var highlights := _highlights(results)
 	if highlights != "":
 		col.add_child(UiKit.title(highlights, 18, UiKit.EMBER))
-	var board := SettingsManager.leaderboard(GameState.last_match_seed, GameState.last_cave_size)
+	var board := [] if online else SettingsManager.leaderboard(GameState.last_match_seed, GameState.last_cave_size)
 	if not board.is_empty():
 		var times: Array[String] = []
 		for t in board:
@@ -76,6 +82,17 @@ func _ready() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 16)
 	col.add_child(row)
+	if online:
+		# Rematches are the host's call from the room; the room is still open.
+		var still_in_room := NetManager.is_online() and NetManager.in_room()
+		var lobby_button := UiKit.button("Back to Room" if still_in_room else "Online Lobby", func() -> void:
+			SceneRouter.go_to(SceneRouter.ONLINE_LOBBY), 280)
+		row.add_child(lobby_button)
+		row.add_child(UiKit.button("Main Menu", func() -> void:
+			NetManager.leave_room()
+			SceneRouter.go_to(SceneRouter.MAIN_MENU), 220))
+		lobby_button.grab_focus.call_deferred()
+		return
 	var rematch := UiKit.button("Rematch  (same cave)", func() -> void:
 		GameState.cave_size = GameState.last_cave_size
 		GameState.prepare_match(GameState.last_match_seed, GameState.bot_count)

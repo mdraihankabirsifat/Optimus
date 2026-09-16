@@ -27,6 +27,7 @@ func _ready() -> void:
 	_test_results_ordering()
 	_test_time_limit()
 	_test_format_time()
+	_test_health_rules()
 
 	print("")
 	print("==================================================")
@@ -148,6 +149,62 @@ func _test_format_time() -> void:
 	_section("time formatting")
 	_check("under a minute", MatchController.format_time(9.5) == "0:09.50")
 	_check("over a minute", MatchController.format_time(75.25) == "1:15.25")
+
+
+## HEALTH-001..005: half and full hearts, cooldowns, refill clamp, shield, Second Chance.
+func _test_health_rules() -> void:
+	_section("health rules")
+	var h := PlayerHealth.new()
+	add_child(h)
+	_check("starts on exactly 5 hearts", is_equal_approx(h.hearts, 5.0))
+
+	h.apply_damage(0.5, "fire_1", 1.0)
+	_check("fire takes half a heart", is_equal_approx(h.hearts, 4.5))
+	_check("same source during its cooldown does nothing", not h.apply_damage(0.5, "fire_1", 1.0))
+	_check("any source during invulnerability does nothing", not h.apply_damage(1.0, "spider_1"))
+	_check("hearts unchanged by blocked hits", is_equal_approx(h.hearts, 4.5))
+	h._process(AppConfig.INVULNERABILITY_TIME + 0.05)
+	h.apply_damage(1.0, "spider_1")
+	_check("a spider takes a full heart once mercy ends", is_equal_approx(h.hearts, 3.5))
+
+	# Standing in fire for 10 seconds, ticking at 60 fps.
+	var drain := PlayerHealth.new()
+	add_child(drain)
+	for i in 600:
+		drain._process(1.0 / 60.0)
+		drain.apply_damage(AppConfig.DAMAGE_FIRE, "fire_9", AppConfig.FIRE_TICK_COOLDOWN)
+	_check("10 s in fire drains at most 10 ticks, not 600 (%.1f hearts left)" % drain.hearts,
+		drain.hearts >= AppConfig.HEARTS_MAX - AppConfig.DAMAGE_FIRE * 10.0 and drain.hearts < AppConfig.HEARTS_MAX)
+
+	h.refill(99.0)
+	_check("Heart Refill clamps to 5", is_equal_approx(h.hearts, AppConfig.HEARTS_MAX))
+
+	h._process(5.0)
+	h.grant_shield()
+	h.apply_damage(1.0, "piston_1")
+	_check("a shield soaks one whole hit", is_equal_approx(h.hearts, 5.0) and not h.has_shield)
+
+	var sc := PlayerHealth.new()
+	add_child(sc)
+	sc.grant_second_chance()
+	sc.apply_damage(5.0, "trap")
+	_check("Second Chance leaves half a heart instead of eliminating",
+		is_equal_approx(sc.hearts, 0.5) and not sc.is_eliminated)
+	sc._process(5.0)
+	sc.apply_damage(5.0, "trap")
+	_check("Second Chance works at most once", sc.is_eliminated)
+	sc.grant_second_chance()
+	sc.refill(3.0)
+	_check("neither a refill nor Second Chance resurrects", sc.is_eliminated and is_equal_approx(sc.hearts, 0.0))
+
+	var online := PlayerHealth.new()
+	add_child(online)
+	online.net_client = true
+	_check("an online client's hazards cannot take hearts", not online.apply_damage(1.0, "fire_2"))
+	online.net_apply(3.0, false, false, false)
+	_check("the server's hearts are applied", is_equal_approx(online.hearts, 3.0))
+	for n: Node in [h, drain, sc, online]:
+		n.queue_free()
 
 
 # --- Helpers ------------------------------------------------------------------

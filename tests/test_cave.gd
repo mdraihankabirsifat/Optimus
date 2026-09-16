@@ -26,6 +26,9 @@ func _ready() -> void:
 	var total_attempts := 0
 	var worst_climbs := 0
 	var min_hops := 9999
+	var total_min_moves := 0
+	var worst_min_moves := 0
+	var hash_first := {}
 
 	print("\nGenerating %d seeds..." % SEED_COUNT)
 
@@ -65,9 +68,52 @@ func _ready() -> void:
 		if graph.spawn_cell == graph.finish_cell:
 			_fail("seed %d: spawn is the finish" % s)
 
+		# Gravity-aware solvability over (cell, gravity, Moves left), no loot.
+		var need := CaveValidator.min_moves_to_finish(graph, AppConfig.MOVE_CHARGES_START)
+		if need == CaveValidator.UNREACHABLE:
+			_fail("seed %d: exit unreachable under gravity rules with 5 Moves" % s)
+		else:
+			total_min_moves += need
+			worst_min_moves = maxi(worst_min_moves, need)
+			if need > climbs:
+				_fail("seed %d: validator needs %d Moves but the spine promised %d" % [s, need, climbs])
+		# Structure: links symmetric and in bounds, no overlapping placements.
+		var problem := CaveValidator.structural_problem(graph, gen.size)
+		if problem != "":
+			_fail("seed %d: %s" % [s, problem])
+		# Hazard constraints.
+		var dist := graph.distances_from(graph.spawn_cell)
+		for h: Dictionary in graph.hazards:
+			if int(dist.get(h["cell"], 0)) < AppConfig.HAZARD_MIN_SPAWN_DISTANCE:
+				_fail("seed %d: fire %s too close to spawn" % [s, h["cell"]])
+			if graph.has_vertical_link(h["cell"]):
+				_fail("seed %d: fire in a shaft cell %s" % [s, h["cell"]])
+		for f: Dictionary in graph.features:
+			if f["kind"] in ["piston", "spider"] \
+					and int(dist.get(f["cell"], 0)) < AppConfig.HAZARD_MIN_SPAWN_DISTANCE:
+				_fail("seed %d: %s at %s too close to spawn" % [s, f["kind"], f["cell"]])
+		# The spawn chamber must be explorable on foot before anyone spends a Move.
+		if CaveValidator.free_region(graph, graph.spawn_cell).size() < 2:
+			_fail("seed %d: spawn is sealed unless a Move is spent" % s)
+		hash_first[s] = graph.graph_hash()
+
 	_check("every seed generated a cave", failures == 0)
 	_check("no seed exceeds the 5-charge budget", worst_climbs <= AppConfig.MOVE_CHARGES_START)
 	_check("closest spawn-finish pair is still far enough", min_hops >= 8)
+	_check("gravity-aware search solves every cave within 5 Moves",
+		failures == 0 and worst_min_moves <= AppConfig.MOVE_CHARGES_START)
+	_test_validator_rules()
+
+	# Same seed, fresh generator: identical graph hash for every one of the 200 seeds.
+	var rehash_ok := true
+	var regen := CaveGenerator.new()
+	for s: int in hash_first:
+		var again := regen.generate(s)
+		if again == null or again.graph_hash() != int(hash_first[s]):
+			rehash_ok = false
+			_fail("seed %d: regenerating gave a different graph hash" % s)
+			break
+	_check("all %d seeds regenerate to the same graph hash" % hash_first.size(), rehash_ok)
 
 	_test_determinism()
 	_test_presets_and_features()
@@ -79,6 +125,7 @@ func _ready() -> void:
 		print("   spawn->exit  avg %.1f hops, min %d" % [float(total_hops) / ok, min_hops])
 		print("   Moves needed avg %.2f, worst %d (racers start with %d)"
 			% [float(total_climbs) / ok, worst_climbs, AppConfig.MOVE_CHARGES_START])
+		print("   gravity-aware minimum Moves avg %.2f, worst %d" % [float(total_min_moves) / ok, worst_min_moves])
 		print("   loops        avg %.1f" % (float(total_cycles) / ok))
 		print("   attempts     avg %.2f per cave" % (float(total_attempts) / ok))
 
@@ -143,6 +190,58 @@ func _test_presets_and_features() -> void:
 		_check("%s: no crumbling cover on the guaranteed route" % label, bad_crumble == 0)
 		_check("%s: no feature in the spawn or finish cell" % label, bad_spawn == 0)
 		_check("%s: caves actually contain features" % label, features > 40)
+
+
+## Hand-built caves with known answers, so the validator itself is tested rather than trusted.
+func _test_validator_rules() -> void:
+	var flat := CaveGraph.new()
+	flat.link(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
+	flat.link(Vector3i(1, 0, 0), Vector3i(2, 0, 0))
+	flat.spawn_cell = Vector3i(0, 0, 0)
+	flat.finish_cell = Vector3i(2, 0, 0)
+	_check("validator: flat corridor needs 0 Moves", CaveValidator.min_moves_to_finish(flat) == 0)
+
+	var shaft := CaveGraph.new()
+	shaft.link(Vector3i(0, 0, 0), Vector3i(0, 1, 0))
+	shaft.link(Vector3i(0, 1, 0), Vector3i(0, 2, 0))
+	shaft.spawn_cell = Vector3i(0, 0, 0)
+	shaft.finish_cell = Vector3i(0, 2, 0)
+	_check("validator: a shaft up needs exactly 1 Move", CaveValidator.min_moves_to_finish(shaft) == 1)
+	_check("validator: a shaft up is impossible with 0 Moves",
+		CaveValidator.min_moves_to_finish(shaft, 0) == CaveValidator.UNREACHABLE)
+
+	# Up one shaft, along the top, down another. Inversions alone cost 2 (flip up, flip back
+	# down), but one 90-degree turn to +X does it: walk up the east wall, drop sideways into
+	# the top corridor, walk down the second shaft's east wall. The validator must find the 1.
+	var arch := CaveGraph.new()
+	arch.link(Vector3i(0, 0, 0), Vector3i(0, 1, 0))
+	arch.link(Vector3i(0, 1, 0), Vector3i(1, 1, 0))
+	arch.link(Vector3i(1, 1, 0), Vector3i(1, 0, 0))
+	arch.spawn_cell = Vector3i(0, 0, 0)
+	arch.finish_cell = Vector3i(1, 0, 0)
+	_check("validator: over an arch costs 1 Move using a wall-walk",
+		CaveValidator.min_moves_to_finish(arch) == 1)
+	_check("validator: the arch cannot be crossed with 0 Moves",
+		CaveValidator.min_moves_to_finish(arch, 0) == CaveValidator.UNREACHABLE)
+
+	var drop := CaveGraph.new()
+	drop.link(Vector3i(0, 1, 0), Vector3i(0, 0, 0))
+	drop.spawn_cell = Vector3i(0, 1, 0)
+	drop.finish_cell = Vector3i(0, 0, 0)
+	_check("validator: dropping down a shaft is free", CaveValidator.min_moves_to_finish(drop) == 0)
+
+	# A 90-degree turn climbs too: under +X gravity the east wall runs straight up the shaft.
+	var costs := CaveValidator.solve(shaft, Vector3i(0, 0, 0), CaveGraph.DIR_PLUS_X, 0)
+	_check("validator: walking up a wall under sideways gravity is free",
+		costs.has("0,2,0,%d" % CaveGraph.DIR_PLUS_X))
+
+	var broken := CaveGraph.new()
+	broken.link(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
+	broken.cells[Vector3i(1, 0, 0)] = 0
+	broken.spawn_cell = Vector3i(0, 0, 0)
+	broken.finish_cell = Vector3i(1, 0, 0)
+	_check("validator: a one-way link is reported",
+		CaveValidator.structural_problem(broken, Vector3i(4, 4, 4)) != "")
 
 
 func _check(label: String, condition: bool) -> void:

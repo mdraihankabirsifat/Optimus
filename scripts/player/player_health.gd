@@ -26,6 +26,9 @@ var _source_cooldowns: Dictionary = {}
 var _invuln_timer: float = 0.0
 ## Blocks all damage during countdown, spawn and loading.
 var _damage_enabled: bool = true
+## Online client: hearts belong to the server. Local hazards still animate and still
+## overlap this racer, but only the server's copy of them can take a heart.
+var net_client: bool = false
 
 
 func _ready() -> void:
@@ -51,7 +54,7 @@ func set_damage_enabled(enabled: bool) -> void:
 
 
 func apply_damage(amount: float, source: String = "unknown", cooldown: float = 0.0) -> bool:
-	if is_eliminated or is_invulnerable or not _damage_enabled:
+	if net_client or is_eliminated or is_invulnerable or not _damage_enabled:
 		return false
 	if _source_cooldowns.has(source):
 		return false
@@ -102,6 +105,31 @@ func refill(amount: float) -> void:
 		return
 	hearts = minf(AppConfig.HEARTS_MAX, hearts + amount)
 	hearts_changed.emit(hearts)
+
+
+## Online: apply the server's health state and fire the same signals a local change would,
+## so the HUD, audio and rig cannot tell the difference.
+func net_apply(p_hearts: float, shield: bool, second_chance: bool, p_eliminated: bool) -> void:
+	if is_eliminated:
+		return
+	var lost := hearts - p_hearts
+	if has_shield and not shield and lost <= 0.0:
+		shield_absorbed.emit()
+	if has_shield != shield:
+		has_shield = shield
+		shield_changed.emit(shield)
+	if has_second_chance and not second_chance and p_hearts > 0.0 and p_hearts <= 0.5:
+		second_chance_used.emit()
+	if has_second_chance != second_chance:
+		has_second_chance = second_chance
+		second_chance_changed.emit(second_chance)
+	if not is_equal_approx(p_hearts, hearts):
+		hearts = clampf(p_hearts, 0.0, AppConfig.HEARTS_MAX)
+		if lost > 0.0:
+			damaged.emit(lost, "server")
+		hearts_changed.emit(hearts)
+	if p_eliminated or hearts <= 0.0:
+		eliminate()
 
 
 func eliminate() -> void:

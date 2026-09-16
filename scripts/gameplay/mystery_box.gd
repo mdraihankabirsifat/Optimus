@@ -8,6 +8,9 @@ extends Area3D
 
 signal opened(racer: PlayerController, reward: String, description: String)
 signal clue_granted(racer: PlayerController, direction: Vector3, vertical: int)
+## Online client: E was pressed on this box. The server decides whether it opens and what
+## is inside; nothing on this machine rolls or applies a reward.
+signal open_requested(box: MysteryBox, racer: PlayerController)
 
 const SIZE := 1.15
 
@@ -17,6 +20,8 @@ var is_open: bool = false
 ## World position of the finish. Used ONLY to derive a coarse clue direction. The box
 ## never reveals it directly, and only ~5% of boxes ever use it.
 var finish_position: Vector3 = Vector3.ZERO
+## Online client copy of the box. See open_requested.
+var net_client: bool = false
 
 var _body: MeshInstance3D
 var _lid: MeshInstance3D
@@ -116,12 +121,32 @@ func prompt_text() -> String:
 func interact(racer: PlayerController) -> void:
 	if is_open or racer == null:
 		return
+	if net_client:
+		open_requested.emit(self, racer)
+		return
 	is_open = true
 	collision_layer = 0
 	_animate_open()
 
 	var reward := _roll_reward()
 	var description := _apply_reward(reward, racer)
+	opened.emit(racer, reward, description)
+
+
+## Online client: the server opened this box for `racer`. Plays the same animation and
+## fires the same signal as a local open. Hearts and Moves arrive separately from the
+## server; only movement effects, which this machine simulates, are applied here.
+func net_apply_open(racer: PlayerController, reward: String, description: String) -> void:
+	if is_open:
+		return
+	is_open = true
+	collision_layer = 0
+	_animate_open()
+	if racer != null and racer.is_local_player:
+		if reward == "speed":
+			racer.apply_speed_effect(AppConfig.SPEED_BOOST_MULTIPLIER, AppConfig.SPEED_BOOST_TIME)
+		elif reward == "slow":
+			racer.apply_speed_effect(AppConfig.SLOW_MULTIPLIER, AppConfig.SLOW_TIME)
 	opened.emit(racer, reward, description)
 
 

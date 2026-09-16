@@ -6,6 +6,7 @@ const SCREENS := [
 	"res://scenes/ui/splash.tscn", "res://scenes/ui/main_menu.tscn", "res://scenes/ui/lobby.tscn",
 	"res://scenes/ui/settings.tscn", "res://scenes/ui/how_to_play.tscn", "res://scenes/ui/about.tscn",
 	"res://scenes/ui/credits.tscn", "res://scenes/ui/results.tscn", "res://scenes/ui/loading.tscn",
+	"res://scenes/ui/mode_select.tscn", "res://scenes/ui/online_lobby.tscn",
 ]
 
 var _passed := 0

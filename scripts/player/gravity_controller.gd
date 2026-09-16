@@ -39,6 +39,9 @@ var _safe_timer: float = 0.0
 ## Set when a 180 inversion is spent, cleared on the next safe landing.
 ## Gates the protected "vacuum 180 damages instead of eliminating" rule.
 var _inversion_pending: bool = false
+## A remote racer's frame. Charges and direction still follow the same rules, but the body
+## pose comes from the network, so nothing here rotates it. See PlayerController.net_puppet.
+var net_puppet: bool = false
 
 
 func _ready() -> void:
@@ -75,6 +78,42 @@ func request_inversion() -> void:
 	_try_shift(-gravity_dir, true)
 
 
+## Server side of an online shift: the same validation and the same single deduction,
+## for a racer whose client asked to fall toward `dir`. Returns whether it was accepted.
+func request_direction(dir: Vector3) -> bool:
+	var cardinal := snap_to_cardinal(dir)
+	return _try_shift(cardinal, cardinal.is_equal_approx(-gravity_dir))
+
+
+## Online client: the server's word on charges. Signals fire only on a real change.
+func net_set_charges(amount: int) -> void:
+	if amount == charges:
+		return
+	charges = clampi(amount, 0, AppConfig.MOVE_CHARGES_MAX)
+	charges_changed.emit(charges)
+
+
+## Online: a remote racer's gravity changed. The pose follows the network; this only
+## records the direction and plays the tuck for the length of a transition.
+func net_set_gravity(dir: Vector3) -> void:
+	var cardinal := snap_to_cardinal(dir)
+	if cardinal.is_equal_approx(gravity_dir):
+		return
+	gravity_dir = cardinal
+	_pending_dir = cardinal
+	is_transitioning = true
+	_elapsed = 0.0
+
+
+## Online client: the server rejected a shift this machine already started. Snap back to
+## the server's frame and charge count.
+func net_force_state(dir: Vector3, amount: int) -> void:
+	is_transitioning = false
+	_inversion_pending = false
+	_align_body_to_gravity(snap_to_cardinal(dir))
+	net_set_charges(amount)
+
+
 ## Add charges, clamped. Used by Move Refill rewards.
 func add_charges(amount: int) -> void:
 	charges = mini(charges + amount, AppConfig.MOVE_CHARGES_MAX)
@@ -107,17 +146,21 @@ func handle_out_of_bounds() -> float:
 
 # --- Internals ----------------------------------------------------------------
 
-func _try_shift(new_dir: Vector3, is_inversion: bool) -> void:
-	if is_transitioning:
+func _try_shift(new_dir: Vector3, is_inversion: bool) -> bool:
+	# A puppet's transition is only a visual timer, and network jitter can make a second,
+	# perfectly legal shift arrive a moment before it ends. Only the owner's own frame
+	# enforces the lockout strictly.
+	var locked := is_transitioning and (not net_puppet or _elapsed < transition_time * 0.5)
+	if locked:
 		shift_denied.emit("transitioning")
-		return
+		return false
 	if charges <= 0:
 		shift_denied.emit("no_charges")
-		return
+		return false
 	if new_dir.is_equal_approx(gravity_dir):
 		# Already falling that way. Refuse without spending a charge.
 		shift_denied.emit("same_direction")
-		return
+		return false
 
 	# Validation deliberately does NOT check for a nearby surface.
 	# Shifting into empty space is a legal, intentional risk.
@@ -127,12 +170,21 @@ func _try_shift(new_dir: Vector3, is_inversion: bool) -> void:
 	if is_inversion:
 		_inversion_pending = true
 
+	if net_puppet:
+		_pending_dir = new_dir
+		gravity_dir = new_dir
+		_elapsed = 0.0
+		is_transitioning = true
+		shift_started.emit(new_dir)
+		return true
+
 	_pending_dir = new_dir
 	_from_basis = _body.global_basis.orthonormalized()
 	_to_basis = _build_basis(new_dir)
 	_elapsed = 0.0
 	is_transitioning = true
 	shift_started.emit(new_dir)
+	return true
 
 
 ## Build the target orientation without introducing camera roll.
@@ -161,6 +213,13 @@ func _align_body_to_gravity(dir: Vector3) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if net_puppet:
+		if is_transitioning:
+			_elapsed += delta
+			if _elapsed >= transition_time:
+				is_transitioning = false
+				shift_completed.emit(gravity_dir)
+		return
 	if is_transitioning:
 		_advance_transition(delta)
 	else:

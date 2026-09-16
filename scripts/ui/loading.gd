@@ -27,9 +27,20 @@ func _ready() -> void:
 	col.add_child(UiKit.logo(90.0))
 	var preset: Dictionary = CaveGenerator.SIZE_PRESETS[GameState.cave_size]
 	var mode := "Time Trial" if GameState.bot_count == 0 else "Bot Race  ·  %d bots" % GameState.bot_count
+	var online := GameState.net_role == "client"
+	if online:
+		var cfg := GameState.net_config
+		var humans := 0
+		for entry: Dictionary in cfg.get("roster", []):
+			if not entry["is_bot"]:
+				humans += 1
+		var total: int = cfg.get("roster", []).size()
+		mode = "%s  ·  %d humans, %d bots" % ["Mixed Race" if cfg.get("mode", "") == "mixed" else "Online Race",
+			humans, total - humans]
 	col.add_child(UiKit.title(mode, 44))
-	col.add_child(UiKit.title("%s cave  ·  seed %d" % [preset["name"], GameState.seed_value], 22, UiKit.TEXT_DIM))
-	var best := SettingsManager.best_for(GameState.seed_value, GameState.cave_size)
+	col.add_child(UiKit.title("%s cave  ·  seed %d%s" % [preset["name"], GameState.seed_value,
+		("  ·  room %s" % GameState.net_config.get("room", "")) if online else ""], 22, UiKit.TEXT_DIM))
+	var best := 0.0 if online else SettingsManager.best_for(GameState.seed_value, GameState.cave_size)
 	if best > 0.0:
 		col.add_child(UiKit.title("Your best here  %s  --  your ghost races with you" % MatchController.format_time(best),
 			18, UiKit.SKY))

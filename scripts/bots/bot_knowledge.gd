@@ -20,6 +20,11 @@ var exit_found: bool = false
 ## Cells where the bot has seen something that hurts. Planner treats them as expensive,
 ## not forbidden -- sometimes the only way on is through the fire.
 var hazard_cells: Dictionary = {}
+## A clue this bot earned from a box it opened itself: the same coarse compass direction and
+## above/below hint a human sees on the HUD. Never a cell, never a distance.
+var has_clue: bool = false
+var clue_direction: Vector3 = Vector3.ZERO
+var clue_vertical: int = 0
 ## The cell observed last tick. Without this, a bot standing still would count a new visit
 ## every physics frame and inflate the revisit penalty into the thousands.
 var _last_cell: Vector3i = Vector3i(-9999, -9999, -9999)
@@ -37,6 +42,15 @@ func observe(cell: Vector3i, connection_mask: int, finish_here: bool = false) ->
 	if finish_here and not exit_found:
 		exit_found = true
 		exit_cell = cell
+
+
+func observe_clue(direction: Vector3, vertical: int) -> void:
+	var flat := Vector3(direction.x, 0.0, direction.z)
+	if flat.length() < 0.01:
+		return
+	has_clue = true
+	clue_direction = flat.normalized()
+	clue_vertical = clampi(vertical, -1, 1)
 
 
 func observe_hazard(cell: Vector3i) -> void:

@@ -10,6 +10,8 @@ signal jumped()
 signal footstep()
 signal pause_requested()
 signal speed_effect_changed(multiplier: float, remaining: float)
+## Online client only: the racer left the world. The server decides the damage.
+signal fell_out_of_world(unrecoverable: bool)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
@@ -48,6 +50,21 @@ var _speed_effect_timer: float = 0.0
 ## keypress can be read as a gravity command instead. Read by the HUD for the preview.
 var gravity_armed: bool = false
 
+## --- Networking. All false offline; offline play never touches any of this. ---
+## A remote racer's body on this machine: no simulation, it follows transforms the
+## network sends. Used for other players and bots on a client, and for humans on the server.
+var net_puppet: bool = false
+## The local racer in an online race: moves itself, but health and falls are the server's.
+var net_client: bool = false
+## Pause menu open during an online race: the race keeps running, so input is swallowed.
+var menu_blocked: bool = false
+var net_target_position: Vector3 = Vector3.ZERO
+var net_target_rotation: Quaternion = Quaternion.IDENTITY
+var net_on_floor: bool = true
+## Exponential smoothing rate for a puppet. The server sets INF: it renders nothing and
+## wants exact positions for hazards and the finish trigger.
+var net_smoothing: float = 14.0
+
 var _was_on_floor: bool = false
 var _coyote_timer: float = 0.0
 var _step_accumulator: float = 0.0
@@ -62,9 +79,14 @@ func _ready() -> void:
 	rig = RacerRig.new()
 	$Visual.add_child(rig)
 	rig.set_colour(racer_colour)
-	# FEEL-005/006 playtest values apply to every racer alike, bots included.
-	gravity.transition_time = SettingsManager.turn_time
-	acceleration = SettingsManager.acceleration
+	# FEEL-005/006 playtest values apply to every racer alike, bots included. Online, every
+	# machine must move identically, so personal slider values give way to the defaults.
+	if GameState.net_role == "":
+		gravity.transition_time = SettingsManager.turn_time
+		acceleration = SettingsManager.acceleration
+	else:
+		gravity.transition_time = AppConfig.GRAVITY_TRANSITION_TIME
+		acceleration = AppConfig.ACCELERATION
 	if is_local_player:
 		# Claimed here rather than in the scene file, so bots instancing the same scene
 		# do not all announce themselves as the local player.
@@ -93,11 +115,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Yaw about the body's own local Y, which is local_up by construction.
 		rotate_object_local(Vector3.UP, -motion.relative.x * mouse_sensitivity)
 		basis = basis.orthonormalized()
-		head.rotate_object_local(Vector3.RIGHT, -motion.relative.y * mouse_sensitivity)
+		var pitch_sign := 1.0 if SettingsManager.invert_y else -1.0
+		head.rotate_object_local(Vector3.RIGHT, pitch_sign * motion.relative.y * mouse_sensitivity)
 		head.rotation.x = clampf(head.rotation.x, -AppConfig.PITCH_LIMIT, AppConfig.PITCH_LIMIT)
 
 
 func _physics_process(delta: float) -> void:
+	if net_puppet:
+		_puppet_step(delta)
+		return
 	if is_local_player:
 		_gather_local_input()
 	if not input_enabled:
@@ -185,9 +211,31 @@ func _emit_feel_events(planar: Vector3, delta: float) -> void:
 			footstep.emit()
 
 
+## A remote racer: glide toward the latest networked pose. Velocity is kept so the rig's
+## run cycle and the trail still read correctly.
+func _puppet_step(delta: float) -> void:
+	up_direction = gravity.local_up()
+	var t := 1.0 if is_inf(net_smoothing) else 1.0 - exp(-net_smoothing * delta)
+	if global_position.distance_to(net_target_position) > 12.0:
+		t = 1.0  # a recovery teleport, not motion worth smoothing
+	global_position = global_position.lerp(net_target_position, t)
+	var current := global_basis.get_rotation_quaternion()
+	global_basis = Basis(current.slerp(net_target_rotation, t)).orthonormalized()
+
+
+## The rig asks this rather than is_on_floor(): a puppet never calls move_and_slide.
+func grounded() -> bool:
+	return net_on_floor if net_puppet else is_on_floor()
+
+
 ## Local player only. Bots never touch Input.
 func _gather_local_input() -> void:
 	if not input_enabled:
+		return
+	if menu_blocked:
+		move_input = Vector2.ZERO
+		sprint_input = false
+		gravity_armed = false
 		return
 	_read_gravity_chord()
 	if gravity_armed:
@@ -265,6 +313,10 @@ func _check_world_bounds() -> void:
 	if global_position.length() < AppConfig.WORLD_BOUNDS:
 		return
 	var damage := gravity.handle_out_of_bounds()
+	if net_client:
+		# Recover locally so play continues at once, but a heart is the server's to take.
+		fell_out_of_world.emit(damage < 0.0)
+		return
 	if damage < 0.0:
 		health.eliminate()
 	else:

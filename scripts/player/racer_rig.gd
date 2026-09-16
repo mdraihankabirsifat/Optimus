@@ -135,7 +135,7 @@ func _process(delta: float) -> void:
 	var vel := _racer.velocity
 	var vertical := vel.dot(up)
 	var planar := (vel - up * vertical).length()
-	var grounded := _racer.is_on_floor()
+	var grounded := _racer.grounded()
 	var t := 1.0 - exp(-14.0 * delta)
 
 	var arm_swing := 0.0

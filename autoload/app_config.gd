@@ -105,7 +105,16 @@ const CLUE_TIME := 9.0
 ## seconds even if bots are still searching. Judges should never wait on a lost bot.
 const LOCAL_RESOLVED_GRACE := 20.0
 
+# --- Online -------------------------------------------------------------------
+## Local development server. `godot --headless --path . res://scenes/net/server.tscn`
+const DEFAULT_SERVER_PORT := 8910
+const DEFAULT_SERVER_URL := "ws://127.0.0.1:8910"
+## The public server, once deployed to Render (wss://<service>.onrender.com). Empty means
+## players type an address in the online lobby. Also overridable per launch with
+## --server-url=... on the command line, or ?server=... in the web build's page address.
+const PUBLIC_SERVER_URL := ""
+
 # --- Feature flags ------------------------------------------------------------
-## Networking is Tier 3 and gated. Offline play must never depend on it.
-const NETWORKING_ENABLED := false
+## Online and Mixed Race appear in the menu. Offline Bot Race never depends on this.
+const NETWORKING_ENABLED := true
 const DEBUG_HUD := true

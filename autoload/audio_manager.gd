@@ -48,6 +48,9 @@ func play_sfx(sfx_name: String, volume_db: float = 0.0, pitch_variation: float =
 
 ## Positional one-shot. Used so you can hear another racer shift gravity across a cavern.
 func play_sfx_3d(sfx_name: String, position: Vector3, volume_db: float = 0.0) -> void:
+	# The dedicated server hears nothing; its races must not pile up sound nodes.
+	if GameState.net_role == "server":
+		return
 	var stream: AudioStreamWAV = _library.get(sfx_name)
 	if stream == null:
 		return

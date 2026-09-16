@@ -90,6 +90,12 @@ func _ready() -> void:
 	_pose(0.0)
 
 
+## Online: pistons run on the server's race clock so every machine sees the same slam.
+func net_sync_time(server_time: float) -> void:
+	if absf(server_time - _time) > 0.15:
+		_time = server_time
+
+
 func _process(delta: float) -> void:
 	_time += delta
 	var t := fmod(_time + _phase_offset, AppConfig.PISTON_CYCLE)
@@ -128,7 +134,7 @@ func _process(delta: float) -> void:
 
 ## FEEL-008: the local racer standing just outside the footprint hears it go past.
 func _near_miss_check() -> void:
-	var local := get_tree().get_first_node_in_group("local_player") as PlayerController
+	var local := WorldScope.first(self, "local_player") as PlayerController
 	if local == null or _bodies.has(local):
 		return
 	var rel := local.global_position - global_position

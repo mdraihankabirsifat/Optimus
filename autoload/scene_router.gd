@@ -5,6 +5,8 @@ extends Node
 const SPLASH := "res://scenes/ui/splash.tscn"
 const MAIN_MENU := "res://scenes/ui/main_menu.tscn"
 const LOBBY := "res://scenes/ui/lobby.tscn"
+const MODE_SELECT := "res://scenes/ui/mode_select.tscn"
+const ONLINE_LOBBY := "res://scenes/ui/online_lobby.tscn"
 const SETTINGS := "res://scenes/ui/settings.tscn"
 const HOW_TO_PLAY := "res://scenes/ui/how_to_play.tscn"
 const ABOUT := "res://scenes/ui/about.tscn"

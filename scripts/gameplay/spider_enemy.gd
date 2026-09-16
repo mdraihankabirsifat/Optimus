@@ -165,7 +165,7 @@ func _begin_retreat() -> void:
 func _find_prey() -> PlayerController:
 	var best: PlayerController = null
 	var best_d := AppConfig.SPIDER_SENSE_RANGE
-	for node in get_tree().get_nodes_in_group("racers"):
+	for node in WorldScope.nodes(self, "racers"):
 		var racer := node as PlayerController
 		if racer == null or not _is_prey(racer):
 			continue

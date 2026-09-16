@@ -19,6 +19,10 @@ func _ready() -> void:
 	_test_knowledge_isolation()
 	_test_planner_is_blind_to_the_exit()
 	_test_paths_stay_inside_discovered_territory()
+	_test_backtracks_from_dead_end()
+	_test_follows_its_own_clue()
+	_test_zero_moves_cannot_climb()
+	await _test_bot_is_eliminated_by_normal_rules()
 	_test_exploration_finds_the_exit()
 
 	print("")
@@ -109,6 +113,87 @@ func _test_paths_stay_inside_discovered_territory() -> void:
 		cell = path[0]
 
 	_check("no path routed through undiscovered territory", violations == 0)
+
+
+## A T with a dead end: once the dead end is explored the bot turns round.
+func _test_backtracks_from_dead_end() -> void:
+	_section("backtracks out of a dead end")
+	var g := CaveGraph.new()
+	# spawn (0,0,0) - (1,0,0) - dead end (2,0,0);  spawn - (-1,0,0) - (-2,0,0) exit
+	g.link(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
+	g.link(Vector3i(1, 0, 0), Vector3i(2, 0, 0))
+	g.link(Vector3i(0, 0, 0), Vector3i(-1, 0, 0))
+	g.link(Vector3i(-1, 0, 0), Vector3i(-2, 0, 0))
+	var k := BotKnowledge.new()
+	var planner := BotPlanner.new()
+	var cell := Vector3i(0, 0, 0)
+	# Walk it into the dead end first.
+	for c: Vector3i in [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(2, 0, 0)]:
+		k.observe(c, int(g.cells[c]), false)
+	cell = Vector3i(2, 0, 0)
+	var path := planner.plan(k, cell, false, 5)
+	_check("plans a route out of the dead end", not path.is_empty())
+	_check("heads back the way it came", not path.is_empty() and path[0] == Vector3i(1, 0, 0))
+	_check("toward the unexplored branch",
+		not path.is_empty() and path[-1] == Vector3i(-1, 0, 0))
+
+
+## Two unexplored frontiers the same distance away. A clue pointing west must pick west.
+func _test_follows_its_own_clue() -> void:
+	_section("reacts to its own clue")
+	var g := CaveGraph.new()
+	g.link(Vector3i(0, 0, 0), Vector3i(1, 0, 0))
+	g.link(Vector3i(0, 0, 0), Vector3i(-1, 0, 0))
+	var picks := {"east": 0, "west": 0}
+	for personality in 8:
+		var k := BotKnowledge.new()
+		k.observe(Vector3i(0, 0, 0), int(g.cells[Vector3i(0, 0, 0)]), false)
+		var planner := BotPlanner.new()
+		planner.personality = personality
+		planner.frontier_jitter = 3.0
+		k.observe_clue(Vector3(-1, 0, 0), 0)
+		var path := planner.plan(k, Vector3i(0, 0, 0), false, 5)
+		if not path.is_empty():
+			picks["west" if path[-1].x < 0 else "east"] += 1
+	_check("with a westward clue, every bot personality heads west (%d/8)" % picks["west"], picks["west"] == 8)
+	var blank := BotKnowledge.new()
+	_check("no clue, no bias", BotPlanner.clue_alignment(blank, Vector3i.ZERO, Vector3i(-1, 0, 0)) == 0.0)
+	var other := BotKnowledge.new()
+	other.observe(Vector3i(0, 0, 0), int(g.cells[Vector3i(0, 0, 0)]), false)
+	_check("one bot's clue is not another's", not other.has_clue)
+	_check("a clue never reveals the exit cell", not other.exit_found)
+
+
+## Out of Moves, a bot cannot plan up a shaft.
+func _test_zero_moves_cannot_climb() -> void:
+	_section("zero Moves cannot climb")
+	var g := CaveGraph.new()
+	g.link(Vector3i(0, 0, 0), Vector3i(0, 1, 0))
+	var k := BotKnowledge.new()
+	k.observe(Vector3i(0, 0, 0), int(g.cells[Vector3i(0, 0, 0)]), false)
+	var planner := BotPlanner.new()
+	var broke := planner.plan(k, Vector3i(0, 0, 0), false, 0)
+	_check("with 0 Moves the shaft above is not a route", broke.is_empty() or broke[-1] != Vector3i(0, 1, 0))
+	var rich := planner.plan(k, Vector3i(0, 0, 0), false, 1)
+	_check("with 1 Move it is", not rich.is_empty() and rich[-1] == Vector3i(0, 1, 0))
+
+
+## A bot is a racer like any other: hearts run out, it is out of the race.
+func _test_bot_is_eliminated_by_normal_rules() -> void:
+	_section("bots are eliminated like anyone")
+	var bot: PlayerController = load("res://scenes/bots/bot_player.tscn").instantiate()
+	add_child(bot)
+	await get_tree().process_frame
+	var graph := CaveGenerator.new().generate(11)
+	(bot.get_node("BotController") as BotController).setup(graph, "Rook", Color.RED, 1, 2)
+	for i in 5:
+		bot.health._process(AppConfig.INVULNERABILITY_TIME + 0.1)
+		bot.health.apply_damage(1.0, "spider_%d" % i)
+	_check("five full hits eliminate a bot", bot.health.is_eliminated)
+	bot.input_enabled = false
+	await get_tree().physics_frame
+	_check("an eliminated bot makes no moves", bot.move_input == Vector2.ZERO)
+	bot.queue_free()
 
 
 func _test_exploration_finds_the_exit() -> void:

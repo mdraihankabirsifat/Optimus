@@ -25,9 +25,31 @@ var acceleration: float = AppConfig.ACCELERATION
 var best_times: Dictionary = {}
 ## Set once the player has read How To Play or finished a race.
 var seen_tutorial: bool = false
+## Invert vertical mouse look.
+var invert_y: bool = false
+## Windowed size, index into RESOLUTIONS. Ignored in fullscreen and in the browser.
+var resolution: int = 1
+## 0 Low (lower 3D resolution), 1 Medium, 2 High (antialiasing). Kept to one choice.
+var graphics_quality: int = 1
+## Online: the name shown to other racers, and the last server used.
+var player_name: String = ""
+var server_url: String = ""
+## Remapped keys: action -> physical keycode. Only changed actions are stored.
+var key_bindings: Dictionary = {}
+
+const RESOLUTIONS: Array[Vector2i] = [Vector2i(1024, 576), Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080)]
+const QUALITY_NAMES: Array[String] = ["Low", "Medium", "High"]
+## Actions a player may rebind from Settings.
+const REMAPPABLE: Array[String] = ["move_forward", "move_back", "move_left", "move_right", "jump",
+	"sprint", "gravity_mod", "interact", "toggle_map"]
+
+var _default_keys: Dictionary = {}
+var _applied_resolution: int = -1
 
 
 func _ready() -> void:
+	for action: String in REMAPPABLE:
+		_default_keys[action] = _first_key(action)
 	load_settings()
 	apply()
 
@@ -49,6 +71,17 @@ func load_settings() -> void:
 	turn_time = clampf(float(cfg.get_value("feel", "turn_time", turn_time)), 0.2, 0.6)
 	acceleration = clampf(float(cfg.get_value("feel", "acceleration", acceleration)), 4.0, 30.0)
 	best_times = cfg.get_value("records", "best_times", best_times)
+	invert_y = bool(cfg.get_value("input", "invert_y", invert_y))
+	resolution = clampi(int(cfg.get_value("video", "resolution", resolution)), 0, RESOLUTIONS.size() - 1)
+	graphics_quality = clampi(int(cfg.get_value("video", "quality", graphics_quality)), 0, 2)
+	player_name = String(cfg.get_value("online", "player_name", player_name))
+	server_url = String(cfg.get_value("online", "server_url", server_url))
+	var keys: Variant = cfg.get_value("input", "key_bindings", {})
+	if keys is Dictionary:
+		key_bindings = keys
+		for action: String in key_bindings:
+			if action in REMAPPABLE:
+				_bind(action, int(key_bindings[action]))
 
 
 func save_settings() -> void:
@@ -66,7 +99,59 @@ func save_settings() -> void:
 	cfg.set_value("feel", "turn_time", turn_time)
 	cfg.set_value("feel", "acceleration", acceleration)
 	cfg.set_value("records", "best_times", best_times)
+	cfg.set_value("input", "invert_y", invert_y)
+	cfg.set_value("video", "resolution", resolution)
+	cfg.set_value("video", "quality", graphics_quality)
+	cfg.set_value("online", "player_name", player_name)
+	cfg.set_value("online", "server_url", server_url)
+	cfg.set_value("input", "key_bindings", key_bindings)
 	cfg.save(PATH)
+
+
+## Rebind a remappable action to one key, and remember it. Returns the action that key was
+## taken from, if another action used it, so the caller can warn about the swap.
+func remap_action(action: String, physical_keycode: int) -> String:
+	if action not in REMAPPABLE:
+		return ""
+	var clashed := ""
+	for other: String in REMAPPABLE:
+		if other != action and _first_key(other) == physical_keycode:
+			# Swap, so no action is ever left unbound.
+			var previous := _first_key(action)
+			_bind(other, previous)
+			key_bindings[other] = previous
+			clashed = other
+	_bind(action, physical_keycode)
+	key_bindings[action] = physical_keycode
+	save_settings()
+	changed.emit()
+	return clashed
+
+
+func reset_keys() -> void:
+	for action: String in REMAPPABLE:
+		_bind(action, int(_default_keys[action]))
+	key_bindings.clear()
+	save_settings()
+	changed.emit()
+
+
+func _bind(action: String, physical_keycode: int) -> void:
+	if not InputMap.has_action(action) or physical_keycode == 0:
+		return
+	InputMap.action_erase_events(action)
+	var ev := InputEventKey.new()
+	ev.physical_keycode = physical_keycode as Key
+	InputMap.action_add_event(action, ev)
+
+
+func _first_key(action: String) -> int:
+	if not InputMap.has_action(action):
+		return 0
+	for ev: InputEvent in InputMap.action_get_events(action):
+		if ev is InputEventKey:
+			return int((ev as InputEventKey).physical_keycode)
+	return 0
 
 
 ## Push the stored values into the engine: audio buses and window mode.
@@ -80,6 +165,18 @@ func apply() -> void:
 			else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != target:
 			DisplayServer.window_set_mode(target)
+		if not fullscreen and OS.get_name() != "Web" and _applied_resolution != resolution:
+			_applied_resolution = resolution
+			var want := RESOLUTIONS[resolution]
+			if DisplayServer.window_get_size() != want:
+				DisplayServer.window_set_size(want)
+				var screen := DisplayServer.screen_get_usable_rect()
+				DisplayServer.window_set_position(screen.position + (screen.size - want) / 2)
+	var vp := get_viewport()
+	if vp != null:
+		# GL Compatibility: bilinear 3D scaling and MSAA are the two cheap, reliable levers.
+		vp.scaling_3d_scale = 0.75 if graphics_quality == 0 else 1.0
+		vp.msaa_3d = Viewport.MSAA_2X if graphics_quality == 2 else Viewport.MSAA_DISABLED
 	changed.emit()
 
 

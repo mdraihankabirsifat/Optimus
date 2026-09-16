@@ -26,6 +26,12 @@ const HAZARD_COST := 5.0
 ## Once the exit is actually in sight the reserve is released and the bot commits.
 const EXPLORE_RESERVE := 0
 
+## With a clue in hand, a frontier straight along the hinted direction is worth this many
+## steps of extra walking, and one on the hinted level a few more. A clue speeds the search
+## up; it never overrides it, because the hint is coarse and the cave has walls.
+const CLUE_WEIGHT := 6.0
+const CLUE_LEVEL_WEIGHT := 3.0
+
 const GRAV_DOWN := 0
 const GRAV_UP := 1
 
@@ -56,7 +62,7 @@ func plan(knowledge: BotKnowledge, from: Vector3i, gravity_is_up: bool,
 	if knowledge.exit_found:
 		goal_key = _best_key_for_cell(dist, knowledge.exit_cell)
 	else:
-		goal_key = _nearest_frontier_key(knowledge, dist, prev)
+		goal_key = _nearest_frontier_key(knowledge, dist, prev, from)
 
 	if goal_key == "":
 		# Nothing new is reachable and the exit is unknown -- usually out of charges with
@@ -149,7 +155,7 @@ func _can_traverse(dir_index: int, grav: int) -> bool:
 
 ## The closest cell the bot knows exists but has never entered.
 func _nearest_frontier_key(knowledge: BotKnowledge, dist: Dictionary,
-		prev: Dictionary) -> String:
+		prev: Dictionary, from: Vector3i = Vector3i.ZERO) -> String:
 	var best_key := ""
 	var best_cost := INF
 
@@ -168,7 +174,8 @@ func _nearest_frontier_key(knowledge: BotKnowledge, dist: Dictionary,
 					continue
 				if not _can_traverse(back, grav):
 					continue
-				var cost: float = float(dist[key]) + STEP_COST + _taste(frontier)
+				var cost: float = float(dist[key]) + STEP_COST + _taste(frontier) \
+					- clue_alignment(knowledge, from, frontier)
 				if cost < best_cost:
 					best_cost = cost
 					best_key = _key(frontier, grav)
@@ -195,6 +202,22 @@ func _least_visited_key(knowledge: BotKnowledge, dist: Dictionary) -> String:
 				best_cost = cost
 				best_key = key
 	return best_key
+
+
+## How much a frontier agrees with this bot's own clue, in step-equivalents. Zero without
+## a clue. Uses only the clue's coarse direction and the bot's own position.
+static func clue_alignment(knowledge: BotKnowledge, from: Vector3i, frontier: Vector3i) -> float:
+	if not knowledge.has_clue:
+		return 0.0
+	var offset := Vector3(frontier - from)
+	var flat := Vector3(offset.x, 0.0, offset.z)
+	var along := 0.0
+	if flat.length() > 0.01:
+		along = flat.normalized().dot(knowledge.clue_direction)
+	var level := 0.0
+	if knowledge.clue_vertical != 0 and signi(frontier.y - from.y) == knowledge.clue_vertical:
+		level = 1.0
+	return CLUE_WEIGHT * along + CLUE_LEVEL_WEIGHT * level
 
 
 ## A stable, bot-specific preference for one corridor over another.

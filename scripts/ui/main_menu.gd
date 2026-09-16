@@ -1,16 +1,20 @@
 extends Control
-## Main menu. Offline Bot Race is the whole game for the jam; online play is not offered
-## unless AppConfig.NETWORKING_ENABLED is on (it is not).
+## Main menu. Play leads to the mode choice: offline Bot Race, Online Race, Mixed Race.
 
 func _ready() -> void:
 	UiKit.setup_screen(self)
+	# Arriving here always means leaving any online session behind.
+	if GameState.net_role == "client":
+		GameState.net_role = ""
+	if NetManager.in_room():
+		NetManager.leave_room()
 	var col := UiKit.centre_column(self, 12)
 	col.add_child(UiKit.logo(96.0))
 	col.add_child(UiKit.title(AppConfig.GAME_TITLE, 76))
 	col.add_child(UiKit.title("Five Moves. Six directions. One hidden exit.", 22, UiKit.TEXT_DIM))
 	col.add_child(UiKit.label(""))
 
-	var race := UiKit.button("Race", func() -> void: SceneRouter.go_to(SceneRouter.LOBBY))
+	var race := UiKit.button("Play", func() -> void: SceneRouter.go_to(SceneRouter.MODE_SELECT))
 	col.add_child(race)
 	col.add_child(UiKit.button("How to Play", func() -> void: SceneRouter.go_to(SceneRouter.HOW_TO_PLAY)))
 	col.add_child(UiKit.button("Settings", func() -> void: SceneRouter.go_to(SceneRouter.SETTINGS)))

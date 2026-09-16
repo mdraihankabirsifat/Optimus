@@ -43,6 +43,8 @@ var max_attempts := 24
 
 var last_failure := ""
 var attempts_used := 0
+## Fewest Moves the last validated cave needs from spawn, found by CaveValidator.
+var last_min_moves := 0
 
 var _rng := RandomNumberGenerator.new()
 var _graph: CaveGraph
@@ -407,6 +409,19 @@ func _validate() -> bool:
 	# The theme must be physically present in the level, not just in the mechanic.
 	if _graph.max_degrees_of_freedom() < 3:
 		last_failure = "no cell offers all three degrees of freedom"
+		return false
+
+	var problem := CaveValidator.structural_problem(_graph, size)
+	if problem != "":
+		last_failure = problem
+		return false
+
+	# Gravity-aware solvability: search (cell, gravity, Moves left) from spawn with the
+	# starting charges and no loot. Connectivity alone would pass a cave whose exit sits
+	# at the top of a shaft nobody can pay to climb.
+	last_min_moves = CaveValidator.min_moves_to_finish(_graph, AppConfig.MOVE_CHARGES_START)
+	if last_min_moves == CaveValidator.UNREACHABLE:
+		last_failure = "exit unreachable within %d Moves under gravity rules" % AppConfig.MOVE_CHARGES_START
 		return false
 
 	return true

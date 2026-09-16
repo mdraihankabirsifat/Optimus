@@ -100,10 +100,23 @@ func _physics_process(delta: float) -> void:
 ## A box within arm's reach is something the bot can plainly see, so opening it breaks no
 ## information boundary. Bots never path toward boxes; they only take what they pass.
 func _open_nearby_box() -> void:
-	for box: MysteryBox in get_tree().get_nodes_in_group("mystery_boxes"):
+	for box: MysteryBox in WorldScope.nodes(self, "mystery_boxes"):
 		if not box.is_open and box.global_position.distance_to(_body.global_position) < BOX_REACH:
+			# A clue from this box is this bot's own, exactly as it would be a human's.
+			box.clue_granted.connect(_on_clue, CONNECT_ONE_SHOT)
 			box.interact(_body)
+			if box.clue_granted.is_connected(_on_clue):
+				box.clue_granted.disconnect(_on_clue)
 			return
+
+
+func _on_clue(racer: PlayerController, direction: Vector3, vertical: int) -> void:
+	if racer != _body:
+		return
+	knowledge.observe_clue(direction, vertical)
+	# Re-think with the new hint rather than finishing a walk toward somewhere else.
+	_path.clear()
+	_body.rig.emote("a clue!")
 
 
 ## Feed the knowledge model exactly what is visible from this cell and nothing more.

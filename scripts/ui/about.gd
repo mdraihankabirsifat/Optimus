@@ -25,6 +25,9 @@ func _ready() -> void:
 			+ "starting Moves. The bots you race only know the parts of the cave they have "
 			+ "personally seen -- they explore, backtrack and gamble on Moves exactly as you do.",
 		"",
+		"[font_size=24][color=#ff9e3d]%s[/color][/font_size]" % AppConfig.TEAM_NAME,
+		"Md. Raihan Kabir Sifat    Estiak Zaman Atul    Sadman Sakib    Ashraf Hossain Chowdhury",
+		"",
 		"[color=#9b928a]%s  --  %s[/color]" % [AppConfig.GAME_TITLE, AppConfig.TEAM_NAME],
 		"[color=#9b928a]BUET Robotics Society GameJam, Intra BUET Robo Challenge 2026[/color]",
 	]))

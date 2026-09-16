@@ -217,9 +217,20 @@ static func settings_panel() -> ScrollContainer:
 	col.add_child(_slider_row("Effects volume", "sfx_volume", 0.0, 1.0))
 	col.add_child(_slider_row("Mouse sensitivity", "sensitivity", 0.2, 3.0))
 
+	col.add_child(_toggle("Invert mouse Y", "invert_y"))
+
 	col.add_child(_toggle("Fullscreen", "fullscreen"))
+	if OS.get_name() != "Web":
+		var sizes: Array[String] = []
+		for r: Vector2i in SettingsManager.RESOLUTIONS:
+			sizes.append("%d x %d" % [r.x, r.y])
+		col.add_child(_option_row("Window size", "resolution", sizes))
+	col.add_child(_option_row("Graphics quality", "graphics_quality", SettingsManager.QUALITY_NAMES))
 	col.add_child(_toggle("Head bob", "head_bob"))
 	col.add_child(_toggle("Camera shake and hitstop", "camera_effects"))
+
+	col.add_child(label("Controls  (click, then press a key)", 17, TEXT_DIM))
+	col.add_child(_remap_grid())
 
 	var feel := label("Playtest tuning  (applies from the next race)", 17, TEXT_DIM)
 	col.add_child(feel)
@@ -229,6 +240,112 @@ static func settings_panel() -> ScrollContainer:
 		SettingsManager.set_and_save("turn_time", AppConfig.GRAVITY_TRANSITION_TIME)
 		SettingsManager.set_and_save("acceleration", AppConfig.ACCELERATION), 300))
 	return scroll
+
+
+## Every control, read from the live InputMap so a remapped key shows its new binding.
+## Used by the pause menu and the Settings screen.
+static func controls_table() -> Control:
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 36)
+	grid.add_theme_constant_override("v_separation", 6)
+	var rows := [
+		["Look", "Mouse"],
+		["Walk", "%s %s %s %s" % [key_for("move_forward"), key_for("move_left"), key_for("move_back"), key_for("move_right")]],
+		["Sprint", key_for("sprint")],
+		["Jump (tap for a hop)", key_for("jump")],
+		["Gravity Move 90 degrees", "%s + walk key" % key_for("gravity_mod")],
+		["Gravity Move 180 degrees", "%s + %s" % [key_for("gravity_mod"), key_for("jump")]],
+		["Open mystery box", key_for("interact")],
+		["Discovered map", key_for("toggle_map")],
+		["Emotes", "%s %s %s" % [key_for("emote_1"), key_for("emote_2"), key_for("emote_3")]],
+		["Menu", key_for("pause")],
+		["Spectate next racer", key_for("spectate_next")],
+		["End race early (offline, once resolved)", key_for("skip_wait")],
+	]
+	for row: Array in rows:
+		grid.add_child(label(String(row[0]), 19, TEXT_DIM))
+		grid.add_child(label(String(row[1]), 19, TEXT))
+	return grid
+
+
+## The first key bound to an action, as a player would read it.
+static func key_for(action: String) -> String:
+	if not InputMap.has_action(action):
+		return "?"
+	for event: InputEvent in InputMap.action_get_events(action):
+		var key := event as InputEventKey
+		if key == null:
+			continue
+		var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+		return OS.get_keycode_string(code)
+	return "unbound"
+
+
+static func _option_row(text: String, property: String, names: Array[String]) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	var name_label := label(text, 20)
+	name_label.custom_minimum_size = Vector2(200, 0)
+	row.add_child(name_label)
+	var opt := OptionButton.new()
+	for n in names:
+		opt.add_item(n)
+	opt.selected = clampi(int(SettingsManager.get(property)), 0, names.size() - 1)
+	opt.custom_minimum_size = Vector2(220, 40)
+	opt.item_selected.connect(func(i: int) -> void: SettingsManager.set_and_save(property, i))
+	row.add_child(opt)
+	return row
+
+
+const ACTION_LABELS := {
+	"move_forward": "Forward", "move_back": "Back", "move_left": "Left", "move_right": "Right",
+	"jump": "Jump / flip", "sprint": "Sprint", "gravity_mod": "Gravity Move",
+	"interact": "Open box", "toggle_map": "Map",
+}
+
+
+## Rebindable keys. Taking a key another action uses swaps the two, so nothing is ever
+## left unbound. Mouse look, Esc and the emote keys stay fixed.
+static func _remap_grid() -> Control:
+	var col := VBoxContainer.new()
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 6)
+	col.add_child(grid)
+	var buttons := {}
+	var refresh := func() -> void:
+		for action: String in buttons:
+			(buttons[action] as Button).text = key_for(action)
+	for action: String in SettingsManager.REMAPPABLE:
+		grid.add_child(label(String(ACTION_LABELS.get(action, action)), 18, TEXT_DIM))
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(110, 36)
+		b.text = key_for(action)
+		b.toggle_mode = true
+		buttons[action] = b
+		grid.add_child(b)
+		b.toggled.connect(func(on: bool) -> void:
+			if on:
+				b.text = "press a key"
+			else:
+				b.text = key_for(action))
+		b.gui_input.connect(func(event: InputEvent) -> void:
+			if not b.button_pressed:
+				return
+			var key := event as InputEventKey
+			if key == null or not key.pressed or key.echo:
+				return
+			b.accept_event()
+			if key.physical_keycode != KEY_ESCAPE:
+				SettingsManager.remap_action(action, int(key.physical_keycode))
+			b.set_pressed_no_signal(false)
+			refresh.call())
+	col.add_child(button("Reset keys to defaults", func() -> void:
+		SettingsManager.reset_keys()
+		refresh.call(), 300))
+	return col
 
 
 static func _toggle(text: String, property: String) -> CheckButton:

@@ -36,6 +36,7 @@ func _ready() -> void:
 	_test_no_roll_on_inversion()
 	_test_chained_drift()
 	_test_charge_accounting()
+	await _test_protected_vacuum()
 
 	print("")
 	print("==================================================")
@@ -142,6 +143,54 @@ func _test_charge_accounting() -> void:
 
 	_gc.add_charges(99)
 	_check("refill clamps to MOVE_CHARGES_MAX", _gc.charges == AppConfig.MOVE_CHARGES_MAX)
+
+
+## AXIS-006: a 180 into a void damages and recovers; it never eliminates.
+func _test_protected_vacuum() -> void:
+	_section("protected vacuum 180")
+	# A real racer on a real floor, so it records safe transforms the way play does.
+	var floor_body := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(20, 1, 20)
+	shape.shape = box
+	floor_body.add_child(shape)
+	floor_body.collision_layer = 1
+	add_child(floor_body)
+	floor_body.global_position = Vector3(0, -0.5, 0)
+
+	var racer: PlayerController = load("res://scenes/player/player.tscn").instantiate()
+	racer.is_local_player = false
+	add_child(racer)
+	racer.global_position = Vector3(0, 1.0, 0)
+	for i in 90:
+		await get_tree().physics_frame
+	var gc := racer.gravity
+	_check("racer recorded a safe grounded transform", not gc._safe_transforms.is_empty())
+	var safe_pos: Vector3 = gc._safe_transforms[-1].origin
+
+	gc.request_inversion()
+	_check("inversion spends a Move", gc.charges == AppConfig.MOVE_CHARGES_START - 1)
+	racer.global_position = Vector3(0, AppConfig.WORLD_BOUNDS + 10.0, 0)
+	var hearts := racer.health.hearts
+	racer._check_world_bounds()
+	_check("vacuum 180 costs exactly one heart",
+		is_equal_approx(racer.health.hearts, hearts - AppConfig.DAMAGE_VACUUM_FALL))
+	_check("vacuum 180 never eliminates", not racer.health.is_eliminated)
+	_check("racer is recovered to its last safe ground",
+		racer.global_position.distance_to(safe_pos) < 0.01)
+	_check("recovered racer's gravity matches the safe pose", gc.gravity_dir.is_equal_approx(Vector3.DOWN))
+
+	# With no safe ground ever recorded, a plain fall out of the world is unrecoverable.
+	var lost: PlayerController = load("res://scenes/player/player.tscn").instantiate()
+	lost.is_local_player = false
+	add_child(lost)
+	lost.global_position = Vector3(0, AppConfig.WORLD_BOUNDS + 50.0, 0)
+	lost._check_world_bounds()
+	_check("an unrecoverable fall with no safe ground eliminates", lost.health.is_eliminated)
+	racer.queue_free()
+	lost.queue_free()
+	floor_body.queue_free()
 
 
 # --- Helpers ------------------------------------------------------------------

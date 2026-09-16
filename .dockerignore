@@ -1,0 +1,7 @@
+.git
+.godot
+.vscode
+builds
+tests/shots
+*.tmp
+.env

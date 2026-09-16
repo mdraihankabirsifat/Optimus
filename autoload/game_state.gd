@@ -31,6 +31,18 @@ var last_cave_size: int = 1
 ## Where the pause menu's "Settings" should return to. Cleared by the settings scene.
 var settings_return_scene: String = ""
 
+# --- Online ---------------------------------------------------------------------------
+## "" offline (the default, and all the judging fallback ever sees), "client" in an online
+## race on this machine, "server" for the whole process on a dedicated server.
+var net_role: String = ""
+## The match configuration the server sent: seed, size, roster, local racer id, room code.
+var net_config: Dictionary = {}
+## True when last_results came from an online race, so results offers the lobby.
+var last_results_online: bool = false
+var net_local_name: String = ""
+## Which online lobby the Play screen asked for: "online" (humans only) or "mixed".
+var online_mode: String = "mixed"
+
 
 ## FUN-006: the same cave for everyone on the same calendar day.
 static func daily_seed() -> int:
@@ -47,6 +59,11 @@ func prepare_match(p_seed: int, p_bots: int) -> void:
 	seed_value = p_seed
 	bot_count = clampi(p_bots, 0, 4)
 	launched_from_menu = true
+	# Starting an offline race always leaves online mode, whatever came before.
+	if net_role == "client":
+		net_role = ""
+		net_config = {}
+	last_results_online = false
 	stats.clear()
 	last_results.clear()
 	new_record = false

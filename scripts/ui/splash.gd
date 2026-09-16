@@ -2,11 +2,18 @@ extends Control
 ## Title card. Any key or click skips straight to the main menu.
 
 const HOLD := 1.8
+const SERVER_SCENE := "res://scenes/net/server.tscn"
 
 var _leaving := false
 
 
 func _ready() -> void:
+	# Dedicated server launch: `SixWaysDown.exe --headless -- --server --port=8910`.
+	# Exported release builds refuse a scene path on the command line, so the flag is read
+	# here, in the main scene, and works the same from source and from an exported build.
+	if "--server" in OS.get_cmdline_user_args():
+		get_tree().change_scene_to_file.call_deferred(SERVER_SCENE)
+		return
 	UiKit.setup_screen(self)
 	var col := UiKit.centre_column(self, 10)
 	col.add_child(UiKit.logo(170.0))
