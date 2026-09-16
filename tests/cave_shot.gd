@@ -26,6 +26,15 @@ func _ready() -> void:
 	_player.look_at(CaveBuilder.cell_to_world(_cave.graph.finish_cell), Vector3.UP)
 	await _wait(50)
 	_shot("cave_03_finish")
+
+	# Stand next to a hazard so it can actually be judged.
+	if not _cave.graph.hazards.is_empty():
+		var h: Dictionary = _cave.graph.hazards[0]
+		_teleport(h["cell"])
+		_player.global_position += Vector3(2.8, 0, 2.8)
+		_player.look_at(CaveBuilder.cell_to_world(h["cell"]), Vector3.UP)
+		await _wait(60)
+		_shot("cave_04_hazard")
 	get_tree().quit()
 
 func _teleport(cell: Vector3i) -> void:

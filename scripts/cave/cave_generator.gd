@@ -32,6 +32,14 @@ var loop_attempts := 30
 ## remaining vertical links into deliberate, readable moments.
 var horizontal_bias := 0.85
 var max_attempts := 24
+## Fraction of eligible cells that get a hazard. Eligible excludes the spawn chamber, its
+## immediate neighbours and the finish, so nobody is burned before they can move.
+var hazard_density := 0.13
+## Cells around spawn kept clear. The design is explicit that the opening must be safe.
+var spawn_safe_radius := 1
+## Hard cap. Each fire carries a light and a particle emitter, and a cave with seventeen of
+## them costs frames on the student laptops this has to run on.
+var max_hazards := 10
 
 var last_failure := ""
 var attempts_used := 0
@@ -58,6 +66,7 @@ func _build() -> bool:
 		return false
 	_add_branches()
 	_add_loops()
+	_place_hazards()
 	return true
 
 
@@ -167,6 +176,35 @@ func _add_loops() -> void:
 		if not _graph.has_cell(n) or _graph.is_linked(c, dir_index):
 			continue
 		_graph.link(c, n)
+
+
+## Hazards are placed after the cave is final, so they can never influence its topology.
+## They deal damage and nothing else -- no hazard has collision, so none of them can close
+## the route the spine guarantees.
+func _place_hazards() -> void:
+	var safe := {_graph.finish_cell: true}
+	var near_spawn := _graph.distances_from(_graph.spawn_cell)
+	for cell: Vector3i in near_spawn:
+		if int(near_spawn[cell]) <= spawn_safe_radius:
+			safe[cell] = true
+
+	var cells: Array = _graph.cells.keys()
+	cells.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		if a.y != b.y: return a.y < b.y
+		if a.x != b.x: return a.x < b.x
+		return a.z < b.z)
+
+	for cell: Vector3i in cells:
+		if safe.has(cell):
+			continue
+		if _rng.randf() > hazard_density:
+			continue
+		# Dead ends get spikes, open cells get fire: a racer who commits to a dead end
+		# should pay more for the mistake than one passing through a corridor.
+		if _graph.hazards.size() >= max_hazards:
+			return
+		var kind := 1 if _graph.degrees_of_freedom(cell) <= 1 else 0
+		_graph.hazards.append({"cell": cell, "kind": kind})
 
 
 func _validate() -> bool:

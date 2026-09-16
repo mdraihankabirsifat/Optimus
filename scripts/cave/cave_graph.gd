@@ -30,6 +30,9 @@ var spawn_cell := Vector3i.ZERO
 var finish_cell := Vector3i.ZERO
 ## The guaranteed spawn-to-finish route. Solvability is proven on this, by construction.
 var spine: Array[Vector3i] = []
+## Hazard placements as {"cell": Vector3i, "kind": int}. Hazards damage but never block,
+## so they cannot invalidate the spine.
+var hazards: Array = []
 
 
 static func opposite(dir_index: int) -> int:

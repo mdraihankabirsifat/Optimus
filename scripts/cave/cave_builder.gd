@@ -70,6 +70,7 @@ func build(graph: CaveGraph, parent: Node3D) -> void:
 	root.add_child(_make_finish(graph))
 	_add_lights(graph, root)
 	_add_detail(graph, root)
+	_add_hazards(graph, root)
 
 
 func _collect_slabs(graph: CaveGraph) -> void:
@@ -162,43 +163,51 @@ func _make_batch(name: String, slabs: Array[Transform3D], texture_set: String,
 	return node
 
 
-## Stone built from the generated texture set in assets/textures.
+## Stone built from the generated texture set plus the stylised shader in
+## assets/shaders/stone.gdshader.
 ##
-## The normal map is the part that matters. Without it every slab in the cave is lit dead
-## flat regardless of how much geometry sits behind it, which is what made the first pass
-## read as untextured boxes. Regenerate the maps with tools/gen_textures.py.
-##
-## Triplanar because the slabs are unit cubes scaled to size by the MultiMesh, so their
-## UVs are stretched by wildly different amounts and a flat UV map would smear.
-func _stone_material(texture_set: String, colour: Color, uv_scale: float) -> StandardMaterial3D:
+## A ShaderMaterial rather than StandardMaterial3D because the cave needs banded lighting
+## and a sharp triplanar blend, neither of which the standard material can do. Regenerate
+## the maps with tools/gen_textures.py.
+func _stone_material(texture_set: String, colour: Color, uv_scale: float) -> Material:
+	var key := "%s|%s|%.3f" % [texture_set, colour.to_html(), uv_scale]
+	if _material_cache.has(key):
+		return _material_cache[key]
+
+	var shader := load("res://assets/shaders/stone.gdshader") as Shader
+	if shader == null:
+		_material_cache[key] = _fallback_material(texture_set, colour, uv_scale)
+		return _material_cache[key]
+
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("tint", colour)
+	mat.set_shader_parameter("uv_scale", uv_scale)
+	mat.set_shader_parameter("albedo_tex", _load_texture(texture_set, "albedo"))
+	mat.set_shader_parameter("normal_tex", _load_texture(texture_set, "normal"))
+	mat.set_shader_parameter("normal_strength", 0.5)
+	mat.set_shader_parameter("bands", 4.0)
+	mat.set_shader_parameter("band_softness", 0.35)
+	mat.set_shader_parameter("rim_strength", 0.22)
+	mat.set_shader_parameter("rim_color", Color(0.72, 0.84, 1.0))
+	mat.set_shader_parameter("texture_contrast", 0.8)
+	_material_cache[key] = mat
+	return mat
+
+
+## Used only if the shader fails to load, so a broken shader degrades to a plain cave
+## rather than an invisible one.
+func _fallback_material(texture_set: String, colour: Color, uv_scale: float) -> Material:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = colour
 	mat.albedo_texture = _load_texture(texture_set, "albedo")
-
-	var normal := _load_texture(texture_set, "normal")
-	if normal != null:
-		mat.normal_enabled = true
-		mat.normal_texture = normal
-		mat.normal_scale = 0.85
-
-	var rough := _load_texture(texture_set, "rough")
-	if rough != null:
-		mat.roughness_texture = rough
-		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
-
-	var ao := _load_texture(texture_set, "ao")
-	if ao != null:
-		mat.ao_enabled = true
-		mat.ao_texture = ao
-		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
-		# Cavity shading should darken the creases without flattening the lighting.
-		mat.ao_light_affect = 0.15
-
-	mat.roughness = 0.85
-	mat.metallic = 0.0
 	mat.uv1_scale = Vector3(uv_scale, uv_scale, uv_scale)
 	mat.uv1_triplanar = true
+	mat.roughness = 0.9
 	return mat
+
+
+static var _material_cache: Dictionary = {}
 
 
 ## Missing textures are survivable -- the cave still builds, just untextured -- so a
@@ -526,3 +535,169 @@ func _prop_mesh(name: String) -> Mesh:
 	inst.free()
 	_prop_cache[name] = found
 	return found
+
+
+const COLOUR_FIRE := Color(1.0, 0.45, 0.12)
+const COLOUR_SPIKE := Color(0.62, 0.72, 0.80)
+
+
+## Fire and spike clusters, placed by the generator and built here.
+##
+## Neither has solid collision. They threaten a route without closing it, which matters
+## because the generator guarantees the exit is reachable and says nothing about damage --
+## a hazard that could seal a corridor would break that guarantee.
+func _add_hazards(graph: CaveGraph, root: Node3D) -> void:
+	if graph.hazards.is_empty():
+		return
+	var holder := Node3D.new()
+	holder.name = "Hazards"
+	root.add_child(holder)
+
+	for entry: Dictionary in graph.hazards:
+		var cell: Vector3i = entry["cell"]
+		var floor_y := cell_to_world(cell) + Vector3(0.0, -CELL_SIZE * 0.5, 0.0)
+		if int(entry["kind"]) == 0:
+			holder.add_child(_make_fire(floor_y))
+		else:
+			holder.add_child(_make_spikes(floor_y, cell))
+
+
+func _make_fire(pos: Vector3) -> Area3D:
+	var area := Area3D.new()
+	area.name = "Fire"
+	area.position = pos + Vector3(0.0, 1.0, 0.0)
+	area.add_to_group("hazard")
+	area.set_script(load("res://scripts/gameplay/hazard.gd"))
+	area.damage = AppConfig.DAMAGE_FIRE
+	area.source = "fire"
+	area.hit_cooldown = 1.2
+
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(3.4, 2.4, 3.4)
+	var col := CollisionShape3D.new()
+	col.shape = shape
+	area.add_child(col)
+
+	# Charred base, so the hazard is readable even before the flame draws.
+	var base := MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = 1.9
+	disc.bottom_radius = 2.1
+	disc.height = 0.18
+	disc.radial_segments = 10
+	base.mesh = disc
+	var base_mat := StandardMaterial3D.new()
+	base_mat.albedo_color = Color(0.12, 0.09, 0.08)
+	base_mat.emission_enabled = true
+	base_mat.emission = COLOUR_FIRE
+	base_mat.emission_energy_multiplier = 0.9
+	base.material_override = base_mat
+	base.position = Vector3(0.0, -0.9, 0.0)
+	area.add_child(base)
+
+	area.add_child(_flame_particles())
+
+	var light := OmniLight3D.new()
+	light.light_color = COLOUR_FIRE
+	light.light_energy = 3.2
+	light.omni_range = CELL_SIZE * 1.1
+	area.add_child(light)
+	return area
+
+
+func _flame_particles() -> GPUParticles3D:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(1.1, 1.4)
+
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_color = COLOUR_FIRE
+	mat.disable_receive_shadows = true
+	# Without a soft mask the quads read as flickering squares rather than flame.
+	var sprite := load("res://assets/textures/flame_sprite.png") as Texture2D
+	if sprite != null:
+		mat.albedo_texture = sprite
+	quad.material = mat
+
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1.0, 0.85, 0.35, 0.9))
+	ramp.set_color(1, Color(0.9, 0.20, 0.05, 0.0))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3.UP
+	pm.spread = 14.0
+	pm.initial_velocity_min = 1.4
+	pm.initial_velocity_max = 2.6
+	pm.gravity = Vector3(0.0, 1.1, 0.0)
+	pm.scale_min = 0.5
+	pm.scale_max = 1.2
+	pm.color_ramp = ramp_tex
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.8
+
+	var p := GPUParticles3D.new()
+	p.name = "Flame"
+	p.amount = 18
+	p.lifetime = 1.1
+	p.draw_pass_1 = quad
+	p.process_material = pm
+	p.position = Vector3(0.0, -0.6, 0.0)
+	# Bounded so a cave full of hazards cannot quietly cost a frame budget.
+	p.visibility_aabb = AABB(Vector3(-2, -2, -2), Vector3(4, 6, 4))
+	return p
+
+
+func _make_spikes(pos: Vector3, cell: Vector3i) -> Area3D:
+	var area := Area3D.new()
+	area.name = "Spikes"
+	area.position = pos
+	area.add_to_group("hazard")
+	area.set_script(load("res://scripts/gameplay/hazard.gd"))
+	area.damage = 1.0
+	area.source = "spikes"
+	area.hit_cooldown = 1.6
+
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(4.6, 1.8, 4.6)
+	var col := CollisionShape3D.new()
+	col.shape = shape
+	col.position = Vector3(0.0, 0.9, 0.0)
+	area.add_child(col)
+
+	var mesh := _prop_mesh("stalactite_00")
+	if mesh == null:
+		return area
+
+	# Reuses the stalactite model the other way up -- a spike is a spike.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = cell.x * 73856093 ^ cell.y * 19349663 ^ cell.z * 83492791
+	var items: Array[Transform3D] = []
+	for i in 9:
+		var p := Vector3(rng.randf_range(-1.9, 1.9), 0.55, rng.randf_range(-1.9, 1.9))
+		var size := rng.randf_range(0.35, 0.65)
+		items.append(Transform3D(
+			Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(
+				Vector3(size, rng.randf_range(0.7, 1.3), size)), p))
+
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = items.size()
+	for i in items.size():
+		mm.set_instance_transform(i, items[i])
+
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = mm
+	var spike_mat := StandardMaterial3D.new()
+	spike_mat.albedo_color = COLOUR_SPIKE
+	spike_mat.roughness = 0.55
+	spike_mat.metallic = 0.25
+	node.material_override = spike_mat
+	area.add_child(node)
+	return area

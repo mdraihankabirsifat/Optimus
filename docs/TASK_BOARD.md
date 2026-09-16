@@ -195,6 +195,9 @@ Completed 16 September 2026.
 | ART-001 | Generated stone texture set with normal maps; per-level light tinting |
 | ART-003 | 16 Blender-generated rock props, placed deterministically, no collision |
 | ART-004 | Stylised axis-coded palette, flat lighting, high-visibility finish beacon |
+| ART-005 | `assets/shaders/stone.gdshader` — banded lighting, sharp triplanar, fresnel rim |
+| HAZ-001 | Fire hazard: soft-sprite flame, light, tick damage with per-source cooldown |
+| HAZ-002 | Spike clusters in dead ends, 1 heart per hit |
 | — | `tests/test_bot.gd` — **15 assertions, 60/60 caves solved** |
 
 ### How to run what exists
@@ -253,6 +256,7 @@ godot res://tests/bot_shot.tscn        # bots racing
 | No audio, no VFX on shift | Expected | AUDIO-002 and UI-004, not yet started. |
 | Never count `process_frame` to measure time | Low | The dev Mac has a 120 Hz display, so frame counts are half the wall time you expect. Use `get_tree().create_timer()`. Cost two wrong screenshot runs. |
 | Results only print to Output and the centre label | Expected | UI-005 replaces this with a real results screen. |
+| Bots walk into hazards | Known | BOT-008 would have them route around fire they have already seen. Until then they take the damage like anyone else, which is at least fair. |
 | Bots use only 180-degree inversions, never 90-degree shifts | By design | The cave's vertical structure is Y-axis only, so inversion is always the right tool. 90-degree wall-walk pathing costs far more than it buys. |
 
 ### Balance findings from bot simulation

@@ -26,6 +26,8 @@ func _ready() -> void:
 	var total_attempts := 0
 	var worst_climbs := 0
 	var min_hops := 9999
+	var total_hazards := 0
+	var worst_hazards := 0
 
 	print("\nGenerating %d seeds..." % SEED_COUNT)
 
@@ -47,6 +49,8 @@ func _ready() -> void:
 		var hops: int = graph.distances_from(graph.spawn_cell).get(graph.finish_cell, -1)
 		total_hops += hops
 		min_hops = mini(min_hops, hops)
+		total_hazards += graph.hazards.size()
+		worst_hazards = maxi(worst_hazards, graph.hazards.size())
 
 		# Per-seed invariants. Report only the first breach of each kind to stay readable.
 		if not graph.is_fully_connected():
@@ -65,9 +69,22 @@ func _ready() -> void:
 		if graph.spawn_cell == graph.finish_cell:
 			_fail("seed %d: spawn is the finish" % s)
 
+		# Hazards must never sit on the finish or in the opening chamber. A racer burned
+		# before they can move is the exact unfairness the design rules out.
+		var spawn_dist: Dictionary = graph.distances_from(graph.spawn_cell)
+		for h: Dictionary in graph.hazards:
+			var hc: Vector3i = h["cell"]
+			if hc == graph.finish_cell:
+				_fail("seed %d: hazard on the finish cell" % s)
+			if int(spawn_dist.get(hc, 99)) <= 1:
+				_fail("seed %d: hazard in the spawn safe zone" % s)
+			if not graph.has_cell(hc):
+				_fail("seed %d: hazard outside the cave" % s)
+
 	_check("every seed generated a cave", failures == 0)
 	_check("no seed exceeds the 5-charge budget", worst_climbs <= AppConfig.MOVE_CHARGES_START)
 	_check("closest spawn-finish pair is still far enough", min_hops >= 8)
+	_check("every cave has at least one hazard", worst_hazards > 0)
 
 	_test_determinism()
 
@@ -79,6 +96,7 @@ func _ready() -> void:
 		print("   Moves needed avg %.2f, worst %d (racers start with %d)"
 			% [float(total_climbs) / ok, worst_climbs, AppConfig.MOVE_CHARGES_START])
 		print("   loops        avg %.1f" % (float(total_cycles) / ok))
+		print("   hazards      avg %.1f, most %d" % [float(total_hazards) / ok, worst_hazards])
 		print("   attempts     avg %.2f per cave" % (float(total_attempts) / ok))
 
 	print("")

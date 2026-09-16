@@ -143,6 +143,29 @@ def build(name, seed, tint, crack_strength=0.55, normal_strength=2.6):
     print(" done")
 
 
+def flame_sprite(size=128):
+    """A soft round particle mask.
+
+    Untextured quads give fire hard square edges that read as glitching rather than
+    burning, and the alpha falloff is what makes overlapping particles blend into a flame.
+    """
+    from PIL import ImageDraw
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    pad = size * 0.18
+    draw.ellipse([pad, pad, size - pad, size - pad], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(size * 0.13))
+
+    # A little noise so the edge flickers instead of reading as a perfect circle.
+    grain = fractal(size, 4321, octaves=3, base_cells=8, persistence=0.5)
+    mask = ImageChops.multiply(mask, grain.point(lambda v: 140 + int(v * 0.45)))
+
+    white = Image.new("L", (size, size), 255)
+    out = Image.merge("RGBA", (white, white, white, mask))
+    out.save(os.path.join(OUT, "flame_sprite.png"))
+    print("  flame_sprite ... done")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     print("Generating stone texture set at %dx%d" % (SIZE, SIZE))
@@ -152,6 +175,7 @@ def main():
     build("stone_floor", 1337, (1.0, 1.0, 1.0), crack_strength=0.20, normal_strength=1.3)
     build("stone_wall", 4242, (1.0, 1.0, 1.0), crack_strength=0.30, normal_strength=1.7)
     build("stone_ceiling", 8888, (1.0, 1.0, 1.0), crack_strength=0.22, normal_strength=1.4)
+    flame_sprite()
     print("Wrote to %s" % os.path.normpath(OUT))
 
 
