@@ -1,0 +1,38 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_controller"]
+[ext_resource type="Script" path="res://scripts/player/gravity_controller.gd" id="2_gravity"]
+[ext_resource type="Script" path="res://scripts/player/player_health.gd" id="3_health"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_racer"]
+albedo_color = Color(0.29, 0.72, 0.98, 1)
+
+[node name="Player" type="CharacterBody3D" groups=["local_player"]]
+script = ExtResource("1_controller")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="Head" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Head"]
+fov = 80.0
+
+[node name="Visual" type="MeshInstance3D" parent="."]
+mesh = SubResource("CapsuleMesh_body")
+surface_material_override/0 = SubResource("StandardMaterial3D_racer")
+
+[node name="GravityController" type="Node" parent="."]
+script = ExtResource("2_gravity")
+
+[node name="PlayerHealth" type="Node" parent="."]
+script = ExtResource("3_health")

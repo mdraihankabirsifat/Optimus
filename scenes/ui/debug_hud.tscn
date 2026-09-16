@@ -1,0 +1,24 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/debug_hud.gd" id="1_hud"]
+
+[node name="DebugHUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="Flash" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 0.25, 0.25, 0)
+
+[node name="Readout" type="Label" parent="."]
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 560.0
+offset_bottom = 400.0
+theme_override_colors/font_color = Color(0.92, 0.95, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.85)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 17
+text = "Loading..."

@@ -5,3 +5,6 @@
 *.tmp
 /.test_user/
 /test-output.log
+
+# Local test captures
+/tests/shots/

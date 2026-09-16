@@ -1,0 +1,139 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/debug_hud.tscn" id="2_hud"]
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0.11, 0.1, 0.12, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.72, 0.7, 0.68, 1)
+ambient_light_energy = 1.6
+
+; Surfaces are deliberately colour-coded by orientation. After a gravity shift the
+; player must be able to tell at a glance which surface they are standing on.
+[sub_resource type="StandardMaterial3D" id="Mat_floor"]
+albedo_color = Color(0.58, 0.47, 0.36, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_ceiling"]
+albedo_color = Color(0.34, 0.39, 0.52, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.46, 0.45, 0.43, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="Mat_accent"]
+albedo_color = Color(0.78, 0.55, 0.26, 1)
+roughness = 0.8
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_dummy"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="Mat_dummy_a"]
+albedo_color = Color(0.95, 0.45, 0.3, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_dummy_b"]
+albedo_color = Color(0.5, 0.85, 0.45, 1)
+
+[node name="TestChamber" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.35, 0.37, 0, 0.72, 0.69, -0.51, -0.6, 0.62, 0, 12, 0)
+light_energy = 0.7
+shadow_enabled = true
+
+[node name="Lights" type="Node3D" parent="."]
+
+[node name="OmniA" type="OmniLight3D" parent="Lights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 8, -7)
+light_energy = 2.2
+omni_range = 24.0
+
+[node name="OmniB" type="OmniLight3D" parent="Lights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 5, 7)
+light_energy = 2.2
+omni_range = 24.0
+
+[node name="OmniC" type="OmniLight3D" parent="Lights"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 12, 2)
+light_energy = 1.8
+omni_range = 22.0
+
+[node name="Geometry" type="Node3D" parent="."]
+
+[node name="Floor" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+use_collision = true
+size = Vector3(30, 1, 30)
+material = SubResource("Mat_floor")
+
+[node name="Ceiling" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 14.5, 0)
+use_collision = true
+size = Vector3(30, 1, 30)
+material = SubResource("Mat_ceiling")
+
+[node name="WallWest" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15.5, 7, 0)
+use_collision = true
+size = Vector3(1, 14, 30)
+material = SubResource("Mat_wall")
+
+[node name="WallEast" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 15.5, 7, 0)
+use_collision = true
+size = Vector3(1, 14, 30)
+material = SubResource("Mat_wall")
+
+[node name="WallNorth" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, -15.5)
+use_collision = true
+size = Vector3(30, 14, 1)
+material = SubResource("Mat_wall")
+
+[node name="WallSouth" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 15.5)
+use_collision = true
+size = Vector3(30, 14, 1)
+material = SubResource("Mat_wall")
+
+[node name="HighLedge" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 9, -11)
+use_collision = true
+size = Vector3(10, 1, 6)
+material = SubResource("Mat_accent")
+
+[node name="Pillar" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 7, 4)
+use_collision = true
+size = Vector3(2, 14, 2)
+material = SubResource("Mat_accent")
+
+[node name="LowStep" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 1, 10)
+use_collision = true
+size = Vector3(5, 2, 5)
+material = SubResource("Mat_accent")
+
+[node name="ReferenceRacers" type="Node3D" parent="."]
+
+[node name="OnCeiling" type="MeshInstance3D" parent="ReferenceRacers"]
+transform = Transform3D(-1, 0, 0, 0, -1, 0, 0, 0, 1, 6, 13.1, 6)
+mesh = SubResource("CapsuleMesh_dummy")
+surface_material_override/0 = SubResource("Mat_dummy_a")
+
+[node name="OnEastWall" type="MeshInstance3D" parent="ReferenceRacers"]
+transform = Transform3D(0, 1, 0, -1, 0, 0, 0, 0, 1, 14.1, 5, -4)
+mesh = SubResource("CapsuleMesh_dummy")
+surface_material_override/0 = SubResource("Mat_dummy_b")
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 8)
+
+[node name="DebugHUD" parent="." instance=ExtResource("2_hud")]
