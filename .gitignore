@@ -8,3 +8,6 @@
 
 # Local test captures
 /tests/shots/
+
+# Blender preview renders (regenerate with tools/gen_rocks.py)
+/tools/preview/

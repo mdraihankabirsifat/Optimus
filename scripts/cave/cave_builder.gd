@@ -318,94 +318,145 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 		placed += 1
 
 
-## Rubble, stalactites and wall studs scattered deterministically from the cave's own hash.
+## Rock props scattered deterministically from the cave's own hash.
 ##
-## Every surface in this cave is an axis-aligned slab, which reads as a stack of boxes no
-## matter how good the material is. These pieces are purely visual -- no collision, so they
-## can never block a route or wedge a racer -- and they exist to break the silhouette of a
-## corridor so it looks carved rather than built.
+## The meshes come from tools/gen_rocks.py, built in Blender from primitives plus
+## displacement. Every surface in this cave is an axis-aligned slab, which reads as a stack
+## of boxes no matter how good the material is; these pieces break that silhouette so a
+## corridor looks carved rather than built.
+##
+## All of it is visual only -- no collision -- so nothing here can block a route or wedge a
+## racer. If the models are missing the cave still builds, just plainer, so a teammate who
+## has not run the generator is never blocked.
+const BOULDER_VARIANTS := 5
+const PANEL_VARIANTS := 4
+const SPIKE_VARIANTS := 3
+const RUBBLE_VARIANTS := 4
+
+
 func _add_detail(graph: CaveGraph, root: Node3D) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = graph.graph_hash()
 
-	var rubble: Array[Transform3D] = []
-	var spikes: Array[Transform3D] = []
-	var studs: Array[Transform3D] = []
+	# variant key -> transforms
+	var boulders := {}
+	var panels := {}
+	var spikes := {}
+	var rubble := {}
 	var half := CELL_SIZE * 0.5
 
 	for c: Vector3i in graph.cells:
 		var centre := cell_to_world(c)
 
 		if not graph.is_linked(c, CaveGraph.DIR_DOWN):
-			for i in rng.randi_range(1, 4):
-				var p := centre + Vector3(
-					rng.randf_range(-half + 1.0, half - 1.0), -half + 0.5,
-					rng.randf_range(-half + 1.0, half - 1.0))
-				rubble.append(_scatter(p, rng, rng.randf_range(0.35, 1.15)))
+			for i in rng.randi_range(1, 3):
+				var p := centre + Vector3(rng.randf_range(-half + 1.2, half - 1.2),
+					-half + 0.45, rng.randf_range(-half + 1.2, half - 1.2))
+				_bucket(boulders, rng.randi() % BOULDER_VARIANTS,
+					_upright(p, rng, rng.randf_range(0.5, 1.4)))
+			for i in rng.randi_range(2, 5):
+				var p2 := centre + Vector3(rng.randf_range(-half + 0.8, half - 0.8),
+					-half + 0.25, rng.randf_range(-half + 0.8, half - 0.8))
+				_bucket(rubble, rng.randi() % RUBBLE_VARIANTS,
+					_upright(p2, rng, rng.randf_range(0.3, 0.8)))
 
 		if not graph.is_linked(c, CaveGraph.DIR_UP):
 			for i in rng.randi_range(0, 3):
-				var p := centre + Vector3(
-					rng.randf_range(-half + 1.2, half - 1.2), half - 0.4,
-					rng.randf_range(-half + 1.2, half - 1.2))
-				var len := rng.randf_range(0.7, 2.1)
-				spikes.append(Transform3D(
-					Basis().scaled(Vector3(rng.randf_range(0.3, 0.6), len,
-						rng.randf_range(0.3, 0.6))), p))
+				var p3 := centre + Vector3(rng.randf_range(-half + 1.4, half - 1.4),
+					half - 0.3, rng.randf_range(-half + 1.4, half - 1.4))
+				# The spike models point up, so flip them to hang.
+				var basis := Basis(Vector3.FORWARD, PI) * Basis(Vector3.UP,
+					rng.randf_range(0.0, TAU))
+				var size := rng.randf_range(0.5, 1.15)
+				_bucket(spikes, rng.randi() % SPIKE_VARIANTS,
+					Transform3D(basis.scaled(Vector3(size, rng.randf_range(0.6, 1.5), size)), p3))
 
-		# Shallow slabs pressed into the walls, so a flat face catches light unevenly.
+		# Slabs pressed onto blank wall faces so a flat face catches light unevenly.
 		for dir_index: int in CaveGraph.FLAT_DIRS:
 			if graph.is_linked(c, dir_index):
 				continue
-			if rng.randf() > 0.55:
-				continue
-			var normal := Vector3(CaveGraph.DIRS[dir_index])
-			var along := Vector3(normal.z, 0.0, normal.x)
-			var p := centre + normal * (half - 0.25) \
-				+ along * rng.randf_range(-half + 1.5, half - 1.5) \
-				+ Vector3(0.0, rng.randf_range(-half + 1.0, half - 1.0), 0.0)
-			var thickness := normal.abs() * 0.5 + Vector3.ONE - normal.abs()
-			studs.append(Transform3D(Basis().scaled(
-				thickness * Vector3(rng.randf_range(1.2, 2.8), rng.randf_range(1.0, 2.6),
-					rng.randf_range(1.2, 2.8))), p))
+			for i in rng.randi_range(1, 3):
+				var normal := Vector3(CaveGraph.DIRS[dir_index])
+				var along := Vector3(normal.z, 0.0, normal.x)
+				var p4 := centre + normal * (half - 0.35) \
+					+ along * rng.randf_range(-half + 1.6, half - 1.6) \
+					+ Vector3(0.0, rng.randf_range(-half + 1.4, half - 1.4), 0.0)
+				# Panel meshes lie flat with +Y as their face normal; stand one up against
+				# the wall by pointing that axis back into the cell.
+				var up := -normal
+				var fwd := Vector3.UP if absf(up.dot(Vector3.UP)) < 0.9 else Vector3.BACK
+				fwd = (fwd - up * fwd.dot(up)).normalized()
+				var right := fwd.cross(up).normalized()
+				var b := Basis(right, up, -fwd).rotated(up, rng.randf_range(0.0, TAU))
+				var sc := rng.randf_range(1.4, 2.6)
+				_bucket(panels, rng.randi() % PANEL_VARIANTS,
+					Transform3D(b.scaled(Vector3(sc, rng.randf_range(0.6, 1.2), sc)), p4))
 
 	var detail := Node3D.new()
 	detail.name = "Detail"
 	root.add_child(detail)
-	detail.add_child(_detail_batch("Rubble", BoxMesh.new(), rubble, "stone_floor", COLOUR_FLOOR))
-	detail.add_child(_detail_batch("Stalactites", _spike_mesh(), spikes, "stone_ceiling", COLOUR_CEILING))
-	detail.add_child(_detail_batch("WallStuds", BoxMesh.new(), studs, "stone_wall", COLOUR_WALL))
+	_emit_props(detail, boulders, "boulder", "stone_floor", COLOUR_FLOOR)
+	_emit_props(detail, rubble, "rubble", "stone_floor", COLOUR_FLOOR)
+	_emit_props(detail, spikes, "stalactite", "stone_ceiling", COLOUR_CEILING)
+	_emit_props(detail, panels, "wall_panel", "stone_wall", COLOUR_WALL)
 
 
-## A chunk at a random orientation, so no two pieces read as the same box.
-func _scatter(pos: Vector3, rng: RandomNumberGenerator, size: float) -> Transform3D:
+func _bucket(store: Dictionary, variant: int, xform: Transform3D) -> void:
+	if not store.has(variant):
+		store[variant] = [] as Array[Transform3D]
+	store[variant].append(xform)
+
+
+## A prop standing on a surface: random spin about up, slight tilt, uneven scale.
+func _upright(pos: Vector3, rng: RandomNumberGenerator, size: float) -> Transform3D:
 	var basis := Basis(Vector3.UP, rng.randf_range(0.0, TAU)) \
-		* Basis(Vector3.RIGHT, rng.randf_range(-0.5, 0.5)) \
-		* Basis(Vector3.BACK, rng.randf_range(-0.5, 0.5))
+		* Basis(Vector3.RIGHT, rng.randf_range(-0.3, 0.3)) \
+		* Basis(Vector3.BACK, rng.randf_range(-0.3, 0.3))
 	return Transform3D(basis.scaled(Vector3(size,
-		size * rng.randf_range(0.5, 1.0), size * rng.randf_range(0.7, 1.3))), pos)
+		size * rng.randf_range(0.6, 1.1), size * rng.randf_range(0.8, 1.2))), pos)
 
 
-func _spike_mesh() -> Mesh:
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.5
-	cone.bottom_radius = 0.0
-	cone.height = 1.0
-	cone.radial_segments = 6
-	cone.rings = 0
-	return cone
+func _emit_props(parent: Node3D, store: Dictionary, prefix: String,
+		texture_set: String, colour: Color) -> void:
+	for variant: int in store:
+		var mesh := _prop_mesh("%s_%02d" % [prefix, variant])
+		if mesh == null:
+			continue
+		var items: Array[Transform3D] = store[variant]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = items.size()
+		for i in items.size():
+			mm.set_instance_transform(i, items[i])
+		var node := MultiMeshInstance3D.new()
+		node.name = "%s_%02d" % [prefix, variant]
+		node.multimesh = mm
+		node.material_override = _stone_material(texture_set, colour, 0.8)
+		parent.add_child(node)
 
 
-func _detail_batch(name: String, mesh: Mesh, items: Array[Transform3D],
-		texture_set: String, colour: Color) -> MultiMeshInstance3D:
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = items.size()
-	for i in items.size():
-		mm.set_instance_transform(i, items[i])
-	var node := MultiMeshInstance3D.new()
-	node.name = name
-	node.multimesh = mm
-	node.material_override = _stone_material(texture_set, colour, 0.9)
-	return node
+## Pull the mesh out of an imported glTF scene. Cached, since the same handful of props is
+## instanced hundreds of times.
+static var _prop_cache: Dictionary = {}
+
+func _prop_mesh(name: String) -> Mesh:
+	if _prop_cache.has(name):
+		return _prop_cache[name]
+	var path := "res://assets/models/%s.glb" % name
+	if not ResourceLoader.exists(path):
+		_prop_cache[name] = null
+		return null
+	var scene := load(path) as PackedScene
+	if scene == null:
+		_prop_cache[name] = null
+		return null
+	var inst := scene.instantiate()
+	var found: Mesh = null
+	for child in inst.get_children():
+		if child is MeshInstance3D:
+			found = (child as MeshInstance3D).mesh
+			break
+	inst.free()
+	_prop_cache[name] = found
+	return found
