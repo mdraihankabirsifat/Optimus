@@ -41,6 +41,7 @@ var _last_charges: int = AppConfig.MOVE_CHARGES_START
 var _go_burst: float = 0.0
 var _time: float = 0.0
 var _racer_list: VBoxContainer
+var _map_open := false
 
 
 func setup(world: Node, player: PlayerController, match_controller: MatchController) -> void:
@@ -158,6 +159,10 @@ func on_clue(racer: PlayerController, direction: Vector3, vertical: int) -> void
 	_clue_dir = direction
 	_clue_vertical = vertical
 	_clue_timer = AppConfig.CLUE_TIME
+
+
+func toggle_map() -> void:
+	_map_open = not _map_open
 
 
 func show_centre(text: String, seconds: float, colour: Color = UiKit.EMBER) -> void:
@@ -440,6 +445,53 @@ func _draw_overlay(c: Control) -> void:
 		c.draw_arc(mid, 60, 0, TAU, 40, Color(UiKit.SKY, 0.6), 2.0)
 	if _clue_timer > 0.0:
 		_draw_clue(c, Vector2(mid.x, 150))
+	if _map_open:
+		_draw_map(c)
+
+
+## UI-015: a top-down map of your current level, drawn only from cells you have stood in and
+## the openings you saw from them. The exit is never marked, even if you walked through it.
+func _draw_map(c: Control) -> void:
+	var visited: Dictionary = _world.visited_cells
+	var g: CaveGraph = _world.graph
+	var here: Vector3i = _world.player_cell()
+	var cell_px := 34.0
+	var panel := Rect2(c.size.x - 320, c.size.y - 330, 300, 310)
+	c.draw_rect(panel, Color(0.05, 0.04, 0.05, 0.82))
+	c.draw_rect(panel, Color(UiKit.PANEL_EDGE, 1.0), false, 2.0)
+	var levels := {}
+	for cell: Vector3i in visited:
+		levels[cell.y] = true
+	c.draw_string(ThemeDB.fallback_font, panel.position + Vector2(12, 22),
+		"MAP  ·  level %d  ·  %d cells found  [M]" % [here.y + 1, visited.size()],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiKit.TEXT_DIM)
+	var origin := panel.position + panel.size * 0.5 + Vector2(0, 14) - Vector2(here.x, here.z) * cell_px
+	for cell: Vector3i in visited:
+		if cell.y != here.y:
+			continue
+		var p := origin + Vector2(cell.x, cell.z) * cell_px
+		if not panel.grow(-8).has_point(p):
+			continue
+		var box := Rect2(p - Vector2.ONE * cell_px * 0.34, Vector2.ONE * cell_px * 0.68)
+		c.draw_rect(box, Color(0.45, 0.4, 0.34, 0.9))
+		for d: int in CaveGraph.FLAT_DIRS:
+			if g.is_linked(cell, d):
+				var dv := Vector2(CaveGraph.DIRS[d].x, CaveGraph.DIRS[d].z)
+				c.draw_line(p + dv * cell_px * 0.34, p + dv * cell_px * 0.5, Color(0.45, 0.4, 0.34, 0.9), cell_px * 0.3)
+		if g.is_linked(cell, CaveGraph.DIR_UP):
+			c.draw_string(ThemeDB.fallback_font, p + Vector2(-5, -1), "^", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.SKY)
+		if g.is_linked(cell, CaveGraph.DIR_DOWN):
+			c.draw_string(ThemeDB.fallback_font, p + Vector2(-4, 12), "v", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiKit.SKY)
+		if cell == g.spawn_cell:
+			c.draw_circle(p, 4, UiKit.TEXT_DIM)
+	var me := origin + Vector2(here.x, here.z) * cell_px
+	var look := -_player.camera.global_basis.z
+	var f := Vector2(look.x, look.z)
+	f = f.normalized() if f.length() > 0.05 else Vector2(0, -1)
+	var side := Vector2(-f.y, f.x)
+	c.draw_colored_polygon(PackedVector2Array([me + f * 11, me - f * 7 + side * 7, me - f * 7 - side * 7]), UiKit.SKY)
+	c.draw_string(ThemeDB.fallback_font, panel.position + Vector2(12, panel.size.y - 10),
+		"N ^    other levels: %d" % maxi(0, levels.size() - 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiKit.TEXT_DIM)
 
 
 ## HEALTH-006: red creeping in from the edges, breathing with the heartbeat.

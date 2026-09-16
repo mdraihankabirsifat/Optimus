@@ -107,6 +107,36 @@ static func title(text: String, size: int = 72, colour: Color = EMBER) -> Label:
 	return l
 
 
+## ART-011: the six gravity directions around a cube. Four in the screen plane in ember,
+## the two depth axes in sky blue, drawn slightly offset so the mark reads as 3D.
+static func logo(size: float = 140.0) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size = Vector2(size, size)
+	c.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var t0 := Time.get_ticks_msec()
+	c.draw.connect(func() -> void:
+		var mid := c.size * 0.5
+		var r := size * 0.46
+		var pulse := 1.0 + 0.04 * sin(float(Time.get_ticks_msec() - t0) * 0.003)
+		for k in 4:
+			var d := Vector2.from_angle(float(k) * PI * 0.5 - PI * 0.5)
+			var tip := mid + d * r * pulse
+			c.draw_line(mid + d * size * 0.16, tip - d * size * 0.08, EMBER, size * 0.05)
+			var side := Vector2(-d.y, d.x) * size * 0.07
+			c.draw_colored_polygon(PackedVector2Array([tip, tip - d * size * 0.12 + side, tip - d * size * 0.12 - side]), EMBER)
+		for k in 2:
+			var d := Vector2(-1, -1).normalized() * (1.0 if k == 0 else -1.0)
+			var tip := mid + d * r * 0.78 * pulse
+			c.draw_line(mid + d * size * 0.16, tip - d * size * 0.07, SKY, size * 0.04)
+			var side := Vector2(-d.y, d.x) * size * 0.06
+			c.draw_colored_polygon(PackedVector2Array([tip, tip - d * size * 0.11 + side, tip - d * size * 0.11 - side]), SKY)
+		var box := Rect2(mid - Vector2.ONE * size * 0.11, Vector2.ONE * size * 0.22)
+		c.draw_rect(box, EMBER)
+		c.draw_rect(box.grow(-size * 0.05), BG)
+		c.queue_redraw())
+	return c
+
+
 static func label(text: String, size: int = 20, colour: Color = TEXT) -> Label:
 	var l := Label.new()
 	l.text = text

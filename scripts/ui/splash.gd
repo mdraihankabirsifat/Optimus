@@ -9,6 +9,7 @@ var _leaving := false
 func _ready() -> void:
 	UiKit.setup_screen(self)
 	var col := UiKit.centre_column(self, 10)
+	col.add_child(UiKit.logo(170.0))
 	col.add_child(UiKit.title(AppConfig.GAME_TITLE, 96))
 	col.add_child(UiKit.title("gravity is yours alone", 26, UiKit.TEXT_DIM))
 	col.add_child(UiKit.label(""))

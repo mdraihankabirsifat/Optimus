@@ -38,6 +38,16 @@ var _spectate_forward := Vector3.FORWARD
 var _move_regen := false
 var _regen_timer := 0.0
 var _heartbeat_timer := 0.0
+## Cells the local racer has stood in. The map (UI-015) draws only these.
+var visited_cells: Dictionary = {}
+var _last_cell := Vector3i(-999, -999, -999)
+var _ghost: GhostRacer
+var _ghost_frames: Array = []
+var _ghost_timer := 0.0
+## FUN-003: per bot, whether it was behind the local racer last frame.
+var _behind: Dictionary = {}
+var _overtake_cooldown: Dictionary = {}
+var _crumb_mat: StandardMaterial3D
 
 @onready var _player: PlayerController = $Player
 @onready var match_controller: MatchController = $MatchController
@@ -58,6 +68,8 @@ func _ready() -> void:
 	elif randomise_seed:
 		seed_value = randi() % 1000000
 	GameState.last_match_seed = seed_value
+	GameState.last_cave_size = cave_size
+	GameState.new_record = false
 
 	var generator := CaveGenerator.new()
 	generator.apply_size_preset(cave_size)
@@ -96,6 +108,11 @@ func _ready() -> void:
 		box.opened.connect(_on_box_opened)
 		box.clue_granted.connect(hud.on_clue)
 
+	_ghost = GhostRacer.load_for(seed_value, cave_size)
+	if _ghost != null:
+		add_child(_ghost)
+		_ghost.visible = false
+
 	_spectate_camera = Camera3D.new()
 	_spectate_camera.fov = 75.0
 	add_child(_spectate_camera)
@@ -125,7 +142,7 @@ func _ready() -> void:
 func _spawn_bots() -> void:
 	var scene: PackedScene = load("res://scenes/bots/bot_player.tscn")
 	var origin := CaveBuilder.floor_position(graph.spawn_cell)
-	var count: int = clampi(bot_count, 1, 4)
+	var count: int = clampi(bot_count, 0, 4)
 
 	for i in count:
 		var bot: Node3D = scene.instantiate()
@@ -144,6 +161,9 @@ func _spawn_bots() -> void:
 ## is something you can hear.
 func _register(racer: PlayerController, racer_name: String, colour: Color, is_bot: bool) -> void:
 	match_controller.register_racer(racer, racer_name, is_bot)
+	racer.health.eliminated.connect(func() -> void:
+		if is_bot:
+			racer.rig.emote("argh"))
 	GameState.register_racer_stats(racer_name, colour, is_bot)
 	var g := racer.gravity
 	# VFX-004 / VFX-005: dust off whatever surface this racer calls the floor.
@@ -189,6 +209,11 @@ func _register(racer: PlayerController, racer_name: String, colour: Color, is_bo
 func _process(delta: float) -> void:
 	_tick_regen(delta)
 	_tick_heartbeat(delta)
+	_track_local(delta)
+	_check_overtakes(delta)
+	if bots.is_empty() and _local_resolved_at >= 0.0 and match_controller.phase == MatchController.Phase.RACING \
+			and match_controller.elapsed - _local_resolved_at > 2.0:
+		match_controller.force_end()
 	if match_controller.phase == MatchController.Phase.RACING and _local_resolved_at >= 0.0:
 		var left := AppConfig.LOCAL_RESOLVED_GRACE - (match_controller.elapsed - _local_resolved_at)
 		hud.set_banner("Spectating %s    [Tab] next racer    [Enter] end race now  (%ds)"
@@ -196,6 +221,85 @@ func _process(delta: float) -> void:
 		if left <= 0.0:
 			match_controller.force_end()
 	_update_spectate_camera(delta)
+
+
+## Breadcrumbs, the map's visited set, and the ghost recording.
+func _track_local(delta: float) -> void:
+	if match_controller.phase != MatchController.Phase.RACING:
+		return
+	var elapsed := match_controller.elapsed
+	if _ghost != null:
+		_ghost.show_at(elapsed)
+	if _local_resolved_at >= 0.0:
+		return
+	_ghost_timer += delta
+	while _ghost_timer >= GhostRacer.SAMPLE and _ghost_frames.size() * GhostRacer.SAMPLE <= elapsed:
+		_ghost_timer -= GhostRacer.SAMPLE
+		_ghost_frames.append([_player.global_position, _player.global_basis.get_rotation_quaternion()])
+
+	var cell := CaveBuilder.world_to_cell(_player.global_position)
+	if cell == _last_cell or not graph.has_cell(cell):
+		return
+	_last_cell = cell
+	if visited_cells.has(cell):
+		return
+	visited_cells[cell] = true
+	_drop_breadcrumb()
+
+
+## LEVEL-013: a faint mark on whatever surface you are standing on as you enter a new cell,
+## so a corridor you have already searched looks searched.
+func _drop_breadcrumb() -> void:
+	if _crumb_mat == null:
+		_crumb_mat = StandardMaterial3D.new()
+		_crumb_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_crumb_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_crumb_mat.albedo_color = Color(PLAYER_COLOUR, 0.35)
+	var up := _player.gravity.local_up()
+	var mark := MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = 0.35
+	disc.bottom_radius = 0.35
+	disc.height = 0.02
+	disc.radial_segments = 6
+	mark.mesh = disc
+	mark.material_override = _crumb_mat
+	add_child(mark)
+	var right := up.cross(Vector3.FORWARD if absf(up.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT).normalized()
+	mark.global_basis = Basis(right, up, right.cross(up))
+	mark.global_position = _player.global_position - up * 0.88
+
+
+## FUN-003: a callout when a bot runs past you in the same corridor, or you past it.
+func _check_overtakes(delta: float) -> void:
+	if match_controller.phase != MatchController.Phase.RACING or _local_resolved_at >= 0.0:
+		return
+	var up := _player.gravity.local_up()
+	var fwd := -_player.global_basis.z
+	fwd = (fwd - up * fwd.dot(up)).normalized()
+	for bot: Node3D in bots:
+		var b := bot as PlayerController
+		_overtake_cooldown[b] = maxf(0.0, float(_overtake_cooldown.get(b, 0.0)) - delta)
+		if not b.input_enabled:
+			_behind.erase(b)
+			continue
+		var rel := b.global_position - _player.global_position
+		if rel.length() > 7.0:
+			_behind.erase(b)
+			continue
+		var along := rel.dot(fwd)
+		var behind := along < -0.5
+		var ahead := along > 1.0
+		if _behind.has(b) and _overtake_cooldown[b] <= 0.0:
+			if _behind[b] and ahead and b.velocity.length() > _player.velocity.length():
+				hud.toast("%s overtook you" % b.display_name, b.racer_colour, 2.0)
+				b.rig.emote("see ya!")
+				_overtake_cooldown[b] = 8.0
+			elif not _behind[b] and behind and _player.velocity.length() > b.velocity.length():
+				hud.toast("You passed %s" % b.display_name, PLAYER_COLOUR, 2.0)
+				_overtake_cooldown[b] = 8.0
+		if behind or ahead:
+			_behind[b] = behind
 
 
 ## AXIS-010: optional slow Move regeneration, identical for every racer.
@@ -234,6 +338,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and _local_resolved_at < 0.0:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if event.is_action_pressed("toggle_map"):
+		hud.toggle_map()
+	for k in 3:
+		if event.is_action_pressed("emote_%d" % (k + 1)) and match_controller.phase != MatchController.Phase.PENDING:
+			var text: String = ["hey!", "GG", "catch me!"][k]
+			_player.rig.emote(text)
+			hud.toast("You: %s" % text, PLAYER_COLOUR, 1.5)
+			AudioManager.play_sfx("emote", -4.0)
 	if _local_resolved_at < 0.0:
 		return
 	if event.is_action_pressed("spectate_next"):
@@ -255,6 +367,8 @@ func _spectate_targets() -> Array[Node3D]:
 
 
 func _spectate_target_name() -> String:
+	if bots.is_empty():
+		return "-"
 	var targets := _spectate_targets()
 	if targets.is_empty():
 		return "-"
@@ -311,9 +425,18 @@ func _on_racer_finished(racer_name: String, place: int, time: float) -> void:
 	print("%s finished #%d in %s" % [racer_name, place, MatchController.format_time(time)])
 	if racer_name == _player.display_name:
 		AudioManager.play_sfx("finish")
+		_player.rig.cheer()
+		GameState.new_record = SettingsManager.submit_cave_time(time, seed_value, cave_size)
+		if GameState.new_record and _ghost_frames.size() > 2:
+			GhostRacer.save(seed_value, cave_size, _ghost_frames)
 		_begin_spectating()
 	else:
 		AudioManager.play_sfx("notify", -4.0)
+		for bot: Node3D in bots:
+			var b := bot as PlayerController
+			if b.display_name == racer_name:
+				b.rig.cheer()
+				b.rig.emote("GG!" if place == 1 else "made it!")
 
 
 func _on_racer_eliminated(racer_name: String, _time: float) -> void:
@@ -346,6 +469,7 @@ func _on_match_ended(results: Array) -> void:
 
 
 func _restart() -> void:
+	GameState.cave_size = cave_size
 	GameState.prepare_match(seed_value, bot_count)
 	AudioManager.stop_ambience()
 	SceneRouter.start_match()

@@ -25,12 +25,10 @@ func _ready() -> void:
 			headline_colour = UiKit.TEXT_DIM
 	col.add_child(UiKit.title(headline, 64, headline_colour))
 
-	var new_record := false
-	if not you.is_empty() and you["finished"]:
-		new_record = SettingsManager.submit_time(float(you["finish_time"]), GameState.last_match_seed)
-		if new_record:
-			AudioManager.play_sfx("record")
-			col.add_child(UiKit.title("New personal best!", 24, UiKit.SKY))
+	# The race itself records the time (it also saves the ghost); results only report it.
+	if not you.is_empty() and you["finished"] and GameState.new_record:
+		AudioManager.play_sfx("record")
+		col.add_child(UiKit.title("New best on this cave!  Your ghost will race you next time.", 22, UiKit.SKY))
 
 	var panel := PanelContainer.new()
 	col.add_child(panel)
@@ -62,13 +60,24 @@ func _ready() -> void:
 		grid.add_child(UiKit.label(str(stats.get("boxes", 0)), 22))
 		grid.add_child(UiKit.label("%.1f" % float(stats.get("damage_taken", 0.0)), 22))
 
-	col.add_child(UiKit.title("Cave seed  %d" % GameState.last_match_seed, 20, UiKit.TEXT_DIM))
+	var highlights := _highlights(results)
+	if highlights != "":
+		col.add_child(UiKit.title(highlights, 18, UiKit.EMBER))
+	var board := SettingsManager.leaderboard(GameState.last_match_seed, GameState.last_cave_size)
+	if not board.is_empty():
+		var times: Array[String] = []
+		for t in board:
+			times.append(MatchController.format_time(float(t)))
+		col.add_child(UiKit.title("Your top times here:  " + "   ".join(times), 18, UiKit.SKY))
+	var size_name: String = CaveGenerator.SIZE_PRESETS[GameState.last_cave_size]["name"]
+	col.add_child(UiKit.title("%s cave  ·  seed %d" % [size_name, GameState.last_match_seed], 20, UiKit.TEXT_DIM))
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 16)
 	col.add_child(row)
 	var rematch := UiKit.button("Rematch  (same cave)", func() -> void:
+		GameState.cave_size = GameState.last_cave_size
 		GameState.prepare_match(GameState.last_match_seed, GameState.bot_count)
 		SceneRouter.start_match(), 280)
 	row.add_child(rematch)
@@ -77,6 +86,44 @@ func _ready() -> void:
 		SceneRouter.start_match(), 220))
 	row.add_child(UiKit.button("Main Menu", func() -> void: SceneRouter.go_to(SceneRouter.MAIN_MENU), 220))
 	rematch.grab_focus.call_deferred()
+
+
+## FUN-008: one line of the race's most notable moments, from stats the race recorded.
+func _highlights(results: Array) -> String:
+	var parts: Array[String] = []
+	var most_moves := ""
+	var moves := 0
+	var most_boxes := ""
+	var boxes := 0
+	var toughest := ""
+	var damage := 0.0
+	for entry: Dictionary in results:
+		var st: Dictionary = GameState.stats.get(entry["name"], {})
+		if int(st.get("moves_used", 0)) > moves:
+			moves = int(st["moves_used"])
+			most_moves = entry["name"]
+		if int(st.get("boxes", 0)) > boxes:
+			boxes = int(st["boxes"])
+			most_boxes = entry["name"]
+		if entry["finished"] and float(st.get("damage_taken", 0.0)) > damage:
+			damage = float(st["damage_taken"])
+			toughest = entry["name"]
+	var finish_times: Array[float] = []
+	for entry: Dictionary in results:
+		if entry["finished"]:
+			finish_times.append(float(entry["finish_time"]))
+	var closest := INF
+	for i in range(1, finish_times.size()):
+		closest = minf(closest, finish_times[i] - finish_times[i - 1])
+	if most_moves != "":
+		parts.append("Most Moves: %s (%d)" % [most_moves, moves])
+	if most_boxes != "":
+		parts.append("Box hunter: %s (%d)" % [most_boxes, boxes])
+	if toughest != "":
+		parts.append("Toughest finish: %s (took %.1f)" % [toughest, damage])
+	if closest < INF:
+		parts.append("Closest finish: %.2fs" % closest)
+	return "   ·   ".join(parts)
 
 
 static func _ordinal(n: int) -> String:

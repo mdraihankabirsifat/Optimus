@@ -5,11 +5,12 @@ extends Control
 func _ready() -> void:
 	UiKit.setup_screen(self)
 	var col := UiKit.centre_column(self, 12)
-	col.add_child(UiKit.title(AppConfig.GAME_TITLE, 84))
+	col.add_child(UiKit.logo(96.0))
+	col.add_child(UiKit.title(AppConfig.GAME_TITLE, 76))
 	col.add_child(UiKit.title("Five Moves. Six directions. One hidden exit.", 22, UiKit.TEXT_DIM))
 	col.add_child(UiKit.label(""))
 
-	var race := UiKit.button("Bot Race", func() -> void: SceneRouter.go_to(SceneRouter.LOBBY))
+	var race := UiKit.button("Race", func() -> void: SceneRouter.go_to(SceneRouter.LOBBY))
 	col.add_child(race)
 	col.add_child(UiKit.button("How to Play", func() -> void: SceneRouter.go_to(SceneRouter.HOW_TO_PLAY)))
 	col.add_child(UiKit.button("Settings", func() -> void: SceneRouter.go_to(SceneRouter.SETTINGS)))

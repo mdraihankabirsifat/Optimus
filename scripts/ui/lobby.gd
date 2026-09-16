@@ -17,14 +17,13 @@ func _ready() -> void:
 		GameState.randomise_seed()
 	_bots = GameState.bot_count
 
-	var col := UiKit.centre_column(self, 18)
-	col.add_child(UiKit.title("Bot Race", 64))
-	col.add_child(UiKit.title("Race bots that know no more about the cave than you do.", 20, UiKit.TEXT_DIM))
+	var col := UiKit.centre_column(self, 12)
+	col.add_child(UiKit.title("Race Setup", 52))
 
 	var panel := PanelContainer.new()
 	col.add_child(panel)
 	var inner := VBoxContainer.new()
-	inner.add_theme_constant_override("separation", 18)
+	inner.add_theme_constant_override("separation", 12)
 	panel.add_child(inner)
 
 	var bot_row := HBoxContainer.new()
@@ -75,18 +74,22 @@ func _ready() -> void:
 	_seed_edit.custom_minimum_size = Vector2(230, 48)
 	_seed_edit.max_length = 9
 	seed_row.add_child(_seed_edit)
-	seed_row.add_child(UiKit.button("Randomise", func() -> void:
-		_seed_edit.text = str(GameState.randomise_seed()), 160))
+	seed_row.add_child(UiKit.button("Random", func() -> void:
+		_seed_edit.text = str(GameState.randomise_seed()), 120))
+	seed_row.add_child(UiKit.button("Daily", func() -> void:
+		_seed_edit.text = str(GameState.daily_seed())
+		_set_cave_size(1), 100))
 	inner.add_child(seed_row)
 
-	inner.add_child(UiKit.label("Same seed, same cave, on every machine.", 16, UiKit.TEXT_DIM))
+	inner.add_child(UiKit.label("Same seed and size, same cave, on every machine. Daily is today's cave for everyone.", 15, UiKit.TEXT_DIM))
 
-	var start := UiKit.button("Start Race", _start)
-	start.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	col.add_child(start)
-	var back := UiKit.button("Back", func() -> void: SceneRouter.go_to(SceneRouter.MAIN_MENU))
-	back.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	col.add_child(back)
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 16)
+	col.add_child(buttons)
+	buttons.add_child(UiKit.button("Back", func() -> void: SceneRouter.go_to(SceneRouter.MAIN_MENU), 200))
+	var start := UiKit.button("Start Race", _start, 320)
+	buttons.add_child(start)
 
 	_set_bots(_bots)
 	_set_skill(GameState.bot_skill)
@@ -100,8 +103,8 @@ func _fixed(c: Control, width: float) -> Control:
 
 
 func _set_bots(n: int) -> void:
-	_bots = clampi(n, 1, 4)
-	_bot_label.text = "%d   (%d racers)" % [_bots, _bots + 1]
+	_bots = clampi(n, 0, 4)
+	_bot_label.text = "Time trial" if _bots == 0 else "%d   (%d racers)" % [_bots, _bots + 1]
 
 
 func _set_skill(i: int) -> void:

@@ -11,6 +11,7 @@ const ABOUT := "res://scenes/ui/about.tscn"
 const CREDITS := "res://scenes/ui/credits.tscn"
 const RESULTS := "res://scenes/ui/results.tscn"
 const GAME := "res://scenes/game/game_world.tscn"
+const LOADING := "res://scenes/ui/loading.tscn"
 
 const FADE_TIME := 0.28
 
@@ -29,6 +30,10 @@ func _ready() -> void:
 	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_layer.add_child(_fade)
+
+
+func is_busy() -> bool:
+	return _busy
 
 
 func go_to(path: String) -> void:
@@ -55,7 +60,7 @@ func go_to(path: String) -> void:
 ## Starts a race using whatever GameState currently holds.
 func start_match() -> void:
 	GameState.launched_from_menu = true
-	go_to(GAME)
+	go_to(LOADING)
 
 
 func quit_game() -> void:
