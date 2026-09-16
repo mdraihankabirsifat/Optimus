@@ -37,8 +37,9 @@ func setup(graph: CaveGraph, bot_name: String, colour: Color, personality: int) 
 	_planner.personality = personality
 	_planner.frontier_jitter = 3.0
 	think_interval = 0.18 + 0.07 * float(personality % 4)
+	# Headless has no renderer to own the material, and nothing to show it to.
 	var visual := get_parent().get_node_or_null("Visual") as MeshInstance3D
-	if visual != null:
+	if visual != null and DisplayServer.get_name() != "headless":
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = colour
 		visual.set_surface_override_material(0, mat)
