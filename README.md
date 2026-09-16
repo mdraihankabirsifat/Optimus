@@ -80,7 +80,7 @@ Keys can be remapped in Settings. Invert Y, sensitivity, volumes, window size an
 
 ```bash
 godot                      # play: splash, menu, Play
-godot --editor             # open the project
+godot --editor             # open the project 
 ```
 
 ### Local Bot Race
