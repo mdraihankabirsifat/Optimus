@@ -246,8 +246,8 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 
 	var light := OmniLight3D.new()
 	light.light_color = COLOUR_FINISH
-	light.light_energy = 7.0
-	light.omni_range = CELL_SIZE * 3.0
+	light.light_energy = 9.0
+	light.omni_range = CELL_SIZE * 3.6
 	light.light_volumetric_fog_energy = 3.0
 	light.position = Vector3(0.0, -CELL_SIZE * 0.5 + 4.5, 0.0)
 	area.add_child(light)
@@ -261,10 +261,10 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 ## how high they are without a single HUD element, and it stops 50-odd stone cells from
 ## looking like one continuous corridor.
 const LEVEL_LIGHT: Array[Color] = [
-	Color(1.00, 0.68, 0.36),
-	Color(1.00, 0.84, 0.60),
-	Color(0.82, 0.90, 1.00),
-	Color(0.70, 0.88, 1.05),
+	Color(1.00, 0.62, 0.28),
+	Color(1.00, 0.86, 0.52),
+	Color(0.68, 0.88, 1.00),
+	Color(0.55, 0.82, 1.10),
 ]
 
 
@@ -300,17 +300,17 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 		var light := OmniLight3D.new()
 		light.position = base
 		light.light_color = tint
-		light.light_energy = 6.0 if junction else 4.4
-		light.omni_range = CELL_SIZE * 2.1
+		light.light_energy = 6.5 if junction else 5.0
+		light.omni_range = CELL_SIZE * 2.6
 		light.omni_attenuation = 1.5
 		# Feeds the volumetric fog so each torch throws a visible shaft of light rather
 		# than just brightening the stone around it.
-		light.light_volumetric_fog_energy = 1.4
+		light.light_volumetric_fog_energy = 0.9
 		light.light_specular = 0.6
 		# Shadows only at junctions: they are the expensive part and the places worth
 		# spending it, since that is where geometry overlaps and depth needs reading.
-		light.shadow_enabled = junction
-		light.shadow_blur = 1.4
+		light.shadow_enabled = junction and placed % 3 == 0
+		light.shadow_blur = 1.0
 		holder.add_child(light)
 
 		var bulb := MeshInstance3D.new()

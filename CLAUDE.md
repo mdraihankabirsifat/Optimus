@@ -58,6 +58,19 @@ Two more traps worth knowing:
 - Do not measure time by counting `process_frame`. This machine has a 120 Hz display, so
   frame counts mean half the wall time you expect. Use `get_tree().create_timer()`.
 
+## Asset tools
+
+All art is generated, never downloaded. See `tools/README.md`.
+
+```bash
+python3 tools/gen_textures.py                                    # stone maps, ~1s
+/Applications/Blender.app/Contents/MacOS/Blender --background --python tools/gen_rocks.py
+```
+
+Nothing in `assets/` is hand-authored or licensed from anyone, so there is nothing to
+credit and nothing that can be rejected at submission. If you add a downloaded asset,
+record it in `CREDITS.md` the moment you add it.
+
 ## Working style
 
 - Reference a Task ID from `docs/TASK_BOARD.md` in commits
