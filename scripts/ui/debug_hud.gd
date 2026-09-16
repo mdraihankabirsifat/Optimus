@@ -30,19 +30,28 @@ func _process(delta: float) -> void:
 		return
 
 	var g := _player.gravity
-	readout.text = "\n".join([
+	var lines := [
 		"HEARTS   %s" % _hearts_bar(_player.health.hearts),
 		"MOVES    %s" % _charge_bar(g.charges),
 		"GRAVITY  %s" % _axis_name(g.gravity_dir),
 		"LOCAL UP %s" % _axis_name(g.local_up()),
 		"STATE    %s" % ("ROTATING" if g.is_transitioning else "STABLE"),
 		"SHIFTS   %d" % _shift_count,
+	]
+
+	var cave := get_tree().get_first_node_in_group("cave_root")
+	if cave != null and cave.graph != null:
+		lines.append("DOF      %d  (axes you can travel here)" % cave.player_degrees_of_freedom())
+		lines.append("SEED     %d   CELL %s" % [cave.seed_value, cave.player_cell()])
+
+	lines.append_array([
 		"",
 		"WASD move   SHIFT sprint   SPACE jump",
 		"G + WASD  = 90 degree gravity shift",
 		"G + SPACE = 180 degree inversion",
 		"ESC releases the mouse",
 	])
+	readout.text = "\n".join(lines)
 
 
 func _hearts_bar(hearts: float) -> String:

@@ -172,18 +172,49 @@ Completed 16 September 2026.
 | AXIS-006 | Safe-transform ring buffer + protected vacuum-180 recovery path |
 | AXIS-007 | `tests/test_gravity.gd` — **150 assertions, 0 failures** |
 
+| LEVEL-001 | `cave_graph.gd` — cells, connection masks, BFS, cycle count, DOF, graph hash |
+| LEVEL-002 | Seeded spine carved spawn→finish in legs, climbs chosen up front to bound Move cost |
+| LEVEL-003 | Branches, dead ends and braided loops. Avg 8.8 cycles per cave. |
+| LEVEL-004/005 | `cave_builder.gd` — boundary-deduped slabs, 3 MultiMesh batches, procedural stone |
+| LEVEL-006 | Spawn chamber and glowing finish pillar, min 8 hops apart |
+| LEVEL-007 | Spine climb cost asserted ≤ 3 of 5 charges |
+| LEVEL-008 | `tests/test_cave.gd` — **200 seeds, 0 failures** |
+
 ### How to run what exists
 
 ```bash
-# Play the prototype
-godot res://scenes/game/test_chamber.tscn
+# Play the procedural cave (this is the main scene)
+godot
 
 # Gravity verification (exits non-zero on failure)
 godot --headless res://tests/test_gravity.tscn
 
+# Cave generation over 200 seeds
+godot --headless res://tests/test_cave.tscn
+
 # Regenerate screenshots
-godot res://tests/screenshot.tscn
+godot res://tests/screenshot.tscn      # gravity prototype chamber
+godot res://tests/cave_shot.tscn       # generated cave
 ```
+
+> **After adding any script with a new `class_name`, run this once before any
+> headless test, or the test will hang with no output:**
+> ```bash
+> godot --headless --editor --quit
+> ```
+> Headless scene runs use the editor's global class cache. If the cache is stale the
+> script fails to resolve, `_ready` never runs, and the process idles forever. This cost
+> an hour once already.
+
+### Measured cave statistics (200 seeds)
+
+| Metric | Value |
+|---|---|
+| Cells per cave | avg 65.9 |
+| Spawn → exit | avg 11.8 hops, min 8 |
+| Moves required | avg 2.58, **worst 3** against a budget of 5 |
+| Loops | avg 8.8 |
+| Generation attempts | avg 1.36 (no thrashing) |
 
 ### Known issues
 

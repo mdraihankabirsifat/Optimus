@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/cave/cave_test.gd" id="1_cave"]
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="2_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/debug_hud.tscn" id="3_hud"]
+
+[sub_resource type="Environment" id="Environment_cave"]
+background_mode = 1
+background_color = Color(0.04, 0.035, 0.045, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.58, 0.54, 1)
+ambient_light_energy = 1.1
+fog_enabled = true
+fog_light_color = Color(0.12, 0.1, 0.11, 1)
+fog_density = 0.008
+
+[node name="CaveTest" type="Node3D"]
+script = ExtResource("1_cave")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_cave")
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+
+[node name="DebugHUD" parent="." instance=ExtResource("3_hud")]
