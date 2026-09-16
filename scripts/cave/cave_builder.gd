@@ -13,6 +13,9 @@ extends RefCounted
 
 const CELL_SIZE := 8.0
 const WALL_THICKNESS := 1.0
+## Physics layers: 1 is cave geometry, 2 is racers.
+const LAYER_WORLD := 1
+const LAYER_RACERS := 2
 ## Stand-on-able surfaces get a warm tone and overheads a cool one, so a racer who has
 ## just rotated their gravity still has an absolute reference for which way world-up is.
 const COLOUR_FLOOR := Color(0.58, 0.47, 0.36)
@@ -159,6 +162,8 @@ func _stone_material(colour: Color, uv_scale: float) -> StandardMaterial3D:
 func _make_collision() -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "CaveCollision"
+	body.collision_layer = LAYER_WORLD
+	body.collision_mask = 0
 	for entry: Array in _collision:
 		var shape := BoxShape3D.new()
 		shape.size = entry[0]
@@ -175,11 +180,16 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 	area.position = cell_to_world(graph.finish_cell)
 	area.add_to_group("finish_area")
 
+	# Fills the cell rather than sitting in the middle of it. A 60% box let racers stand
+	# on the ceiling or against a wall inside the finish cell without ever triggering it,
+	# which meant a race that could not be won.
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(CELL_SIZE * 0.6, CELL_SIZE * 0.6, CELL_SIZE * 0.6)
+	shape.size = Vector3(CELL_SIZE * 0.95, CELL_SIZE * 0.95, CELL_SIZE * 0.95)
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	area.add_child(collision)
+	area.collision_layer = 0
+	area.collision_mask = LAYER_RACERS
 
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = COLOUR_FINISH

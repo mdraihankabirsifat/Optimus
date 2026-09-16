@@ -8,9 +8,20 @@ extends Node3D
 ## specific cave when chasing a bug.
 @export var randomise_seed := true
 @export var fixed_seed := 12345
+## 1-4 bots, giving 2-5 total racers. Every match needs at least two.
+@export_range(1, 4) var bot_count: int = 2
+
+const BOT_COLOURS: Array[Color] = [
+	Color(0.95, 0.45, 0.30),
+	Color(0.50, 0.85, 0.45),
+	Color(0.85, 0.60, 0.95),
+	Color(0.95, 0.85, 0.35),
+]
+const BOT_NAMES: Array[String] = ["Rook", "Vex", "Nim", "Kilo"]
 
 var graph: CaveGraph
 var seed_value: int
+var bots: Array[Node3D] = []
 
 @onready var _player: PlayerController = $Player
 @onready var match_controller: MatchController = $MatchController
@@ -42,9 +53,29 @@ func _ready() -> void:
 	])
 
 	match_controller.register_racer(_player, "You")
+	_spawn_bots()
 	match_controller.racer_finished.connect(_on_racer_finished)
 	match_controller.match_ended.connect(_on_match_ended)
 	match_controller.begin_countdown()
+
+
+## Bots spawn in a ring around the shared starting chamber so nobody begins inside
+## anyone else, and every racer starts the same distance from the exit.
+func _spawn_bots() -> void:
+	var scene: PackedScene = load("res://scenes/bots/bot_player.tscn")
+	var origin := CaveBuilder.floor_position(graph.spawn_cell)
+	var count: int = clampi(bot_count, 1, 4)
+
+	for i in count:
+		var bot: Node3D = scene.instantiate()
+		add_child(bot)
+		var angle := TAU * float(i) / float(count)
+		bot.global_position = origin + Vector3(cos(angle), 0.0, sin(angle)) * 1.8
+
+		var controller: BotController = bot.get_node("BotController")
+		controller.setup(graph, BOT_NAMES[i], BOT_COLOURS[i], i + 1)
+		match_controller.register_racer(bot, BOT_NAMES[i], true)
+		bots.append(bot)
 
 
 func _on_racer_finished(racer_name: String, place: int, time: float) -> void:

@@ -187,6 +187,12 @@ Completed 16 September 2026.
 | HEALTH-003 | Elimination at zero hearts, input lockout, Heart Refill cannot resurrect |
 | HEALTH-004 | No damage possible before GO |
 | — | `tests/test_match.gd` — **29 assertions, 0 failures** |
+| BOT-001 | `bot_knowledge.gd` — discovered graph, fed only primitive observations |
+| BOT-002 | `bot_planner.gd` — Dijkstra over (cell, gravity) states, frontier search, backtracking |
+| BOT-003 | `bot_controller.gd` — fills the same `move_input` a human fills, so identical movement code |
+| BOT-004 | Bots invert gravity to climb, and cannot when out of charges |
+| BOT-005 | 1-4 bots, distinct colours, per-bot route personalities |
+| — | `tests/test_bot.gd` — **15 assertions, 60/60 caves solved** |
 
 ### How to run what exists
 
@@ -203,10 +209,17 @@ godot --headless res://tests/test_cave.tscn
 # Match rules, health, elimination, results ordering
 godot --headless res://tests/test_match.tscn
 
+# Bot knowledge isolation and exploration over 60 caves
+godot --headless res://tests/test_bot.tscn
+
+# Watch a full 4-bot race and print finishing order
+godot --headless res://tests/race_diag.tscn
+
 # Regenerate screenshots
 godot res://tests/screenshot.tscn      # gravity prototype chamber
 godot res://tests/cave_shot.tscn       # generated cave
 godot res://tests/match_shot.tscn      # countdown and racing HUD
+godot res://tests/bot_shot.tscn        # bots racing
 ```
 
 > **After adding any script with a new `class_name`, run this once before any
@@ -237,3 +250,16 @@ godot res://tests/match_shot.tscn      # countdown and racing HUD
 | No audio, no VFX on shift | Expected | AUDIO-002 and UI-004, not yet started. |
 | Never count `process_frame` to measure time | Low | The dev Mac has a 120 Hz display, so frame counts are half the wall time you expect. Use `get_tree().create_timer()`. Cost two wrong screenshot runs. |
 | Results only print to Output and the centre label | Expected | UI-005 replaces this with a real results screen. |
+| Bots use only 180-degree inversions, never 90-degree shifts | By design | The cave's vertical structure is Y-axis only, so inversion is always the right tool. 90-degree wall-walk pathing costs far more than it buys. |
+
+### Balance findings from bot simulation
+
+These came out of running bots across many caves and are worth knowing before tuning anything.
+
+| Finding | Detail |
+|---|---|
+| **A branch that climbs can softlock a racer** | It creates a dead end whose only exit is vertical. A racer arriving with zero charges cannot move at all. Branches are now always horizontal; loops may still go vertical because they only connect cells that already exist. |
+| **Scattered vertical links break the Move economy** | Crossing one costs a charge, so vertical noise fragments each floor into pieces nobody can explore without paying. Bot completion went 38/60 → 60/60 by biasing braiding horizontal (`horizontal_bias = 0.85`). |
+| **`horizontal_bias = 1.0` scores best and is still wrong** | It gives 60/60 at an average of exactly 1.00 Moves used, which removes the scarcity the mechanic depends on. 0.85 keeps 97% completion while averaging 1.91 with a worst case of 5. |
+| **One inversion currently buys unlimited climbing** | With gravity inverted you keep falling upward through aligned shafts for free, so Moves are less scarce than the design intends. Worth watching in playtests; hazards and non-aligned shafts would restore the pressure. |
+| **Identical planners make identical bots** | Four bots first finished within 0.4 s of each other, which reads as a bug. Each bot now has a stable per-cell route preference and its own reaction delay; the same race now spreads over ~10 s. |

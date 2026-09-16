@@ -22,6 +22,15 @@ var max_spine_climbs := 3
 var min_spawn_finish_distance := 8
 var branch_attempts := 45
 var loop_attempts := 30
+## Fraction of LOOPS allowed to stay on one Y level. Branches are always horizontal --
+## see _pick_branch_dir.
+##
+## Vertical links are not free to traverse -- crossing one costs a Move charge, and racers
+## only ever get five. Scattering vertical connections everywhere fragments each floor into
+## pieces that cannot be explored without paying, which strands anyone searching blind.
+## Keeping braiding mostly horizontal makes each level explorable for free and turns the
+## remaining vertical links into deliberate, readable moments.
+var horizontal_bias := 0.85
 var max_attempts := 24
 
 var last_failure := ""
@@ -126,9 +135,15 @@ func _add_branches() -> void:
 			current = next
 
 
+## Branches are always horizontal, without exception.
+##
+## A branch creates NEW cells, so a branch that climbed would produce a dead end whose only
+## exit is vertical -- and a racer who arrives there with no charges left is softlocked,
+## unable to move at all. Loops are free to go vertical because they only ever connect
+## cells that already exist, so they cannot trap anyone.
 func _pick_branch_dir(from: Vector3i) -> int:
 	var options: Array[int] = []
-	for dir_index in 6:
+	for dir_index: int in CaveGraph.FLAT_DIRS:
 		var target: Vector3i = from + CaveGraph.DIRS[dir_index]
 		if _in_bounds(target) and not _graph.has_cell(target):
 			options.append(dir_index)
@@ -146,6 +161,8 @@ func _add_loops() -> void:
 	for i in loop_attempts:
 		var c: Vector3i = existing[_rng.randi_range(0, existing.size() - 1)]
 		var dir_index := _rng.randi_range(0, 5)
+		if _rng.randf() < horizontal_bias:
+			dir_index = CaveGraph.FLAT_DIRS[_rng.randi_range(0, 3)]
 		var n: Vector3i = c + CaveGraph.DIRS[dir_index]
 		if not _graph.has_cell(n) or _graph.is_linked(c, dir_index):
 			continue

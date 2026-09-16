@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
+[ext_resource type="Script" path="res://scripts/bots/bot_controller.gd" id="2_bot"]
+
+[node name="BotPlayer" instance=ExtResource("1_player")]
+
+[node name="BotController" type="Node" parent="."]
+script = ExtResource("2_bot")

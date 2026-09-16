@@ -17,13 +17,25 @@ var is_local_player: bool = true
 ## can orient themselves before GO.
 var input_enabled: bool = true
 
+## Movement intent for this frame. A local player fills these from Input; a bot fills them
+## from BotController. Both then run through identical movement code below, which is what
+## guarantees a bot cannot out-accelerate, out-run, or clip past a human.
+var move_input: Vector2 = Vector2.ZERO
+var sprint_input: bool = false
+var jump_requested: bool = false
+
 ## True while the G chord is held, which suppresses ordinary WASD movement so the
 ## keypress can be read as a gravity command instead.
 var _gravity_armed: bool = false
 
 
 func _ready() -> void:
+	# Without this every bot's camera fights the local player's for the viewport.
+	camera.current = is_local_player
 	if is_local_player:
+		# Claimed here rather than in the scene file, so bots instancing the same scene
+		# do not all announce themselves as the local player.
+		add_to_group("local_player")
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		$Visual.visible = false
 
@@ -49,9 +61,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if is_local_player and input_enabled:
-		_read_gravity_chord()
-	elif not input_enabled:
+	if is_local_player:
+		_gather_local_input()
+	if not input_enabled:
+		move_input = Vector2.ZERO
+		sprint_input = false
+		jump_requested = false
 		_gravity_armed = false
 
 	var up := gravity.local_up()
@@ -66,8 +81,9 @@ func _physics_process(delta: float) -> void:
 		planar = Vector3.ZERO
 	else:
 		planar = _apply_planar_movement(planar, up, delta)
-		if Input.is_action_just_pressed("jump") and is_on_floor() and not _gravity_armed:
+		if jump_requested and is_on_floor() and not _gravity_armed:
 			vertical = up * AppConfig.JUMP_VELOCITY
+	jump_requested = false
 
 	if is_on_floor() and vertical.dot(up) <= 0.0:
 		# Small downward bias keeps floor snapping stable on slopes and corners.
@@ -83,20 +99,29 @@ func _physics_process(delta: float) -> void:
 
 
 func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vector3:
-	var input := Vector2.ZERO
-	if not _gravity_armed:
-		input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-
 	# global_basis.y is local_up, so this vector already lies in the walk plane.
-	var wish := global_basis * Vector3(input.x, 0.0, input.y)
+	var wish := global_basis * Vector3(move_input.x, 0.0, move_input.y)
 	wish = wish - up * wish.dot(up)
 
-	var speed: float = AppConfig.SPRINT_SPEED if Input.is_action_pressed("sprint") \
-		else AppConfig.WALK_SPEED
+	var speed: float = AppConfig.SPRINT_SPEED if sprint_input else AppConfig.WALK_SPEED
 
 	if wish.length_squared() > 0.001:
 		return planar.lerp(wish.normalized() * speed, AppConfig.ACCELERATION * delta)
 	return planar.lerp(Vector3.ZERO, AppConfig.FRICTION * delta)
+
+
+## Local player only. Bots never touch Input.
+func _gather_local_input() -> void:
+	if not input_enabled:
+		return
+	_read_gravity_chord()
+	if _gravity_armed:
+		move_input = Vector2.ZERO
+		return
+	move_input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	sprint_input = Input.is_action_pressed("sprint")
+	if Input.is_action_just_pressed("jump"):
+		jump_requested = true
 
 
 func _read_gravity_chord() -> void:
