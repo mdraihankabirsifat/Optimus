@@ -41,6 +41,32 @@ var boxes: Array[Dictionary] = []
 ## Set dressing: {"cell": Vector3i, "kind": String, "variant": int}
 ## kinds: stalagmite, stalactite, crystal, moss, torch, ember
 var decor: Array[Dictionary] = []
+## Gameplay features beyond fire and boxes: {"cell": Vector3i, "kind": String, ...}
+## kinds: pad {axis}, wind {axis, sign}, piston {phase}, spider {axis},
+## crumble (the floor of this cell over a shaft), shortcut (vertical link from this cell up),
+## landmark {variant}. See CaveGenerator._place_features.
+var features: Array[Dictionary] = []
+
+
+## True when the cell is a straight horizontal corridor along one axis and nothing else.
+## Returns the axis (DIR_PLUS_X or DIR_PLUS_Z) or -1.
+func straight_axis(c: Vector3i) -> int:
+	if not cells.has(c):
+		return -1
+	var mask := int(cells[c])
+	if mask == (1 << DIR_PLUS_X) | (1 << DIR_MINUS_X):
+		return DIR_PLUS_X
+	if mask == (1 << DIR_PLUS_Z) | (1 << DIR_MINUS_Z):
+		return DIR_PLUS_Z
+	return -1
+
+
+func features_at(c: Vector3i) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for f: Dictionary in features:
+		if f["cell"] == c:
+			out.append(f)
+	return out
 
 
 ## Number of open faces at a cell (its degree in the graph).

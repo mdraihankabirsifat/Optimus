@@ -122,6 +122,16 @@ func _build_visuals() -> void:
 	particles.position = Vector3(0.0, 0.4, 0.0)
 	add_child(particles)
 
+	var crackle := AudioStreamPlayer3D.new()
+	crackle.bus = "SFX"
+	crackle.stream = AudioManager.get_stream("fire_loop")
+	crackle.unit_size = 4.0
+	crackle.max_distance = 22.0
+	crackle.volume_db = -4.0
+	crackle.autoplay = crackle.stream != null
+	crackle.position.y = 1.0
+	add_child(crackle)
+
 	_light = OmniLight3D.new()
 	_light.light_color = Color(1.0, 0.5, 0.15)
 	_light.light_energy = 2.6

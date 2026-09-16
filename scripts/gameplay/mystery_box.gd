@@ -160,6 +160,9 @@ func _apply_reward(reward: String, racer: PlayerController) -> String:
 		"lose_move":
 			var taken := racer.gravity.remove_charges(1)
 			return "Drained  -1 Gravity Move" if taken > 0 else "Drained  ...but you had no Moves to lose"
+		"second_chance":
+			racer.health.grant_second_chance()
+			return "Second Chance  survive one fatal hit"
 		"clue":
 			var info := _coarse_clue(racer.global_position)
 			clue_granted.emit(racer, info["direction"], info["vertical"])

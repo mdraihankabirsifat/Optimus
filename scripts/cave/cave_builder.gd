@@ -62,6 +62,270 @@ func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 	_add_lights(graph, root)
 	if match_seed >= 0:
 		_add_features(graph, root, match_seed)
+		_add_gameplay_features(graph, root)
+		_add_spawn_gates(graph, root)
+		_stage_finish(graph, root)
+		_stage_shafts(graph, root)
+
+
+## Pads, wind, pistons, spiders, crumbling covers, shortcut markers and landmarks.
+func _add_gameplay_features(graph: CaveGraph, root: Node3D) -> void:
+	var holder := Node3D.new()
+	holder.name = "GameplayFeatures"
+	root.add_child(holder)
+	var ids := 0
+	for f: Dictionary in graph.features:
+		var c: Vector3i = f["cell"]
+		var node: Node3D = null
+		match f["kind"]:
+			"pad": node = BoostPad.create(c, int(f["axis"]))
+			"wind": node = WindZone.create(c, int(f["axis"]), int(f["sign"]))
+			"piston": node = PistonHazard.create(ids, c, int(f["phase"]))
+			"spider": node = SpiderEnemy.create(ids, c, int(f["axis"]), int(f.get("span", 3)), int(f.get("shift", 0)))
+			"crumble": node = CrumbleTile.create(c)
+			"shortcut": node = _make_shortcut_marker(c)
+			"landmark": node = _make_landmark(graph, c, int(f["variant"]))
+		ids += 1
+		if node != null:
+			holder.add_child(node)
+
+
+func _add_spawn_gates(graph: CaveGraph, root: Node3D) -> void:
+	for dir_index: int in CaveGraph.FLAT_DIRS:
+		if graph.is_linked(graph.spawn_cell, dir_index):
+			root.add_child(SpawnGate.create(graph.spawn_cell, dir_index))
+
+
+## ART-009 / VFX-006: the exit should feel like an arrival. Standing stones, a pale beam
+## rising from the pillar, embers drifting up. All of it stays inside the finish cell, so it
+## is only ever seen by someone who has already found the way in.
+func _stage_finish(graph: CaveGraph, root: Node3D) -> void:
+	var stage := Node3D.new()
+	stage.name = "FinishStage"
+	stage.position = cell_to_world(graph.finish_cell)
+	root.add_child(stage)
+	var floor_y := -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5
+	var stone := StandardMaterial3D.new()
+	stone.albedo_color = Color(0.42, 0.36, 0.3)
+	var rune := _glow(COLOUR_FINISH, 1.2)
+	for i in 6:
+		var a := TAU * float(i) / 6.0
+		var slab := MeshInstance3D.new()
+		var m := BoxMesh.new()
+		m.size = Vector3(0.7, 1.6 + 0.4 * float(i % 2), 0.35)
+		slab.mesh = m
+		slab.material_override = stone
+		slab.position = Vector3(cos(a) * 3.0, floor_y + m.size.y * 0.5, sin(a) * 3.0)
+		slab.rotation.y = -a + PI * 0.5
+		stage.add_child(slab)
+		var glyph := MeshInstance3D.new()
+		var g := BoxMesh.new()
+		g.size = Vector3(0.25, 0.5, 0.05)
+		glyph.mesh = g
+		glyph.material_override = rune
+		glyph.position = Vector3(0.0, 0.2, -0.2)
+		slab.add_child(glyph)
+	var beam := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 1.4
+	cyl.bottom_radius = 0.9
+	cyl.height = CELL_SIZE - 5.0
+	beam.mesh = cyl
+	beam.material_override = _beam_material(COLOUR_FINISH, 0.08)
+	beam.position.y = floor_y + 4.0 + cyl.height * 0.5
+	stage.add_child(beam)
+	var embers := CPUParticles3D.new()
+	embers.amount = 30
+	embers.lifetime = 2.6
+	embers.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	embers.emission_sphere_radius = 2.4
+	embers.direction = Vector3(0, 1, 0)
+	embers.gravity = Vector3(0, 0.5, 0)
+	embers.initial_velocity_min = 0.3
+	embers.initial_velocity_max = 1.0
+	var spark := BoxMesh.new()
+	spark.size = Vector3.ONE * 0.08
+	spark.material = _glow(COLOUR_FINISH, 1.5)
+	embers.mesh = spark
+	embers.position.y = floor_y + 1.0
+	stage.add_child(embers)
+
+
+## LEVEL-012: every shaft gets a pale column of light through it and glowing lips on the
+## opening above, so vertical routes read as deliberate moments from a distance.
+func _stage_shafts(graph: CaveGraph, root: Node3D) -> void:
+	var holder := Node3D.new()
+	holder.name = "Shafts"
+	root.add_child(holder)
+	var beam_mat := _beam_material(Color(0.6, 0.8, 1.0), 0.025)
+	var lip_mat := _glow(Color(0.35, 0.65, 0.95), 0.7)
+	for c: Vector3i in graph.sorted_cells():
+		if not graph.is_linked(c, CaveGraph.DIR_UP):
+			continue
+		var beam := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 2.8
+		cyl.bottom_radius = 2.2
+		cyl.height = CELL_SIZE
+		cyl.radial_segments = 12
+		beam.mesh = cyl
+		beam.material_override = beam_mat
+		beam.position = cell_to_world(c) + Vector3(0.0, CELL_SIZE * 0.5, 0.0)
+		holder.add_child(beam)
+		for k in 4:
+			var lip := MeshInstance3D.new()
+			var m := BoxMesh.new()
+			m.size = Vector3(CELL_SIZE - 1.0, 0.12, 0.12) if k < 2 else Vector3(0.12, 0.12, CELL_SIZE - 1.0)
+			lip.mesh = m
+			lip.material_override = lip_mat
+			var edge := CELL_SIZE * 0.5 - 0.6
+			var offs := [Vector3(0, 0, edge), Vector3(0, 0, -edge), Vector3(edge, 0, 0), Vector3(-edge, 0, 0)]
+			lip.position = cell_to_world(c) + Vector3(0.0, CELL_SIZE * 0.5, 0.0) + offs[k]
+			holder.add_child(lip)
+
+
+## FUN-004: a ring of upward chevrons under a shaft that saves a long walk. It says "this
+## costs a Move and is worth it", nothing about where the exit is.
+func _make_shortcut_marker(c: Vector3i) -> Node3D:
+	var marker := Node3D.new()
+	marker.position = cell_to_world(c) + Vector3(0.0, -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5 + 0.05, 0.0)
+	var mat := _glow(Color(0.3, 0.85, 0.55), 0.9)
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 1.9
+	torus.outer_radius = 2.15
+	ring.mesh = torus
+	ring.material_override = mat
+	marker.add_child(ring)
+	for i in 4:
+		var a := TAU * float(i) / 4.0 + PI * 0.25
+		var arrow := MeshInstance3D.new()
+		var prism := PrismMesh.new()
+		prism.size = Vector3(0.6, 0.8, 0.1)
+		arrow.mesh = prism
+		arrow.material_override = mat
+		arrow.position = Vector3(cos(a) * 1.2, 0.45, sin(a) * 1.2)
+		arrow.rotation.y = -a
+		marker.add_child(arrow)
+	var label := Label3D.new()
+	label.text = "SHORTCUT"
+	label.font_size = 48
+	label.pixel_size = 0.008
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.modulate = Color(0.55, 1.0, 0.75)
+	label.outline_size = 8
+	label.position.y = 1.6
+	marker.add_child(label)
+	return marker
+
+
+## ART-005: three one-off chambers so a cave has places people can name.
+func _make_landmark(graph: CaveGraph, c: Vector3i, variant: int) -> Node3D:
+	var node := Node3D.new()
+	node.name = "Landmark%d" % variant
+	node.position = cell_to_world(c)
+	var floor_y := -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5
+	var corner := CELL_SIZE * 0.5 - 1.2
+	var corners := [Vector3(corner, 0, corner), Vector3(-corner, 0, corner),
+		Vector3(corner, 0, -corner), Vector3(-corner, 0, -corner)]
+	match variant % 3:
+		0:  # Crystal hollow
+			var mat := _glow(Color(0.3, 0.6, 0.85), 0.9)
+			for k in 4:
+				for j in 4:
+					var shard := MeshInstance3D.new()
+					var prism := PrismMesh.new()
+					prism.size = Vector3(0.5, 1.2 + 0.6 * float(j), 0.5)
+					shard.mesh = prism
+					shard.material_override = mat
+					shard.position = corners[k] + Vector3(0.3 * cos(j * 1.9), floor_y + prism.size.y * 0.5, 0.3 * sin(j * 1.9))
+					shard.rotation = Vector3(0.2 * sin(j), float(j), 0.25 * cos(j))
+					node.add_child(shard)
+			var core := MeshInstance3D.new()
+			var sphere := SphereMesh.new()
+			sphere.radius = 0.5
+			sphere.height = 1.0
+			core.mesh = sphere
+			core.material_override = _glow(Color(0.55, 0.85, 1.0), 1.6)
+			core.position.y = 0.8
+			node.add_child(core)
+		1:  # Pillar hall: corner columns that really are solid
+			var stone := StandardMaterial3D.new()
+			stone.albedo_color = Color(0.5, 0.45, 0.4)
+			var body := StaticBody3D.new()
+			body.collision_layer = LAYER_WORLD
+			body.collision_mask = 0
+			node.add_child(body)
+			for k in 4:
+				var col := MeshInstance3D.new()
+				var cyl := CylinderMesh.new()
+				cyl.top_radius = 0.55
+				cyl.bottom_radius = 0.7
+				cyl.height = CELL_SIZE - WALL_THICKNESS
+				col.mesh = cyl
+				col.material_override = stone
+				col.position = corners[k]
+				node.add_child(col)
+				var shape := CollisionShape3D.new()
+				var cs := CylinderShape3D.new()
+				cs.radius = 0.65
+				cs.height = cyl.height
+				shape.shape = cs
+				shape.position = corners[k]
+				body.add_child(shape)
+			var fallen := MeshInstance3D.new()
+			var drum := CylinderMesh.new()
+			drum.top_radius = 0.5
+			drum.bottom_radius = 0.5
+			drum.height = 3.2
+			fallen.mesh = drum
+			fallen.material_override = stone
+			fallen.rotation.z = PI * 0.5
+			fallen.position = Vector3(0.0, floor_y + 0.5, corner - 0.2)
+			node.add_child(fallen)
+		2:  # Still pool
+			var water := MeshInstance3D.new()
+			var disc := CylinderMesh.new()
+			disc.top_radius = 2.6
+			disc.bottom_radius = 2.6
+			disc.height = 0.05
+			disc.radial_segments = 32
+			water.mesh = disc
+			var wmat := StandardMaterial3D.new()
+			wmat.albedo_color = Color(0.1, 0.3, 0.4, 0.75)
+			wmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			wmat.metallic = 0.6
+			wmat.roughness = 0.05
+			wmat.emission_enabled = true
+			wmat.emission = Color(0.1, 0.45, 0.55)
+			wmat.emission_energy_multiplier = 0.6
+			water.material_override = wmat
+			water.position.y = floor_y + 0.04
+			node.add_child(water)
+			var rock := StandardMaterial3D.new()
+			rock.albedo_color = Color(0.38, 0.33, 0.28)
+			for k in 12:
+				var a := TAU * float(k) / 12.0
+				var pebble := MeshInstance3D.new()
+				var sm := SphereMesh.new()
+				sm.radius = 0.3 + 0.1 * float(k % 3)
+				sm.height = sm.radius * 1.2
+				pebble.mesh = sm
+				pebble.material_override = rock
+				pebble.position = Vector3(cos(a) * 2.8, floor_y + 0.1, sin(a) * 2.8)
+				node.add_child(pebble)
+	return node
+
+
+func _beam_material(colour: Color, alpha: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.no_depth_test = false
+	m.albedo_color = Color(colour, alpha)
+	return m
 
 
 ## Fire, boxes and set dressing, exactly where the generator put them. Offsets are derived
@@ -99,15 +363,21 @@ func _decor_kit() -> Dictionary:
 	moss.emission_enabled = true
 	moss.emission = Color(0.2, 0.5, 0.15)
 	moss.emission_energy_multiplier = 0.25
-	var ember := _glow(Color(1.0, 0.42, 0.1), 2.4)
+	var ember := _glow(Color(0.9, 0.35, 0.08), 1.3)
 	var wood := StandardMaterial3D.new()
 	wood.albedo_color = Color(0.3, 0.18, 0.09)
 	var crystals: Array[StandardMaterial3D] = [
-		_glow(Color(0.35, 0.8, 1.0), 1.8), _glow(Color(0.7, 0.4, 1.0), 1.8),
-		_glow(Color(0.4, 1.0, 0.6), 1.6), _glow(Color(1.0, 0.45, 0.7), 1.6),
+		_glow(Color(0.25, 0.6, 0.85), 0.8), _glow(Color(0.55, 0.3, 0.85), 0.8),
+		_glow(Color(0.3, 0.8, 0.45), 0.7), _glow(Color(0.85, 0.35, 0.55), 0.7),
+	]
+	var crack := StandardMaterial3D.new()
+	crack.albedo_color = Color(0.08, 0.06, 0.05)
+	var streaks: Array[StandardMaterial3D] = [
+		_glow(Color(0.35, 0.55, 0.5), 0.25), _glow(Color(0.6, 0.4, 0.25), 0.2), _glow(Color(0.5, 0.5, 0.6), 0.2),
 	]
 	return {"rock": rock, "moss": moss, "ember": ember, "wood": wood,
-		"flame": _glow(Color(1.0, 0.6, 0.15), 3.0), "crystals": crystals}
+		"flame": _glow(Color(1.0, 0.55, 0.15), 1.6), "crystals": crystals,
+		"torch_cone": _beam_material(Color(1.0, 0.6, 0.25), 0.02), "crack": crack, "streaks": streaks}
 
 
 func _glow(colour: Color, energy: float) -> StandardMaterial3D:
@@ -204,8 +474,68 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			flame.radius = 0.2
 			flame.height = 0.5
 			root.add_child(_mesh(flame, kit["flame"], Vector3(0, 0.55, 0)))
+			# VFX-007 / VFX-013: a flickering flame and a faint cone of light down the wall.
+			var fire := CPUParticles3D.new()
+			fire.amount = 14
+			fire.lifetime = 0.5
+			fire.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+			fire.emission_sphere_radius = 0.12
+			fire.direction = Vector3(0, 1, 0)
+			fire.spread = 15.0
+			fire.gravity = Vector3(0, 2.0, 0)
+			fire.initial_velocity_min = 0.4
+			fire.initial_velocity_max = 1.0
+			fire.scale_amount_min = 0.6
+			fire.scale_amount_max = 1.0
+			var ember := BoxMesh.new()
+			ember.size = Vector3.ONE * 0.1
+			ember.material = kit["flame"]
+			fire.mesh = ember
+			fire.position.y = 0.6
+			root.add_child(fire)
+			var cone := MeshInstance3D.new()
+			var cone_mesh := CylinderMesh.new()
+			cone_mesh.top_radius = 0.2
+			cone_mesh.bottom_radius = 1.6
+			cone_mesh.height = 2.6
+			cone_mesh.radial_segments = 10
+			cone.mesh = cone_mesh
+			cone.material_override = kit["torch_cone"]
+			cone.position = Vector3(0, -0.6, 0) - n * 0.7
+			root.add_child(cone)
 			root.position = centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.25) \
 				+ Vector3(0, floor_y + 2.4, 0)
+		"walldetail":
+			# ART-003: a crack or a mineral streak on a wall that actually exists.
+			var walls := [CaveGraph.DIR_PLUS_X, CaveGraph.DIR_MINUS_X, CaveGraph.DIR_PLUS_Z, CaveGraph.DIR_MINUS_Z]
+			var wall := -1
+			for k in 4:
+				var candidate: int = walls[(v + k) % 4]
+				if not graph.is_linked(c, candidate):
+					wall = candidate
+					break
+			if wall == -1:
+				return null
+			var n := Vector3(CaveGraph.DIRS[wall])
+			var right := n.cross(Vector3.UP).normalized()
+			var streak := v % 3 == 0
+			var mat: StandardMaterial3D = kit["streaks"][v % 3] if streak else kit["crack"]
+			var segments := 1 if streak else 4
+			var p := Vector3.ZERO
+			for k in segments:
+				var seg := MeshInstance3D.new()
+				var m := BoxMesh.new()
+				m.size = Vector3(0.18, 3.5, 0.03) if streak else Vector3(0.07, 1.1, 0.03)
+				seg.mesh = m
+				seg.material_override = mat
+				var tilt := 0.0 if streak else (0.5 if k % 2 == 0 else -0.45)
+				seg.basis = Basis.looking_at(-n, Vector3.UP) * Basis(Vector3(0, 0, 1), tilt)
+				seg.position = p
+				root.add_child(seg)
+				p += Vector3.DOWN * 0.95 + right * (0.45 if k % 2 == 0 else -0.4)
+			var height := 1.0 + float(v % 4) * 0.6
+			root.position = centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.02) \
+				+ right * (float(v % 5) - 2.0) + Vector3(0, floor_y + height + 1.5, 0)
 		_:
 			return null
 	return root
@@ -275,10 +605,18 @@ func _make_batch(name: String, slabs: Array[Transform3D], colour: Color,
 
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
 	mm.mesh = mesh
 	mm.instance_count = slabs.size()
 	for i in slabs.size():
 		mm.set_instance_transform(i, slabs[i])
+		# ART-001: every slab a slightly different stone. Derived from position, not rolled,
+		# so the builder still makes no choices of its own.
+		var o := slabs[i].origin
+		var h: int = absi(hash(Vector3i(roundi(o.x * 2.0), roundi(o.y * 2.0), roundi(o.z * 2.0))))
+		var shade := 0.86 + float(h % 1000) / 1000.0 * 0.22
+		var warmth := (float((h / 1000) % 100) / 100.0 - 0.5) * 0.08
+		mm.set_instance_color(i, Color(shade + warmth, shade, shade - warmth))
 
 	var node := MultiMeshInstance3D.new()
 	node.name = name
@@ -309,9 +647,24 @@ func _stone_material(colour: Color, uv_scale: float) -> StandardMaterial3D:
 	tex.height = 256
 	tex.seamless = true
 
+	var bump_noise := FastNoiseLite.new()
+	bump_noise.noise_type = FastNoiseLite.TYPE_CELLULAR
+	bump_noise.frequency = 0.045
+	var bump := NoiseTexture2D.new()
+	bump.noise = bump_noise
+	bump.as_normal_map = true
+	bump.bump_strength = 6.0
+	bump.width = 256
+	bump.height = 256
+	bump.seamless = true
+
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = colour
 	mat.albedo_texture = tex
+	mat.vertex_color_use_as_albedo = true
+	mat.normal_enabled = true
+	mat.normal_texture = bump
+	mat.normal_scale = 0.7
 	mat.uv1_scale = Vector3(uv_scale, uv_scale, uv_scale)
 	mat.uv1_triplanar = true
 	mat.roughness = 0.95

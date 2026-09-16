@@ -19,6 +19,10 @@ signal speed_effect_changed(multiplier: float, remaining: float)
 var mouse_sensitivity: float = AppConfig.MOUSE_SENSITIVITY
 var is_local_player: bool = true
 var display_name: String = "You"
+var rig: RacerRig
+var acceleration: float = AppConfig.ACCELERATION
+## Set when Space is released while still rising: the jump is cut short for a smaller hop.
+var _jump_cut: bool = false
 var racer_colour: Color = Color(0.29, 0.72, 0.98)
 ## Cleared by MatchController during countdown, after finishing, and on elimination.
 ## Looking around stays allowed while this is false -- only movement is frozen, so a racer
@@ -31,6 +35,10 @@ var input_enabled: bool = true
 var move_input: Vector2 = Vector2.ZERO
 var sprint_input: bool = false
 var jump_requested: bool = false
+
+## World-space velocity pushed onto the racer this frame by wind. Cleared after each move,
+## so a zone must keep pushing every physics frame the racer stays inside it.
+var push_velocity: Vector3 = Vector3.ZERO
 
 ## Temporary speed modifier from a mystery box (boost above 1, slow below 1).
 var speed_multiplier: float = 1.0
@@ -49,6 +57,14 @@ var _last_vertical_speed: float = 0.0
 func _ready() -> void:
 	# Without this every bot's camera fights the local player's for the viewport.
 	camera.current = is_local_player
+	# The capsule mesh stays in the scene as a placeholder; the rig replaces it at runtime.
+	($Visual as MeshInstance3D).mesh = null
+	rig = RacerRig.new()
+	$Visual.add_child(rig)
+	rig.set_colour(racer_colour)
+	# FEEL-005/006 playtest values apply to every racer alike, bots included.
+	gravity.transition_time = SettingsManager.turn_time
+	acceleration = SettingsManager.acceleration
 	if is_local_player:
 		# Claimed here rather than in the scene file, so bots instancing the same scene
 		# do not all announce themselves as the local player.
@@ -117,6 +133,12 @@ func _physics_process(delta: float) -> void:
 			jumped.emit()
 	jump_requested = false
 
+	# FEEL-004: tap for a hop, hold for the full jump.
+	if _jump_cut:
+		_jump_cut = false
+		if vertical.dot(up) > AppConfig.JUMP_VELOCITY * 0.35:
+			vertical *= 0.5
+
 	if on_floor and vertical.dot(up) <= 0.0:
 		# Small downward bias keeps floor snapping stable on slopes and corners.
 		vertical = gravity.gravity_dir * 0.1
@@ -126,8 +148,11 @@ func _physics_process(delta: float) -> void:
 			vertical = vertical.normalized() * AppConfig.TERMINAL_VELOCITY
 
 	_last_vertical_speed = vertical.dot(up)
-	velocity = planar + vertical
+	velocity = planar + vertical + push_velocity
 	move_and_slide()
+	# Take the push back out so it never accumulates into the racer's own momentum.
+	velocity -= push_velocity
+	push_velocity = Vector3.ZERO
 	_check_world_bounds()
 	_emit_feel_events(planar, delta)
 
@@ -141,7 +166,7 @@ func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vecto
 	speed *= speed_multiplier
 
 	if wish.length_squared() > 0.001:
-		return planar.lerp(wish.normalized() * speed, AppConfig.ACCELERATION * delta)
+		return planar.lerp(wish.normalized() * speed, minf(1.0, acceleration * delta))
 	return planar.lerp(Vector3.ZERO, AppConfig.FRICTION * delta)
 
 
@@ -170,6 +195,8 @@ func _gather_local_input() -> void:
 		return
 	move_input = Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	sprint_input = Input.is_action_pressed("sprint")
+	if Input.is_action_just_released("jump"):
+		_jump_cut = true
 	if Input.is_action_just_pressed("jump"):
 		jump_requested = true
 
@@ -253,14 +280,9 @@ func current_gravity() -> Vector3:
 ## Applies a racer colour to the visible body. Bots and remote players are told apart by it.
 func set_racer_colour(colour: Color) -> void:
 	racer_colour = colour
-	var visual := $Visual as MeshInstance3D
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = colour
-	mat.emission_enabled = true
-	mat.emission = colour
-	mat.emission_energy_multiplier = 0.35
-	visual.set_surface_override_material(0, mat)
-	var visor := get_node_or_null("Visual/Visor") as MeshInstance3D
+	if rig != null:
+		rig.set_colour(colour)
+	var visor := find_child("Visor", true, false) as MeshInstance3D
 	if visor != null:
 		var vm := StandardMaterial3D.new()
 		vm.albedo_color = Color(0.08, 0.08, 0.1)

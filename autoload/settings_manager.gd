@@ -15,6 +15,14 @@ var fullscreen: bool = false
 ## Best finish time on any seed, in seconds. 0 means none yet.
 var best_time: float = 0.0
 var best_time_seed: int = 0
+## Comfort: head bob and camera shake/hitstop can each be switched off.
+var head_bob: bool = true
+var camera_effects: bool = true
+## FEEL-005/006 playtest tuning. Defaults are the locked design values.
+var turn_time: float = AppConfig.GRAVITY_TRANSITION_TIME
+var acceleration: float = AppConfig.ACCELERATION
+## MATCH-006: best finish per cave, keyed "seed:size".
+var best_times: Dictionary = {}
 ## Set once the player has read How To Play or finished a race.
 var seen_tutorial: bool = false
 
@@ -36,6 +44,11 @@ func load_settings() -> void:
 	best_time = float(cfg.get_value("records", "best_time", best_time))
 	best_time_seed = int(cfg.get_value("records", "best_time_seed", best_time_seed))
 	seen_tutorial = bool(cfg.get_value("progress", "seen_tutorial", seen_tutorial))
+	head_bob = bool(cfg.get_value("comfort", "head_bob", head_bob))
+	camera_effects = bool(cfg.get_value("comfort", "camera_effects", camera_effects))
+	turn_time = clampf(float(cfg.get_value("feel", "turn_time", turn_time)), 0.2, 0.6)
+	acceleration = clampf(float(cfg.get_value("feel", "acceleration", acceleration)), 4.0, 30.0)
+	best_times = cfg.get_value("records", "best_times", best_times)
 
 
 func save_settings() -> void:
@@ -48,6 +61,11 @@ func save_settings() -> void:
 	cfg.set_value("records", "best_time", best_time)
 	cfg.set_value("records", "best_time_seed", best_time_seed)
 	cfg.set_value("progress", "seen_tutorial", seen_tutorial)
+	cfg.set_value("comfort", "head_bob", head_bob)
+	cfg.set_value("comfort", "camera_effects", camera_effects)
+	cfg.set_value("feel", "turn_time", turn_time)
+	cfg.set_value("feel", "acceleration", acceleration)
+	cfg.set_value("records", "best_times", best_times)
 	cfg.save(PATH)
 
 
@@ -69,6 +87,35 @@ func set_and_save(property: String, value: Variant) -> void:
 	set(property, value)
 	apply()
 	save_settings()
+
+
+static func cave_key(p_seed: int, size: int) -> String:
+	return "%d:%d" % [p_seed, size]
+
+
+func best_for(p_seed: int, size: int) -> float:
+	return float(best_times.get(cave_key(p_seed, size), 0.0))
+
+
+## Top five times on one cave, fastest first.
+func leaderboard(p_seed: int, size: int) -> Array:
+	return (best_times.get(cave_key(p_seed, size) + ":board", []) as Array).duplicate()
+
+
+## MATCH-006: records a finish on this cave. Returns true when it beats the previous best.
+func submit_cave_time(seconds: float, p_seed: int, size: int) -> bool:
+	var key := cave_key(p_seed, size)
+	var board: Array = best_times.get(key + ":board", [])
+	board.append(seconds)
+	board.sort()
+	best_times[key + ":board"] = board.slice(0, 5)
+	var previous := float(best_times.get(key, 0.0))
+	var record := previous <= 0.0 or seconds < previous
+	if record:
+		best_times[key] = seconds
+	submit_time(seconds, p_seed)
+	save_settings()
+	return record
 
 
 ## Records a finish time if it beats the stored best. Returns true when it is a new record.

@@ -6,6 +6,7 @@ const SKILLS: Array[String] = ["Easy", "Normal", "Hard"]
 
 var _bots := 2
 var _skill_buttons: Array[Button] = []
+var _size_buttons: Array[Button] = []
 var _bot_label: Label
 var _seed_edit: LineEdit
 
@@ -46,6 +47,26 @@ func _ready() -> void:
 		_skill_buttons.append(b)
 	inner.add_child(skill_row)
 
+	var size_row := HBoxContainer.new()
+	size_row.add_theme_constant_override("separation", 14)
+	size_row.add_child(_fixed(UiKit.label("Cave size", 22), 140))
+	for i in CaveGenerator.SIZE_PRESETS.size():
+		var b := UiKit.button(CaveGenerator.SIZE_PRESETS[i]["name"], func() -> void: _set_cave_size(i), 118)
+		b.toggle_mode = true
+		size_row.add_child(b)
+		_size_buttons.append(b)
+	inner.add_child(size_row)
+
+	var regen_row := HBoxContainer.new()
+	regen_row.add_theme_constant_override("separation", 14)
+	regen_row.add_child(_fixed(UiKit.label("Move regen", 22), 140))
+	var regen := CheckButton.new()
+	regen.text = "+1 Move every %ds (off: five Moves, no more)" % int(AppConfig.MOVE_REGEN_INTERVAL)
+	regen.button_pressed = GameState.move_regen
+	regen.toggled.connect(func(on: bool) -> void: GameState.move_regen = on)
+	regen_row.add_child(regen)
+	inner.add_child(regen_row)
+
 	var seed_row := HBoxContainer.new()
 	seed_row.add_theme_constant_override("separation", 14)
 	seed_row.add_child(_fixed(UiKit.label("Cave seed", 22), 140))
@@ -69,6 +90,7 @@ func _ready() -> void:
 
 	_set_bots(_bots)
 	_set_skill(GameState.bot_skill)
+	_set_cave_size(GameState.cave_size)
 	start.grab_focus.call_deferred()
 
 
@@ -86,6 +108,12 @@ func _set_skill(i: int) -> void:
 	GameState.bot_skill = i
 	for k in _skill_buttons.size():
 		_skill_buttons[k].set_pressed_no_signal(k == i)
+
+
+func _set_cave_size(i: int) -> void:
+	GameState.cave_size = i
+	for k in _size_buttons.size():
+		_size_buttons[k].set_pressed_no_signal(k == i)
 
 
 func _start() -> void:

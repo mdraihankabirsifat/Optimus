@@ -42,6 +42,9 @@ func _ready() -> void:
 	await _wait(0.4)
 	_shot("ui_box_opened")
 
+	player.health.apply_damage(3.0, "shot2")
+	await _wait(0.3)
+	_shot("ui_low_health")
 	player.health.eliminate()
 	await _wait(3.0)
 	_shot("ui_spectating")

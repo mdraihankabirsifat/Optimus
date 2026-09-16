@@ -17,6 +17,9 @@ var visits: Dictionary = {}
 ## Set only when the finish is genuinely observed. Until then the bot has no idea.
 var exit_cell: Vector3i = Vector3i.ZERO
 var exit_found: bool = false
+## Cells where the bot has seen something that hurts. Planner treats them as expensive,
+## not forbidden -- sometimes the only way on is through the fire.
+var hazard_cells: Dictionary = {}
 ## The cell observed last tick. Without this, a bot standing still would count a new visit
 ## every physics frame and inflate the revisit penalty into the thousands.
 var _last_cell: Vector3i = Vector3i(-9999, -9999, -9999)
@@ -34,6 +37,14 @@ func observe(cell: Vector3i, connection_mask: int, finish_here: bool = false) ->
 	if finish_here and not exit_found:
 		exit_found = true
 		exit_cell = cell
+
+
+func observe_hazard(cell: Vector3i) -> void:
+	hazard_cells[cell] = true
+
+
+func is_hazard(cell: Vector3i) -> bool:
+	return hazard_cells.has(cell)
 
 
 func has_seen(cell: Vector3i) -> bool:

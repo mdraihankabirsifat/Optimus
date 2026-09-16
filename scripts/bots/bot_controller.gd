@@ -34,10 +34,18 @@ var _path: Array[Vector3i] = []
 var _think_timer: float = 0.0
 var _exit_was_known: bool = false
 var _hesitate: float = 0.0
+## Where hazards physically are. Only ever consulted for the cell the bot is standing in,
+## and only that single fact is passed into knowledge -- the same as seeing it.
+var _hazard_cells: Dictionary = {}
 
 
 func setup(graph: CaveGraph, bot_name: String, colour: Color, personality: int, p_skill: int = 2) -> void:
 	skill = clampi(p_skill, 0, 2)
+	for h: Dictionary in graph.hazards:
+		_hazard_cells[h["cell"]] = true
+	for f: Dictionary in graph.features:
+		if f["kind"] in ["piston", "spider"]:
+			_hazard_cells[f["cell"]] = true
 	_graph = graph
 	display_name = bot_name
 	# Stable per-bot route preference and reaction speed, so four bots do not run the
@@ -107,6 +115,8 @@ func _observe(cell: Vector3i) -> void:
 	if skill == 0 and not knowledge.has_seen(cell) and _graph.degree(cell) >= 3:
 		_hesitate = EASY_JUNCTION_PAUSE
 	knowledge.observe(cell, int(_graph.cells[cell]), finish_here)
+	if _hazard_cells.has(cell):
+		knowledge.observe_hazard(cell)
 
 	# Spotting the exit invalidates whatever it was exploring toward.
 	if knowledge.exit_found and not _exit_was_known:

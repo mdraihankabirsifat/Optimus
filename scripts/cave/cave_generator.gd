@@ -13,7 +13,7 @@ extends RefCounted
 ## the number of charges a racer needs to finish, and it is capped below the starting five.
 
 ## Bump when generation logic changes. Peers with different versions cannot race together.
-const VERSION := 2
+const VERSION := 3
 
 ## Set dressing and pickups. Dead ends are rewarded with boxes far more often than
 ## corridors are, so exploring a wrong turn is a gamble rather than a pure loss.
@@ -68,7 +68,138 @@ func _build() -> bool:
 	_add_loops()
 	_place_hazards_and_boxes()
 	_place_decor()
+	# Runs last so it cannot shift any earlier RNG roll: a seed keeps its layout, fire,
+	# boxes and decor exactly as they were before features existed.
+	_place_features()
 	return true
+
+
+## Named cave sizes for the lobby. Standard is the size every test and balance number in
+## docs/TASK_BOARD.md was measured on.
+const SIZE_PRESETS := [
+	{"name": "Short", "size": Vector3i(5, 3, 5), "min_distance": 6, "branches": 30, "loops": 20,
+		"boxes": 8, "fires": 6},
+	{"name": "Standard", "size": Vector3i(6, 4, 6), "min_distance": 8, "branches": 45, "loops": 30,
+		"boxes": 12, "fires": 9},
+	{"name": "Long", "size": Vector3i(8, 4, 8), "min_distance": 11, "branches": 80, "loops": 50,
+		"boxes": 18, "fires": 13},
+]
+
+
+func apply_size_preset(index: int) -> void:
+	var p: Dictionary = SIZE_PRESETS[clampi(index, 0, SIZE_PRESETS.size() - 1)]
+	size = p["size"]
+	min_spawn_finish_distance = p["min_distance"]
+	branch_attempts = p["branches"]
+	loop_attempts = p["loops"]
+	max_boxes = p["boxes"]
+	max_fires = p["fires"]
+
+
+## Boost pads, wind, pistons, spiders, crumbling shaft covers, shortcut markers and
+## landmark chambers. One feature per cell, nothing dangerous near spawn, and nothing that
+## can block the guaranteed route permanently.
+func _place_features() -> void:
+	var from_spawn := _graph.distances_from(_graph.spawn_cell)
+	var taken := {_graph.spawn_cell: true, _graph.finish_cell: true}
+	for h: Dictionary in _graph.hazards:
+		taken[h["cell"]] = true
+	for b: Dictionary in _graph.boxes:
+		taken[b["cell"]] = true
+
+	var spine_edges := {}
+	for i in range(1, _graph.spine.size()):
+		spine_edges[_edge_key(_graph.spine[i - 1], _graph.spine[i])] = true
+
+	var counts := {"pad": 0, "wind": 0, "piston": 0, "spider": 0}
+	var limits := {"pad": 5, "wind": 3, "piston": 2, "spider": 2}
+	for c: Vector3i in _graph.sorted_cells():
+		if taken.has(c):
+			continue
+		var axis := _graph.straight_axis(c)
+		if axis == -1:
+			continue
+		var hops: int = int(from_spawn.get(c, 0))
+		var roll := _rng.randf()
+		var d: Vector3i = CaveGraph.DIRS[axis]
+		# A spider needs at least two straight cells in a row; it patrols their full length.
+		var ahead := _graph.straight_axis(c + d) == axis
+		var behind := _graph.straight_axis(c - d) == axis
+		if (ahead or behind) and hops >= 4 and roll < 0.6 and counts["spider"] < limits["spider"]:
+			var span := 3 if ahead and behind else 2
+			var shift := 0 if span == 3 else (1 if ahead else -1)
+			_add_feature(taken, counts, {"cell": c, "kind": "spider", "axis": axis,
+				"span": span, "shift": shift})
+		elif hops >= 4 and roll < 0.68 and counts["piston"] < limits["piston"]:
+			_add_feature(taken, counts, {"cell": c, "kind": "piston", "phase": _rng.randi_range(0, 3)})
+		elif hops >= 3 and roll < 0.55 and counts["wind"] < limits["wind"]:
+			_add_feature(taken, counts, {"cell": c, "kind": "wind", "axis": axis,
+				"sign": 1 if _rng.randf() < 0.5 else -1})
+		elif hops >= 2 and roll < 0.8 and counts["pad"] < limits["pad"]:
+			_add_feature(taken, counts, {"cell": c, "kind": "pad", "axis": axis})
+
+	# Shaft features. A crumbling cover never sits on the guaranteed route, so the spine
+	# can never be slowed by one.
+	var crumbles := 0
+	var shortcuts := 0
+	for c: Vector3i in _graph.sorted_cells():
+		if not _graph.is_linked(c, CaveGraph.DIR_UP):
+			continue
+		var above: Vector3i = c + CaveGraph.DIRS[CaveGraph.DIR_UP]
+		var on_spine := spine_edges.has(_edge_key(c, above))
+		if not on_spine and crumbles < 3 and above != _graph.spawn_cell \
+				and above != _graph.finish_cell and _rng.randf() < 0.4:
+			_graph.features.append({"cell": above, "kind": "crumble"})
+			crumbles += 1
+		var detour := _detour_length(c, above) if shortcuts < 3 else 0
+		# 999 means the shaft is the only way through: required, not a shortcut.
+		if detour >= 5 and detour < 999:
+			_graph.features.append({"cell": c, "kind": "shortcut"})
+			shortcuts += 1
+
+	# Wall detail: cracks and mineral streaks, one roll per cell, on the rock that exists.
+	for c: Vector3i in _graph.sorted_cells():
+		if _rng.randf() < 0.45:
+			_graph.decor.append({"cell": c, "kind": "walldetail", "variant": _rng.randi_range(0, 11)})
+
+	var landmarks := 0
+	for c: Vector3i in _graph.sorted_cells():
+		if taken.has(c) or landmarks >= 3 or _graph.degree(c) < 3:
+			continue
+		if _graph.has_vertical_link(c) or _rng.randf() > 0.35:
+			continue
+		_graph.features.append({"cell": c, "kind": "landmark", "variant": landmarks})
+		taken[c] = true
+		landmarks += 1
+
+
+func _add_feature(taken: Dictionary, counts: Dictionary, f: Dictionary) -> void:
+	_graph.features.append(f)
+	taken[f["cell"]] = true
+	counts[f["kind"]] = int(counts[f["kind"]]) + 1
+
+
+func _edge_key(a: Vector3i, b: Vector3i) -> String:
+	var lo := a if (a.y < b.y or (a.y == b.y and (a.x < b.x or (a.x == b.x and a.z < b.z)))) else b
+	var hi := b if lo == a else a
+	return "%s|%s" % [lo, hi]
+
+
+## Hops from a to b if their direct link did not exist. A long detour means the link is a
+## real shortcut, worth marking for anyone willing to spend a Move on it.
+func _detour_length(a: Vector3i, b: Vector3i) -> int:
+	var dist := {a: 0}
+	var queue: Array[Vector3i] = [a]
+	while not queue.is_empty():
+		var cur: Vector3i = queue.pop_front()
+		for n: Vector3i in _graph.linked_neighbours(cur):
+			if (cur == a and n == b) or (cur == b and n == a) or dist.has(n):
+				continue
+			dist[n] = int(dist[cur]) + 1
+			if n == b:
+				return dist[n]
+			queue.append(n)
+	return 999
 
 
 ## Fire and mystery boxes, from the same seeded RNG as the cave itself.

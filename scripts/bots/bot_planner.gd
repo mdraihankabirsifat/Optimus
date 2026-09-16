@@ -19,6 +19,8 @@ const STEP_COST := 1.0
 const INVERSION_COST := 12.0
 ## Nudges the bot toward fresh ground instead of pacing a corridor it already knows.
 const REVISIT_PENALTY := 2.5
+## A cell the bot has seen fire, a piston or a spider in. Worth a few steps of detour.
+const HAZARD_COST := 5.0
 ## Charges held back while still exploring. Climbing a shaft on your last Move strands you
 ## up there with no way down, which is the single biggest cause of a bot never finishing.
 ## Once the exit is actually in sight the reserve is released and the bot commits.
@@ -106,7 +108,8 @@ func _dijkstra(knowledge: BotKnowledge, from: Vector3i, start_g: int,
 				continue
 
 			var step: float = STEP_COST \
-				+ REVISIT_PENALTY * float(knowledge.visit_count(neighbour))
+				+ REVISIT_PENALTY * float(knowledge.visit_count(neighbour)) \
+				+ (HAZARD_COST if knowledge.is_hazard(neighbour) else 0.0)
 			var next_key := _key(neighbour, grav)
 			var next_cost: float = best + step
 			if next_cost < float(dist.get(next_key, INF)):

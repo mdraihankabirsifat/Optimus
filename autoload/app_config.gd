@@ -56,6 +56,21 @@ const FIRE_DENSITY := 0.16
 ## Hop distance from spawn inside which nothing dangerous may be placed.
 const HAZARD_MIN_SPAWN_DISTANCE := 3
 
+## Pistons slam from the ceiling on a fixed cycle. Always telegraphed, always avoidable.
+const DAMAGE_PISTON := 1.0
+const PISTON_CYCLE := 4.0
+## Spiders patrol a straight corridor on the world floor and lunge at racers nearby.
+const SPIDER_PATROL_SPEED := 2.6
+const SPIDER_LUNGE_SPEED := 8.5
+const SPIDER_SENSE_RANGE := 5.5
+const SPIDER_RETREAT_TIME := 2.2
+## Wind pushes along a corridor axis: free speed one way, a fight the other.
+const WIND_SPEED := 4.2
+## Crumbling shaft covers hold this long after something touches them.
+const CRUMBLE_DELAY := 0.7
+const BOOST_PAD_MULTIPLIER := 1.35
+const BOOST_PAD_TIME := 3.0
+
 # --- Mystery boxes ------------------------------------------------------------
 const BOX_DENSITY := 0.22
 const BOX_MIN_SPAWN_DISTANCE := 1
@@ -69,6 +84,7 @@ const LOOT_TABLE := {
 	"slow": 10,
 	"lose_move": 6,
 	"clue": 5,
+	"second_chance": 3,
 }
 const HEART_REFILL_AMOUNT := 1.0
 const MOVE_REFILL_AMOUNT := 1
@@ -76,6 +92,11 @@ const SPEED_BOOST_MULTIPLIER := 1.4
 const SPEED_BOOST_TIME := 8.0
 const SLOW_MULTIPLIER := 0.6
 const SLOW_TIME := 5.0
+## AXIS-010: when the lobby switches regen on, every racer still below the starting five
+## gets one Move back this often. Off by default; five scarce Moves is the design.
+const MOVE_REGEN_INTERVAL := 25.0
+## HEALTH-006: at or below this many hearts the screen and sound say so.
+const LOW_HEALTH := 1.0
 ## How long the clue arrow stays on screen. Coarse direction only, never the exit itself.
 const CLUE_TIME := 9.0
 

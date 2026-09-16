@@ -174,24 +174,43 @@ static func text_page(root: Control, heading: String, bbcode: String) -> void:
 
 ## Volume, sensitivity and fullscreen. Used by the Settings screen and the pause menu, so
 ## changing a setting mid-race never throws the race away.
-static func settings_panel() -> VBoxContainer:
+static func settings_panel() -> ScrollContainer:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(580, 430)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 12)
-	col.custom_minimum_size = Vector2(520, 0)
+	col.custom_minimum_size = Vector2(540, 0)
+	scroll.add_child(col)
 	col.add_child(_slider_row("Master volume", "master_volume", 0.0, 1.0))
 	col.add_child(_slider_row("Music volume", "music_volume", 0.0, 1.0))
 	col.add_child(_slider_row("Effects volume", "sfx_volume", 0.0, 1.0))
 	col.add_child(_slider_row("Mouse sensitivity", "sensitivity", 0.2, 3.0))
 
-	var full := CheckButton.new()
-	full.text = "Fullscreen"
-	full.button_pressed = SettingsManager.fullscreen
-	full.toggled.connect(func(on: bool) -> void: SettingsManager.set_and_save("fullscreen", on))
-	col.add_child(full)
-	return col
+	col.add_child(_toggle("Fullscreen", "fullscreen"))
+	col.add_child(_toggle("Head bob", "head_bob"))
+	col.add_child(_toggle("Camera shake and hitstop", "camera_effects"))
+
+	var feel := label("Playtest tuning  (applies from the next race)", 17, TEXT_DIM)
+	col.add_child(feel)
+	col.add_child(_slider_row("Gravity turn time", "turn_time", 0.2, 0.6, "%.2fs"))
+	col.add_child(_slider_row("Acceleration", "acceleration", 4.0, 30.0, "%.0f"))
+	col.add_child(button("Reset tuning to defaults", func() -> void:
+		SettingsManager.set_and_save("turn_time", AppConfig.GRAVITY_TRANSITION_TIME)
+		SettingsManager.set_and_save("acceleration", AppConfig.ACCELERATION), 300))
+	return scroll
 
 
-static func _slider_row(text: String, property: String, lo: float, hi: float) -> HBoxContainer:
+static func _toggle(text: String, property: String) -> CheckButton:
+	var b := CheckButton.new()
+	b.text = text
+	b.button_pressed = bool(SettingsManager.get(property))
+	b.toggled.connect(func(on: bool) -> void: SettingsManager.set_and_save(property, on))
+	return b
+
+
+static func _slider_row(text: String, property: String, lo: float, hi: float,
+		fmt: String = "") -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	var name_label := label(text, 20)
@@ -201,7 +220,7 @@ static func _slider_row(text: String, property: String, lo: float, hi: float) ->
 	var slider := HSlider.new()
 	slider.min_value = lo
 	slider.max_value = hi
-	slider.step = 0.05
+	slider.step = 0.01 if hi - lo <= 1.0 else 0.05
 	slider.value = float(SettingsManager.get(property))
 	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slider.custom_minimum_size = Vector2(220, 28)
@@ -211,7 +230,10 @@ static func _slider_row(text: String, property: String, lo: float, hi: float) ->
 	value_label.custom_minimum_size = Vector2(60, 0)
 	row.add_child(value_label)
 	var show := func(v: float) -> void:
-		value_label.text = ("%d%%" % roundi(v * 100.0)) if hi <= 1.0 else ("%.2fx" % v)
+		if fmt != "":
+			value_label.text = fmt % v
+		else:
+			value_label.text = ("%d%%" % roundi(v * 100.0)) if hi <= 1.0 else ("%.2fx" % v)
 	show.call(slider.value)
 	slider.value_changed.connect(func(v: float) -> void:
 		show.call(v)

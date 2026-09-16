@@ -36,6 +36,11 @@ var _clue_timer: float = 0.0
 var _heart_pulse: float = 0.0
 var _last_dof: int = -1
 var _dof_pop: float = 0.0
+var _last_hearts: float = AppConfig.HEARTS_MAX
+var _last_charges: int = AppConfig.MOVE_CHARGES_START
+var _go_burst: float = 0.0
+var _time: float = 0.0
+var _racer_list: VBoxContainer
 
 
 func setup(world: Node, player: PlayerController, match_controller: MatchController) -> void:
@@ -85,6 +90,19 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 		_flash = Color(0.4, 0.8, 1.0, 0.18)
 		_pip_pulse[g.charges] = 1.0)
 	g.shift_denied.connect(_on_shift_denied)
+	# FEEL-007: gains pulse too, not only losses.
+	g.charges_changed.connect(func(c: int) -> void:
+		if c > _last_charges and c - 1 < _pip_pulse.size():
+			_pip_pulse[c - 1] = 1.0
+		_last_charges = c)
+	_player.health.hearts_changed.connect(func(h: float) -> void:
+		if h > _last_hearts:
+			_heart_pulse = 1.0
+			_flash = Color(0.4, 1.0, 0.5, 0.12)
+		_last_hearts = h)
+	_player.health.second_chance_used.connect(func() -> void:
+		_flash = Color(1.0, 0.85, 0.3, 0.35)
+		show_centre("SECOND CHANCE", 1.6, Color(1.0, 0.85, 0.35)))
 	g.vacuum_recovered.connect(func(_dmg: float) -> void:
 		toast("The void spat you back.  -1 heart", UiKit.DANGER))
 	_player.health.damaged.connect(func(_a: float, _s: String) -> void:
@@ -102,7 +120,15 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 	_match.countdown_tick.connect(func(v: int) -> void:
 		if v > 0:
 			show_centre(str(v), 1.0, UiKit.EMBER))
-	_match.match_started.connect(func() -> void: show_centre("GO!", 0.9, Color(0.5, 1.0, 0.55)))
+	_match.match_started.connect(func() -> void:
+		show_centre("GO!", 0.9, Color(0.5, 1.0, 0.55))
+		_go_burst = 1.0)
+
+	_racer_list = VBoxContainer.new()
+	_racer_list.position = Vector2(20, 176)
+	_racer_list.add_theme_constant_override("separation", 2)
+	_racer_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_racer_list)
 	_match.racer_finished.connect(func(n: String, place: int, t: float) -> void:
 		if n == _player.display_name:
 			show_centre("FINISHED  %s" % _ordinal(place), 4.0, UiKit.EMBER)
@@ -172,6 +198,9 @@ func _process(delta: float) -> void:
 	for i in _pip_pulse.size():
 		_pip_pulse[i] = maxf(0.0, _pip_pulse[i] - delta * 2.2)
 	_clue_timer = maxf(0.0, _clue_timer - delta)
+	_go_burst = maxf(0.0, _go_burst - delta * 1.4)
+	_time += delta
+	_update_racer_list()
 
 	if _centre_timer > 0.0:
 		_centre_timer -= delta
@@ -231,6 +260,42 @@ func _update_preview() -> void:
 		l.position = centre + spots[key] - l.size * 0.5
 
 
+## UI-011: who is still out there. Finished racers show their place and time; racers still
+## searching are listed with their hearts, never with any hint of how close they are.
+func _update_racer_list() -> void:
+	var rows: Array = []
+	for r: Dictionary in _match.racers:
+		rows.append(r)
+	rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var ka := 0 if a["finished"] else (2 if a["eliminated"] else 1)
+		var kb := 0 if b["finished"] else (2 if b["eliminated"] else 1)
+		if ka != kb:
+			return ka < kb
+		if ka == 0:
+			return int(a["place"]) < int(b["place"])
+		return String(a["name"]) < String(b["name"]))
+	while _racer_list.get_child_count() < rows.size():
+		var l := UiKit.label("", 16)
+		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+		l.add_theme_constant_override("outline_size", 4)
+		_racer_list.add_child(l)
+	for i in rows.size():
+		var r: Dictionary = rows[i]
+		var body := r["body"] as PlayerController
+		var l := _racer_list.get_child(i) as Label
+		var status := ""
+		if r["finished"]:
+			status = "%s  %s" % [_ordinal(int(r["place"])), MatchController.format_time(float(r["finish_time"]))]
+		elif r["eliminated"]:
+			status = "out"
+		elif is_instance_valid(body):
+			status = "%.1f hearts" % body.health.hearts
+		var marker := "> " if body == _player else "   "
+		l.text = "%s%s   %s" % [marker, r["name"], status]
+		var colour: Color = body.racer_colour if is_instance_valid(body) else UiKit.TEXT
+		l.add_theme_color_override("font_color", colour.darkened(0.45) if r["eliminated"] else colour)
+
+
 func _axes_text() -> String:
 	if _world.graph == null:
 		return ""
@@ -284,6 +349,11 @@ func _draw_stats(c: Control) -> void:
 			_draw_heart(c, centre, 16.0 * beat, HEART_RED, 1.0)
 		elif fill >= 0.5:
 			_draw_heart(c, centre, 16.0 * beat, HEART_RED, 0.5)
+	if h.has_second_chance:
+		var sc := origin + Vector2(int(AppConfig.HEARTS_MAX) * 44 + (34 if h.has_shield else 0), 0)
+		c.draw_arc(sc, 15, 0, TAU, 24, Color(1.0, 0.85, 0.35), 3.0)
+		c.draw_string(ThemeDB.fallback_font, sc + Vector2(-9, 6), "2nd",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1.0, 0.85, 0.35))
 	if h.has_shield:
 		c.draw_arc(origin + Vector2(int(AppConfig.HEARTS_MAX) * 44, 0), 15, 0, TAU, 24, UiKit.SKY, 3.0)
 		c.draw_string(ThemeDB.fallback_font, origin + Vector2(int(AppConfig.HEARTS_MAX) * 44 - 5, 6),
@@ -354,6 +424,11 @@ func _draw_heart(c: Control, centre: Vector2, size: float, colour: Color, portio
 func _draw_overlay(c: Control) -> void:
 	if _flash.a > 0.0:
 		c.draw_rect(Rect2(Vector2.ZERO, c.size), _flash)
+	_draw_low_health(c)
+	_draw_speed_lines(c)
+	if _go_burst > 0.0:
+		var r := (1.0 - _go_burst) * c.size.length() * 0.6
+		c.draw_arc(c.size * 0.5, r, 0, TAU, 64, Color(0.5, 1.0, 0.55, _go_burst * 0.8), 10.0 * _go_burst + 2.0)
 	var mid := c.size * 0.5
 	if _player.input_enabled:
 		var ch := Color(1, 1, 1, 0.8)
@@ -365,6 +440,47 @@ func _draw_overlay(c: Control) -> void:
 		c.draw_arc(mid, 60, 0, TAU, 40, Color(UiKit.SKY, 0.6), 2.0)
 	if _clue_timer > 0.0:
 		_draw_clue(c, Vector2(mid.x, 150))
+
+
+## HEALTH-006: red creeping in from the edges, breathing with the heartbeat.
+func _draw_low_health(c: Control) -> void:
+	var h := _player.health
+	if h.is_eliminated or h.hearts > AppConfig.LOW_HEALTH:
+		return
+	var beat := 0.5 + 0.5 * pow(absf(sin(_time * (3.6 if h.hearts <= 0.5 else 2.8))), 6.0)
+	var a := (0.35 if h.hearts <= 0.5 else 0.22) * (0.6 + 0.4 * beat)
+	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.35, 0.35, 0.35, 0.08))
+	var s := c.size
+	var depth := minf(s.x, s.y) * 0.22
+	var edge := Color(0.75, 0.0, 0.05, a)
+	var clear := Color(0.75, 0.0, 0.05, 0.0)
+	var o := [Vector2(0, 0), Vector2(s.x, 0), Vector2(s.x, s.y), Vector2(0, s.y)]
+	var i := [Vector2(depth, depth), Vector2(s.x - depth, depth), Vector2(s.x - depth, s.y - depth), Vector2(depth, s.y - depth)]
+	for k in 4:
+		var n := (k + 1) % 4
+		c.draw_polygon(PackedVector2Array([o[k], o[n], i[n], i[k]]),
+			PackedColorArray([edge, edge, clear, clear]))
+
+
+## VFX-003: streaks at the edges once you are moving faster than a sprint.
+func _draw_speed_lines(c: Control) -> void:
+	if not _player.input_enabled:
+		return
+	var up := _player.gravity.local_up()
+	var speed := (_player.velocity - up * _player.velocity.dot(up)).length()
+	var fall := absf(_player.velocity.dot(up))
+	var amount := clampf((maxf(speed, fall * 0.6) - AppConfig.SPRINT_SPEED * 1.05) / 6.0, 0.0, 1.0)
+	if amount <= 0.0:
+		return
+	var mid := c.size * 0.5
+	var reach := c.size.length() * 0.5
+	for k in 28:
+		var ang := float(k) * 2.39996 + floorf(_time * 20.0 + float(k)) * 0.37
+		var dir := Vector2(cos(ang), sin(ang))
+		var start := 0.62 + 0.25 * fmod(float(k) * 0.618 + _time * 3.0, 1.0)
+		var p0 := mid + dir * reach * start
+		var p1 := mid + dir * reach * minf(1.1, start + 0.18 * amount)
+		c.draw_line(p0, p1, Color(1, 1, 1, 0.22 * amount), 2.0)
 
 
 func _draw_clue(c: Control, at: Vector2) -> void:

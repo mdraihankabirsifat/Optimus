@@ -13,6 +13,7 @@ var _sfx_players: Array[AudioStreamPlayer] = []
 var _music: AudioStreamPlayer
 var _ambience: AudioStreamPlayer
 var _current_music: String = ""
+var _music_tween: Tween
 var _generated: bool = false
 
 
@@ -65,20 +66,30 @@ func play_sfx_3d(sfx_name: String, position: Vector3, volume_db: float = 0.0) ->
 	player.play()
 
 
-func play_music(track: String) -> void:
+## Raw access for nodes that loop their own positional sound (wind, fire).
+func get_stream(stream_name: String) -> AudioStreamWAV:
+	return _library.get(stream_name)
+
+
+func play_music(track: String, volume_db: float = -6.0) -> void:
 	if _current_music == track and _music.playing:
 		return
 	_current_music = track
+	# A fade-out still running from stop_music would otherwise stop this new track.
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
 	_music.stream = _library.get(track)
-	_music.volume_db = -6.0
+	_music.volume_db = volume_db
 	_music.play()
 
 
 func stop_music() -> void:
 	_current_music = ""
-	var tween := create_tween()
-	tween.tween_property(_music, "volume_db", -40.0, 0.5)
-	tween.tween_callback(_music.stop)
+	if _music_tween != null and _music_tween.is_valid():
+		_music_tween.kill()
+	_music_tween = create_tween()
+	_music_tween.tween_property(_music, "volume_db", -40.0, 0.5)
+	_music_tween.tween_callback(_music.stop)
 
 
 func play_ambience() -> void:
@@ -144,6 +155,20 @@ func _generate_library() -> void:
 	_library["eliminated"] = _wav(_mix([_tone(1.0, 320.0, 70.0, 0.45, 0.01, 1.0), _noise(0.6, 0.15, 0.05, 1.5, 4)]))
 	_library["record"] = _wav(_notes([784.0, 988.0, 1175.0, 1568.0], 0.13, 0.4))
 
+	_library["crumble"] = _wav(_mix([_noise(0.7, 0.45, 0.01, 1.2, 12), _tone(0.5, 80.0, 45.0, 0.4, 0.01, 1.5)]))
+	_library["piston"] = _wav(_mix([_tone(0.35, 70.0, 38.0, 0.9, 0.001, 2.2), _noise(0.25, 0.5, 0.001, 2.5, 6)]))
+	_library["spider"] = _wav(_noise(0.45, 0.35, 0.02, 0.8, 1))
+	_library["whoosh"] = _wav(_noise(0.3, 0.3, 0.08, 1.2, 3))
+	_library["heartbeat"] = _wav(_mix([_tone(0.12, 60.0, 45.0, 0.9, 0.002, 2.0),
+		_shift(_tone(0.1, 55.0, 42.0, 0.7, 0.002, 2.0), 0.2)]))
+	_library["second_chance"] = _wav(_mix([_notes([392.0, 523.0, 784.0], 0.14, 0.4),
+		_shift(_tremolo(0.8, 1046.0, 0.2, 10.0), 0.3)]))
+	_library["emote"] = _wav(_notes([880.0, 1175.0], 0.08, 0.3))
+	_library["gate"] = _wav(_mix([_tone(0.6, 110.0, 70.0, 0.6, 0.01, 1.2), _noise(0.5, 0.25, 0.02, 1.4, 10)]))
+	_library["wind"] = _wav(_wind_loop(), true)
+	_library["fire_loop"] = _wav(_fire_loop(), true)
+	_library["music_race"] = _wav(_race_music(), true)
+
 	_library["music_menu"] = _wav(_menu_music(), true)
 	_library["ambience"] = _wav(_cave_ambience(), true)
 
@@ -182,6 +207,62 @@ func _menu_music() -> PackedFloat32Array:
 		v += sin(TAU * chord[0] * 0.25 * t) * 0.12 * exp(-local * 1.6)
 		out[i] = v
 	return _fade_edges(out, 0.05)
+
+
+## Hollow gusting noise. Four seconds, seamless.
+func _wind_loop() -> PackedFloat32Array:
+	var frames := int(4.0 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(frames)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var lp := 0.0
+	for i in frames:
+		var t := float(i) / RATE
+		lp = lerpf(lp, rng.randf() * 2.0 - 1.0, 0.06)
+		out[i] = lp * 0.9 * (0.55 + 0.45 * sin(TAU * t / 4.0 * 2.0))
+	return _fade_edges(out, 0.03)
+
+
+## Crackle: sparse sharp pops over a soft roar. Three seconds, seamless.
+func _fire_loop() -> PackedFloat32Array:
+	var frames := int(3.0 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(frames)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 555
+	var lp := 0.0
+	var pop := 0.0
+	for i in frames:
+		lp = lerpf(lp, rng.randf() * 2.0 - 1.0, 0.03)
+		if rng.randf() < 0.0009:
+			pop = 1.0
+		pop *= 0.992
+		out[i] = lp * 0.5 + (rng.randf() * 2.0 - 1.0) * pop * 0.5
+	return _fade_edges(out, 0.02)
+
+
+## A low pulse under the race: two alternating bass notes and a ticking hat. Eight
+## seconds, seamless. Quiet by design -- the ambience and the gravity shift lead.
+func _race_music() -> PackedFloat32Array:
+	var frames := int(8.0 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(frames)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var beat := 0.5
+	for i in frames:
+		var t := float(i) / RATE
+		var bar := int(t / 2.0) % 4
+		var root: float = [55.0, 55.0, 49.0, 61.74][bar]
+		var since := fmod(t, beat)
+		var v := sin(TAU * root * t) * 0.22 * exp(-since * 5.0)
+		v += sin(TAU * root * 2.0 * t) * 0.05
+		var half := fmod(t + beat * 0.5, beat)
+		v += (rng.randf() * 2.0 - 1.0) * 0.05 * exp(-half * 60.0)
+		v += sin(TAU * root * 3.0 * t) * 0.03 * (0.5 + 0.5 * sin(TAU * t / 8.0))
+		out[i] = v
+	return _fade_edges(out, 0.02)
 
 
 ## Brown noise draught plus a low hum, drifting slowly. Six seconds, seamless.

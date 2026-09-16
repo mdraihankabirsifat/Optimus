@@ -10,12 +10,16 @@ signal hearts_changed(hearts: float)
 signal eliminated()
 signal shield_changed(active: bool)
 signal shield_absorbed()
+signal second_chance_changed(active: bool)
+signal second_chance_used()
 
 var hearts: float = 5.0
 var is_eliminated: bool = false
 var is_invulnerable: bool = false
 ## A mystery-box shield soaks the next hit entirely. Never stacks.
 var has_shield: bool = false
+## HEALTH-005: survive one hit that would have eliminated you, on half a heart.
+var has_second_chance: bool = false
 
 ## Per-source cooldowns. Prevents a single hazard draining hearts every physics frame.
 var _source_cooldowns: Dictionary = {}
@@ -64,12 +68,24 @@ func apply_damage(amount: float, source: String = "unknown", cooldown: float = 0
 		return true
 
 	hearts = maxf(0.0, hearts - amount)
+	if hearts <= 0.0 and has_second_chance:
+		has_second_chance = false
+		hearts = 0.5
+		second_chance_changed.emit(false)
+		second_chance_used.emit()
 	damaged.emit(amount, source)
 	hearts_changed.emit(hearts)
 
 	if hearts <= 0.0:
 		eliminate()
 	return true
+
+
+func grant_second_chance() -> void:
+	if is_eliminated:
+		return
+	has_second_chance = true
+	second_chance_changed.emit(true)
 
 
 func grant_shield() -> void:

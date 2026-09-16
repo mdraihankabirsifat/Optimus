@@ -12,6 +12,7 @@ extends Node3D
 ## 1-4 bots, giving 2-5 total racers. Every match needs at least two.
 @export_range(1, 4) var bot_count: int = 2
 @export_range(0, 2) var bot_skill: int = 2
+@export_range(0, 2) var cave_size: int = 1
 
 const BOT_COLOURS: Array[Color] = [
 	Color(0.95, 0.45, 0.30),
@@ -34,6 +35,9 @@ var _local_resolved_at: float = -1.0
 var _spectate_camera: Camera3D
 var _spectate_index: int = 0
 var _spectate_forward := Vector3.FORWARD
+var _move_regen := false
+var _regen_timer := 0.0
+var _heartbeat_timer := 0.0
 
 @onready var _player: PlayerController = $Player
 @onready var match_controller: MatchController = $MatchController
@@ -49,11 +53,14 @@ func _ready() -> void:
 		seed_value = GameState.seed_value
 		bot_count = GameState.bot_count
 		bot_skill = GameState.bot_skill
+		_move_regen = GameState.move_regen
+		cave_size = GameState.cave_size
 	elif randomise_seed:
 		seed_value = randi() % 1000000
 	GameState.last_match_seed = seed_value
 
 	var generator := CaveGenerator.new()
+	generator.apply_size_preset(cave_size)
 	graph = generator.generate(seed_value)
 	if graph == null:
 		push_error("Cave generation failed after %d attempts: %s"
@@ -96,7 +103,14 @@ func _ready() -> void:
 	match_controller.countdown_tick.connect(func(v: int) -> void:
 		if v > 0:
 			AudioManager.play_sfx("countdown"))
-	match_controller.match_started.connect(func() -> void: AudioManager.play_sfx("go"))
+	match_controller.match_started.connect(func() -> void:
+		AudioManager.play_sfx("go")
+		AudioManager.play_music("music_race", -16.0)
+		var gates := get_tree().get_nodes_in_group("spawn_gates")
+		if not gates.is_empty():
+			AudioManager.play_sfx("gate", -4.0)
+		for gate in gates:
+			(gate as SpawnGate).open())
 	match_controller.racer_finished.connect(_on_racer_finished)
 	match_controller.racer_eliminated.connect(_on_racer_eliminated)
 	match_controller.match_ended.connect(_on_match_ended)
@@ -132,6 +146,18 @@ func _register(racer: PlayerController, racer_name: String, colour: Color, is_bo
 	match_controller.register_racer(racer, racer_name, is_bot)
 	GameState.register_racer_stats(racer_name, colour, is_bot)
 	var g := racer.gravity
+	# VFX-004 / VFX-005: dust off whatever surface this racer calls the floor.
+	racer.footstep.connect(func() -> void:
+		var up := g.local_up()
+		Vfx.dust_puff(self, racer.global_position - up * 0.9, up, 0.25))
+	racer.landed.connect(func(speed: float) -> void:
+		if speed > 6.0:
+			var up := g.local_up()
+			Vfx.dust_puff(self, racer.global_position - up * 0.9, up, clampf(speed / 18.0, 0.4, 1.6)))
+	if is_bot:
+		var trail := RacerTrail.new()
+		add_child(trail)
+		trail.setup(racer)
 	g.shift_started.connect(func(_d: Vector3) -> void:
 		GameState.bump_stat(racer_name, "moves_used")
 		if is_bot:
@@ -151,6 +177,8 @@ func _register(racer: PlayerController, racer_name: String, colour: Color, is_bo
 		if reason != "transitioning":
 			AudioManager.play_sfx("denied"))
 	racer.health.shield_absorbed.connect(func() -> void: AudioManager.play_sfx("shield"))
+	racer.health.second_chance_used.connect(func() -> void: AudioManager.play_sfx("second_chance"))
+	racer.add_child(Vfx.dust_motes())
 	racer.footstep.connect(func() -> void: AudioManager.play_sfx("footstep", -10.0, 0.15))
 	racer.jumped.connect(func() -> void: AudioManager.play_sfx("jump", -6.0))
 	racer.landed.connect(func(speed: float) -> void:
@@ -159,6 +187,8 @@ func _register(racer: PlayerController, racer_name: String, colour: Color, is_bo
 
 
 func _process(delta: float) -> void:
+	_tick_regen(delta)
+	_tick_heartbeat(delta)
 	if match_controller.phase == MatchController.Phase.RACING and _local_resolved_at >= 0.0:
 		var left := AppConfig.LOCAL_RESOLVED_GRACE - (match_controller.elapsed - _local_resolved_at)
 		hud.set_banner("Spectating %s    [Tab] next racer    [Enter] end race now  (%ds)"
@@ -166,6 +196,35 @@ func _process(delta: float) -> void:
 		if left <= 0.0:
 			match_controller.force_end()
 	_update_spectate_camera(delta)
+
+
+## AXIS-010: optional slow Move regeneration, identical for every racer.
+func _tick_regen(delta: float) -> void:
+	if not _move_regen or match_controller.phase != MatchController.Phase.RACING:
+		return
+	_regen_timer += delta
+	if _regen_timer < AppConfig.MOVE_REGEN_INTERVAL:
+		return
+	_regen_timer = 0.0
+	for r: Dictionary in match_controller.racers:
+		var racer := r["body"] as PlayerController
+		if r["finished"] or r["eliminated"] or racer.gravity.charges >= AppConfig.MOVE_CHARGES_START:
+			continue
+		racer.gravity.add_charges(1)
+		if racer == _player:
+			hud.toast("+1 Gravity Move regenerated", UiKit.SKY, 2.0)
+			AudioManager.play_sfx("move_refill", -6.0)
+
+
+## HEALTH-006: a heartbeat you can hear when one more hit ends your race.
+func _tick_heartbeat(delta: float) -> void:
+	var h := _player.health
+	if h.is_eliminated or h.hearts > AppConfig.LOW_HEALTH or match_controller.phase != MatchController.Phase.RACING:
+		return
+	_heartbeat_timer -= delta
+	if _heartbeat_timer <= 0.0:
+		_heartbeat_timer = 0.85 if h.hearts <= 0.5 else 1.1
+		AudioManager.play_sfx("heartbeat", -2.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -275,6 +334,7 @@ func _on_match_ended(results: Array) -> void:
 		else:
 			print("  --  %s  DNF" % entry["name"])
 
+	AudioManager.stop_music()
 	GameState.record_results(results, seed_value, match_controller.elapsed)
 	if not _from_menu:
 		return

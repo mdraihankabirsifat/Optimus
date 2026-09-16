@@ -70,6 +70,7 @@ func _ready() -> void:
 	_check("closest spawn-finish pair is still far enough", min_hops >= 8)
 
 	_test_determinism()
+	_test_presets_and_features()
 
 	var ok: int = SEED_COUNT - failures
 	if ok > 0:
@@ -107,6 +108,41 @@ func _test_determinism() -> void:
 		if g != null:
 			distinct[g.graph_hash()] = true
 	_check("different seeds produce different caves", distinct.size() >= 24)
+
+
+## LEVEL-011, HAZ-002..004, FUN-001/004: every size generates, and no feature can make the
+## guaranteed route worse.
+func _test_presets_and_features() -> void:
+	for p in CaveGenerator.SIZE_PRESETS.size():
+		var fails := 0
+		var bad_crumble := 0
+		var bad_spawn := 0
+		var features := 0
+		for s in 40:
+			var gen := CaveGenerator.new()
+			gen.apply_size_preset(p)
+			var g := gen.generate(s)
+			if g == null:
+				fails += 1
+				continue
+			var spine_pairs := {}
+			for i in range(1, g.spine.size()):
+				spine_pairs[str(g.spine[i - 1]) + str(g.spine[i])] = true
+				spine_pairs[str(g.spine[i]) + str(g.spine[i - 1])] = true
+			for f: Dictionary in g.features:
+				features += 1
+				var c: Vector3i = f["cell"]
+				if f["kind"] != "shortcut" and (c == g.spawn_cell or c == g.finish_cell):
+					bad_spawn += 1
+				if f["kind"] == "crumble":
+					var below: Vector3i = c + CaveGraph.DIRS[CaveGraph.DIR_DOWN]
+					if spine_pairs.has(str(below) + str(c)):
+						bad_crumble += 1
+		var label: String = CaveGenerator.SIZE_PRESETS[p]["name"]
+		_check("%s caves all generate (%d failed of 40)" % [label, fails], fails == 0)
+		_check("%s: no crumbling cover on the guaranteed route" % label, bad_crumble == 0)
+		_check("%s: no feature in the spawn or finish cell" % label, bad_spawn == 0)
+		_check("%s: caves actually contain features" % label, features > 40)
 
 
 func _check(label: String, condition: bool) -> void:

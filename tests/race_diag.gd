@@ -19,6 +19,9 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("skill="):
 			skill = int(arg.trim_prefix("skill="))
+		if arg.begins_with("seed="):
+			cave_seed = int(arg.trim_prefix("seed="))
+			_world.fixed_seed = cave_seed
 	_world.bot_skill = skill
 	add_child(_world)
 	await get_tree().process_frame

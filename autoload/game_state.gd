@@ -11,6 +11,10 @@ var seed_value: int = 0
 var bot_count: int = 2
 ## 0 Easy, 1 Normal, 2 Hard. See BotController.skill.
 var bot_skill: int = 0
+## Index into CaveGenerator.SIZE_PRESETS. 1 is Standard.
+var cave_size: int = 1
+## AXIS-010: slow Move regeneration, off by default.
+var move_regen: bool = false
 ## Set by the lobby so GameWorld knows to read this state instead of its export defaults.
 ## Test harnesses that instantiate game_world.tscn directly never set it.
 var launched_from_menu: bool = false
