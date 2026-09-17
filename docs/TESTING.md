@@ -75,12 +75,14 @@ to the room; offline suites untouched by networking.
 **Environments:** each of the four builds seed 4242 with the same graph hash, boxes and hazards; lighting and fog applied; signature props placed; Dark Cave lamp present and only there; no theme too dark to navigate; rooms carry the environment; unknown ids fall back to Stone Age. Screenshots of all four were reviewed.
 
 **Build:** Windows export launched as the game (900 frames, no errors) and as a dedicated server
-with two clients racing through it; Docker image built and raced through; web export builds.
+with two clients racing through it; Docker image built and raced through; web export builds, and
+the exported page loads in headless Chrome (WebGL through SwiftShader) and renders the splash screen.
 
 ## Not automated
 
 - How the 0.35 s turn and acceleration *feel*: needs a person.
 - The Windows exe on a machine without Godot installed.
-- The web build in a real browser after the networking changes.
+- Playing a full race in the web build after the networking changes (it loads and renders in
+  Chrome; a full race was played in Chrome on 16 September, before networking).
 - The online lobby's visual layout at every resolution.
 - A deployed Render server (no account in this environment).
