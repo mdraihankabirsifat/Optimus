@@ -227,6 +227,13 @@ func _client_mirror() -> void:
 		Vector3.ZERO, CaveGraph.DIR_PLUS_X, 1]], [])
 	_check(them.gravity.gravity_dir.is_equal_approx(Vector3.RIGHT), "a remote racer's gravity follows the snapshot")
 	_check(me.gravity.gravity_dir.is_equal_approx(Vector3.DOWN), "my gravity is untouched by theirs")
+	# Remote presentation: the puppet's body turns to the orientation the server sent.
+	var wall_pose := Basis(Vector3(0, -1, 0), Vector3(-1, 0, 0), Vector3(0, 0, -1)).get_rotation_quaternion()
+	m.client_on_snapshot(1.1, 5.1, [[1, them.global_position, wall_pose, Vector3.ZERO, CaveGraph.DIR_PLUS_X, 1]], [])
+	for i in 40:
+		await get_tree().physics_frame
+	_check(them.global_basis.y.dot(Vector3.LEFT) > 0.95,
+		"a remote racer on the +X wall is drawn standing on that wall")
 
 	var damaged := []
 	me.health.damaged.connect(func(amount: float, _s: String) -> void: damaged.append(amount))

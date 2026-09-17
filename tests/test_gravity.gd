@@ -37,6 +37,8 @@ func _ready() -> void:
 	_test_chained_drift()
 	_test_charge_accounting()
 	await _test_protected_vacuum()
+	_test_current_frame_axes()
+	await _test_current_frame_walking()
 
 	print("")
 	print("==================================================")
@@ -143,6 +145,127 @@ func _test_charge_accounting() -> void:
 
 	_gc.add_charges(99)
 	_check("refill clamps to MOVE_CHARGES_MAX", _gc.charges == AppConfig.MOVE_CHARGES_MAX)
+
+
+## Prompt 2, change #1: movement is interpreted from the CURRENT frame -- current gravity,
+## current camera -- in every orientation and after any chain of shifts.
+func _test_current_frame_axes() -> void:
+	_section("current-frame movement axes")
+	var yaws := [0.0, 0.7, -1.9, 2.8]
+	for g: Vector3 in CARDINALS:
+		for yaw: float in yaws:
+			_reset_to(g)
+			_player.rotate_object_local(Vector3.UP, yaw)
+			_player.head.rotation.x = -0.45
+			_check_axes("%s yaw %.1f" % [_name_of(g), yaw])
+	# Looking straight along local up must not collapse the axes.
+	_reset_to(Vector3.RIGHT)
+	_player.head.rotation.x = -AppConfig.PITCH_LIMIT
+	_check_axes("+X looking straight down")
+	_player.head.rotation.x = AppConfig.PITCH_LIMIT
+	_check_axes("+X looking straight up")
+	_player.head.rotation.x = 0.0
+
+	# A long chain of shifts: after each, the axes live in the new plane, never the spawn one.
+	_reset_to(Vector3.DOWN)
+	var spawn_forward: Vector3 = _player.movement_axes()["forward"]
+	var chain := [Vector3.RIGHT, Vector3.FORWARD, Vector3.UP, Vector3.LEFT, Vector3.BACK,
+		Vector3.DOWN, Vector3.FORWARD, Vector3.RIGHT, Vector3.UP]
+	var left_spawn_plane := 0
+	for i in chain.size():
+		_gc.charges = 5
+		_player.rotate_object_local(Vector3.UP, 0.4 * float(i + 1))
+		_player.head.rotation.x = 0.3 - 0.1 * float(i % 5)
+		_gc.request_shift(chain[i])
+		_complete_transition()
+		var label := "chain step %d (%s)" % [i + 1, _name_of(_gc.gravity_dir)]
+		_check_axes(label)
+		var axes: Dictionary = _player.movement_axes()
+		_check("%s: forward has no component along current gravity" % label,
+			absf((axes["forward"] as Vector3).dot(_gc.gravity_dir)) < EPSILON)
+		if absf(spawn_forward.dot(_gc.gravity_dir)) > 0.5:
+			left_spawn_plane += 1
+			_check("%s: spawn forward is no longer a movement direction" % label,
+				absf((axes["forward"] as Vector3).dot(spawn_forward)) < 0.5 + EPSILON)
+	_check("the chain really left the spawn plane", left_spawn_plane > 0)
+
+
+func _check_axes(label: String) -> void:
+	var axes: Dictionary = _player.movement_axes()
+	var f: Vector3 = axes["forward"]
+	var r: Vector3 = axes["right"]
+	var u: Vector3 = axes["up"]
+	_check("%s: up is minus current gravity" % label, u.is_equal_approx(-_gc.gravity_dir))
+	_check("%s: forward, right unit and in the walk plane" % label,
+		absf(f.length() - 1.0) < EPSILON and absf(r.length() - 1.0) < EPSILON
+		and absf(f.dot(u)) < EPSILON and absf(r.dot(u)) < EPSILON and absf(f.dot(r)) < EPSILON)
+	_check("%s: right is forward x up" % label, r.is_equal_approx(f.cross(u).normalized()))
+	var cam: Vector3 = -(_player.head.global_basis.z as Vector3)
+	var projected: Vector3 = cam - u * cam.dot(u)
+	if projected.length() > 0.05:
+		_check("%s: forward is the camera's forward projected" % label,
+			f.is_equal_approx(projected.normalized()))
+
+
+## Real physics: in a sealed room, stand on each of the six surfaces in turn, press W and D,
+## then jump. Movement must follow the camera across that surface and the jump must leave it.
+func _test_current_frame_walking() -> void:
+	_section("current-frame walking on floor, four walls and ceiling")
+	var room := StaticBody3D.new()
+	room.collision_layer = 1
+	add_child(room)
+	var half := 7.0
+	for axis: Vector3 in CARDINALS:
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(16, 16, 16) - axis.abs() * 15.0
+		shape.shape = box
+		shape.position = axis * (half + 0.5)
+		room.add_child(shape)
+	# Well inside AppConfig.WORLD_BOUNDS, or out-of-bounds recovery fires every frame.
+	room.global_position = Vector3(60, 20, 60)
+
+	var racer: PlayerController = load("res://scenes/player/player.tscn").instantiate()
+	racer.is_local_player = false
+	add_child(racer)
+	await get_tree().physics_frame
+	for g: Vector3 in CARDINALS:
+		racer.global_position = room.global_position
+		racer.velocity = Vector3.ZERO
+		racer.gravity._align_body_to_gravity(g)
+		racer.rotate_object_local(Vector3.UP, 0.6)
+		racer.head.rotation.x = -0.35
+		for i in 45:
+			await get_tree().physics_frame
+		var label := "on the %s surface" % _name_of(g)
+		_check("%s: landed" % label, racer.is_on_floor())
+		var axes: Dictionary = racer.movement_axes()
+		var start := racer.global_position
+		racer.move_input = Vector2(0, -1)
+		for i in 30:
+			await get_tree().physics_frame
+		racer.move_input = Vector2.ZERO
+		var moved := racer.global_position - start
+		_check("%s: W moves along the current camera forward (%.2f)" % [label, moved.dot(axes["forward"])],
+			moved.dot(axes["forward"]) > 1.5 and absf(moved.dot(axes["right"])) < 0.4)
+		_check("%s: W never pushes off the surface" % label, absf(moved.dot(axes["up"])) < 0.3)
+		start = racer.global_position
+		racer.move_input = Vector2(1, 0)
+		for i in 30:
+			await get_tree().physics_frame
+		racer.move_input = Vector2.ZERO
+		moved = racer.global_position - start
+		_check("%s: D moves along the current right" % label,
+			moved.dot(axes["right"]) > 1.5 and absf(moved.dot(axes["forward"])) < 0.4)
+		for i in 20:
+			await get_tree().physics_frame
+		racer.jump_requested = true
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		_check("%s: jump goes along current local up" % label,
+			racer.velocity.dot(-g) > AppConfig.JUMP_VELOCITY * 0.5)
+	racer.queue_free()
+	room.queue_free()
 
 
 ## AXIS-006: a 180 into a void damages and recovers; it never eliminates.

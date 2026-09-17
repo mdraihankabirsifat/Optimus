@@ -208,9 +208,10 @@ func _steer_towards(world_target: Vector3) -> void:
 		_body.move_input = Vector2.ZERO
 		return
 
-	# move_input is read in body-local space, the same space a human's WASD lands in.
-	var local := _body.global_basis.inverse() * flat.normalized()
-	_body.move_input = Vector2(local.x, local.z).normalized()
+	# move_input is read in the racer's current movement frame, exactly as a human's WASD.
+	var axes := _body.movement_axes()
+	var dir := flat.normalized()
+	_body.move_input = Vector2(dir.dot(axes["right"]), -dir.dot(axes["forward"])).normalized()
 
 
 func _grav() -> int:

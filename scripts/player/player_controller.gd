@@ -184,8 +184,10 @@ func _physics_process(delta: float) -> void:
 
 
 func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vector3:
-	# global_basis.y is local_up, so this vector already lies in the walk plane.
-	var wish := global_basis * Vector3(move_input.x, 0.0, move_input.y)
+	# W means "forward from where I am NOW": the axes come from the camera and the gravity
+	# this racer has at this instant, never from the spawn frame. See movement_axes().
+	var axes := movement_axes()
+	var wish: Vector3 = axes["right"] * move_input.x - axes["forward"] * move_input.y
 	wish = wish - up * wish.dot(up)
 
 	var speed: float = AppConfig.SPRINT_SPEED if sprint_input else AppConfig.WALK_SPEED
@@ -270,15 +272,34 @@ func _read_gravity_chord() -> void:
 ## Gravity commands are camera-relative, never world-axis-relative.
 ## Public so the HUD preview can show exactly what each key would do.
 func _camera_relative(local_dir: Vector3) -> Vector3:
+	var axes := movement_axes()
+	return (axes["forward"] * -local_dir.z + axes["right"] * local_dir.x).normalized()
+
+
+## The racer's current movement frame: {forward, right, up}, all unit length and mutually
+## perpendicular. Built fresh every call from the CURRENT gravity and the CURRENT camera:
+##   up      = -gravity
+##   forward = camera forward projected onto the plane perpendicular to up
+##   right   = forward x up
+## If the camera looks almost straight along up or down, its projection vanishes; the body's
+## forward is used instead, then the camera's own up vector (which points "ahead" when you
+## look straight down). Nothing here ever reads the spawn orientation or world up.
+func movement_axes() -> Dictionary:
 	var up := gravity.local_up()
-	var fwd := -head.global_basis.z
-	fwd = fwd - up * fwd.dot(up)
-	if fwd.length() < 0.01:
-		# Looking straight up or down; fall back to the body's forward.
-		fwd = -global_basis.z
+	var fwd := _project(-head.global_basis.z, up)
+	if fwd.length_squared() < 1e-4:
+		fwd = _project(-global_basis.z, up)
+	if fwd.length_squared() < 1e-4:
+		fwd = _project(head.global_basis.y, up)
+	if fwd.length_squared() < 1e-4:
+		# Last resort: any direction in the plane. Only reachable with a degenerate basis.
+		fwd = _project(Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.BACK, up)
 	fwd = fwd.normalized()
-	var right := fwd.cross(up).normalized()
-	return (fwd * -local_dir.z + right * local_dir.x).normalized()
+	return {"forward": fwd, "right": fwd.cross(up).normalized(), "up": up}
+
+
+static func _project(v: Vector3, up: Vector3) -> Vector3:
+	return v - up * v.dot(up)
 
 
 func preview_shift_direction(local_dir: Vector3) -> Vector3:
