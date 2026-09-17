@@ -5,11 +5,11 @@ It is deliberately short — it points at the real documents rather than duplica
 
 ## Read these first
 
-1. `AI_CONTEXT.md` — what the game is, the twelve non-negotiable rules, current state
+1. `ai/AI_CONTEXT.md` — what the game is, the twelve non-negotiable rules, current state
 2. `docs/CORE_MECHANICS.md` — the Gravity Move, in full
 3. `docs/MVP_SCOPE.md` — what is actually being shipped, and what was cut and why
 4. `docs/TASK_BOARD.md` — what exists right now. This is the authority on progress.
-5. `AGENTS.md` — the full working rules
+5. `ai/AGENTS.md` — the full working rules
 
 ## The five rules that break this project
 

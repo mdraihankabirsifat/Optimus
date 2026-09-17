@@ -8,3 +8,8 @@
 
 # Local test captures
 /tests/shots/
+
+# Private AI workspace: prompts and the context files the AI tools read.
+# Kept out of the public repo on request; the copies live in ai/ on each machine.
+/ai/
+/CLAUDE.md
