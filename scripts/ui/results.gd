@@ -38,6 +38,9 @@ func _ready() -> void:
 		else:
 			headline = "Did not finish"
 			headline_colour = UiKit.TEXT_DIM
+	if GameState.last_ruleset == AppConfig.RULESET_BATTLE:
+		_battle_results(col, results)
+		return
 	var champion_entry := _entry_with(results, 1)
 	if GameState.last_time_up and champion_entry.is_empty():
 		headline = "Time up  -  no qualifiers"
@@ -215,3 +218,41 @@ static func _ordinal(n: int) -> String:
 		2: return "2nd"
 		3: return "3rd"
 	return "%dth" % n
+
+
+## Master Prompt 4: a Battle Mode result -- not a race, not a Freedom Duel, no Champion.
+func _battle_results(col: VBoxContainer, results: Array) -> void:
+	var draw := results.size() >= 2 and bool(results[0].get("battle_draw", false))
+	var headline := "Draw" if draw else "%s wins the battle" % String(results[0]["name"]) if not results.is_empty() else "Battle over"
+	col.add_child(UiKit.title(headline, 60, UiKit.EMBER))
+	col.add_child(UiKit.title("Battle Mode result  -  most kills when the clock ran out. Not a race, not a Freedom Duel, no Champion.", 18, UiKit.TEXT_DIM))
+	var panel := PanelContainer.new()
+	col.add_child(panel)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 40)
+	grid.add_theme_constant_override("v_separation", 10)
+	panel.add_child(grid)
+	for h: String in ["", "Racer", "Kills", "Deaths"]:
+		grid.add_child(UiKit.label(h, 17, UiKit.TEXT_DIM))
+	for i in results.size():
+		var e: Dictionary = results[i]
+		var colour: Color = GameState.stats.get(e["name"], {}).get("colour", UiKit.TEXT)
+		grid.add_child(UiKit.label(_ordinal(i + 1), 22, UiKit.EMBER if i == 0 and not draw else UiKit.TEXT_DIM))
+		grid.add_child(UiKit.label(String(e["name"]), 22, colour))
+		grid.add_child(UiKit.label(str(int(e.get("battle_score", 0))), 22))
+		grid.add_child(UiKit.label(str(int(e.get("battle_deaths", 0))), 22))
+	col.add_child(UiKit.title("Ties: fewer deaths, then whoever reached the score first.  %s  ·  seed %d"
+		% [UiKit.ruleset_text(GameState.last_ruleset, GameState.last_rush_seconds), GameState.last_match_seed], 16, UiKit.TEXT_DIM))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	col.add_child(row)
+	var still_in_room := NetManager.is_online() and NetManager.in_room()
+	var lobby_button := UiKit.button("Back to Room" if still_in_room else "Online Lobby", func() -> void:
+		SceneRouter.go_to(SceneRouter.ONLINE_LOBBY), 280)
+	row.add_child(lobby_button)
+	row.add_child(UiKit.button("Main Menu", func() -> void:
+		NetManager.leave_room()
+		SceneRouter.go_to(SceneRouter.MAIN_MENU), 220))
+	lobby_button.grab_focus.call_deferred()

@@ -395,15 +395,11 @@ func fire(shooter: PlayerController, kind: String, aim_from: Vector3 = Vector3.I
 	var from := aim_from if aim_from != Vector3.INF else shooter.head.global_position
 	var dir := aim_dir if aim_dir != Vector3.ZERO else -shooter.head.global_basis.z
 	dir = dir.normalized()
-	var to := from + dir * AppConfig.PULSE_RANGE
+	var cast := Combat.hitscan(shooter, from, dir)
+	var to: Vector3 = cast["to"]
 	var hit: PlayerController = null
-	var space := shooter.get_world_3d().direct_space_state
-	var query := PhysicsRayQueryParameters3D.create(from, to, 1 | 2, [shooter.get_rid()])
-	var result := space.intersect_ray(query)
-	if not result.is_empty():
-		to = result["position"]
-		if result["collider"] == opponent_of(shooter):
-			hit = result["collider"]
+	if cast["body"] != null and cast["body"] == opponent_of(shooter):
+		hit = cast["body"]
 
 	shot.emit(shooter, kind, from, to, hit)
 	if hit != null:

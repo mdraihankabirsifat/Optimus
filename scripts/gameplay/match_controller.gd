@@ -34,6 +34,9 @@ var duel: FreedomDuel
 var cave_time_limit: float = 0.0
 ## Set once when a Rush cave runs out, whatever happens next.
 var cave_expired: bool = false
+## Master Prompt 4: Battle Mode. No exit to reach; the clock ends the match.
+var battle: BattleMode
+var finish_enabled: bool = true
 signal cave_time_up(qualifiers: int)
 
 var _countdown_remaining: float = 0.0
@@ -78,7 +81,9 @@ func begin_countdown() -> void:
 		_set_racers_active(false)
 		return
 	_finish_area = WorldScope.first(self, "finish_area") as Area3D
-	if _finish_area != null:
+	if not finish_enabled:
+		_finish_area = null
+	elif _finish_area != null:
 		_finish_area.body_entered.connect(_on_finish_body_entered)
 	else:
 		push_warning("MatchController found no finish area; the race cannot be won.")
@@ -180,6 +185,9 @@ func _on_racer_eliminated(body: Node3D) -> void:
 
 
 func _check_for_end() -> void:
+	if battle != null:
+		# Nobody is ever "resolved" in Battle Mode: the clock ends it (or an empty room).
+		return
 	if duel != null and duel.claims_end():
 		duel.on_resolution_changed()
 		return
@@ -203,6 +211,12 @@ func _check_for_end() -> void:
 ##   no qualifiers   -> the race ends: time up, no qualifiers, no Champion
 func _expire_cave() -> void:
 	cave_expired = true
+	if battle != null:
+		# Resolved exactly once here, after this frame's physics (and any kill in it).
+		battle.on_time_up()
+		cave_time_up.emit(0)
+		_end_match()
+		return
 	var qualifiers := 0
 	for racer: Dictionary in racers:
 		if int(racer.get("qualified", 0)) > 0:
@@ -349,6 +363,8 @@ func _end_match() -> void:
 ## racers latest-first (surviving longer ranks higher), then anyone still unresolved --
 ## closest to the exit first when the duel stopped them.
 func build_results() -> Array:
+	if battle != null:
+		return battle.build_ranking()
 	var duelists: Array = []
 	var finishers: Array = []
 	var eliminated: Array = []

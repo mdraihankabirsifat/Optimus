@@ -358,14 +358,15 @@ func _build_host_controls(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) ->
 		func(i: int) -> void: NetManager.host_action("cave_size", i)))
 
 	var rules_row := _cfg_row(cfg, "Ruleset")
-	rules_row.add_child(_option(["Normal (no time limit)", "Rush (timed, easier cave)"],
+	rules_row.add_child(_option(["Normal (no time limit)", "Rush (timed, easier cave)", "Battle (timed free-for-all)"],
 		AppConfig.RULESETS.find(String(lobby.get("ruleset", "normal"))),
 		func(i: int) -> void: NetManager.host_action("ruleset", AppConfig.RULESETS[i])))
-	if String(lobby.get("ruleset", "normal")) == AppConfig.RULESET_RUSH:
+	var chosen_rules := String(lobby.get("ruleset", "normal"))
+	if chosen_rules == AppConfig.RULESET_RUSH or chosen_rules == AppConfig.RULESET_BATTLE:
 		var lengths: Array[String] = []
 		for secs: int in AppConfig.RUSH_DURATIONS:
 			lengths.append("%d minutes" % (secs / 60))
-		_cfg_row(cfg, "Rush length").add_child(_option(lengths,
+		_cfg_row(cfg, "Battle length" if chosen_rules == AppConfig.RULESET_BATTLE else "Rush length").add_child(_option(lengths,
 			AppConfig.RUSH_DURATIONS.find(int(lobby.get("rush_seconds", AppConfig.RUSH_DEFAULT))),
 			func(i: int) -> void: NetManager.host_action("rush_seconds", AppConfig.RUSH_DURATIONS[i])))
 

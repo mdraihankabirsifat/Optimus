@@ -139,6 +139,9 @@ func _physics_process(delta: float) -> void:
 	var cell := CaveBuilder.world_to_cell(_body.global_position)
 	_observe(cell)
 	_open_nearby_box()
+	_battle_combat(delta)
+	if _seek_sprint_gift():
+		return
 	if _hesitate > 0.0:
 		_hesitate -= delta
 		_body.move_input = Vector2.ZERO
@@ -298,6 +301,70 @@ func remaining_steps() -> int:
 	return _path.size()
 
 
+## Master Prompt 4, Battle Mode: a bot keeps exploring the cave with its normal planner and
+## shoots any rival it can actually see within range, aiming with its own body and head and
+## firing through BattleMode.fire -- the same rules, cooldown and hitscan as a human.
+var _battle_node: BattleMode
+var _battle_pause := 0.0
+
+
+func _battle() -> BattleMode:
+	if _battle_node == null:
+		_battle_node = WorldScope.first(self, "battle_mode") as BattleMode
+	return _battle_node
+
+
+func _battle_combat(delta: float) -> bool:
+	var b := _battle()
+	if b == null or not b.is_alive(_body):
+		return false
+	_battle_pause -= delta
+	var eye := _body.head.global_position
+	var target: PlayerController = null
+	var best := 30.0
+	for other: PlayerController in b.fighters:
+		if other == _body or not b.is_alive(other) or not is_instance_valid(other):
+			continue
+		var d := eye.distance_to(other.global_position)
+		if d < best and _duel_line_of_sight(eye, other):
+			best = d
+			target = other
+	if target == null:
+		return false
+	var up := _body.gravity.local_up()
+	var spread: float = [1.2, 0.8, 0.5][skill] * clampf(best / 12.0, 0.5, 2.0)
+	var aim := (target.global_position + up * 0.3 - eye).normalized()
+	var turn: float = [4.0, 7.0, 10.0][skill] * delta
+	var flat := aim - up * aim.dot(up)
+	if flat.length() > 0.05:
+		var want := Basis.looking_at(flat.normalized(), up).get_rotation_quaternion()
+		_body.global_basis = Basis(_body.global_basis.get_rotation_quaternion().slerp(want, minf(1.0, turn))).orthonormalized()
+	_body.head.rotation.x = move_toward(_body.head.rotation.x, asin(clampf(aim.dot(up), -1.0, 1.0)), turn)
+	var facing := -_body.head.global_basis.z
+	if facing.dot(aim) > cos(0.15) and _battle_pause <= 0.0:
+		var jitter := Vector3(_duel_rng.randf_range(-1, 1), _duel_rng.randf_range(-0.5, 0.5), _duel_rng.randf_range(-1, 1)) * spread * 0.05
+		if b.fire(_body, eye, (facing + jitter).normalized()):
+			_battle_pause = [0.9, 0.6, 0.35][skill]
+	return true
+
+
+## Master Prompt 4: a Sprint Gift the bot can plainly see -- in its own cell, close by -- is
+## worth a few steps. It walks over and takes it; the pickup and the 5-second window are the
+## same as a human's, and the movement code only lets it sprint inside that window.
+func _seek_sprint_gift() -> bool:
+	if _body.gravity.is_transitioning or _body.sprint_gift_left > 1.0:
+		return false
+	var here := CaveBuilder.world_to_cell(_body.global_position)
+	for gift: SprintGift in WorldScope.nodes(self, "sprint_gifts"):
+		if not gift.available or CaveBuilder.world_to_cell(gift.global_position) != here:
+			continue
+		if gift.global_position.distance_to(_body.global_position) > 7.0:
+			continue
+		_steer_towards(gift.global_position)
+		return true
+	return false
+
+
 ## A box within arm's reach is something the bot can plainly see, so opening it breaks no
 ## information boundary. Bots never path toward boxes; they only take what they pass.
 func _open_nearby_box() -> void:
@@ -324,7 +391,8 @@ func _on_clue(racer: PlayerController, direction: Vector3, vertical: int) -> voi
 func _observe(cell: Vector3i) -> void:
 	if not _graph.has_cell(cell):
 		return
-	var finish_here := cell == _graph.finish_cell
+	# Battle Mode has no exit: the cell is just a cell.
+	var finish_here := cell == _graph.finish_cell and _battle() == null
 	# Easy bots stop to look around at every junction they have not seen before.
 	if skill == 0 and not knowledge.has_seen(cell) and _graph.degree(cell) >= 3:
 		_hesitate = EASY_JUNCTION_PAUSE

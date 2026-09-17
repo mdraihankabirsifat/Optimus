@@ -34,8 +34,8 @@ func _ready() -> void:
 	var rules_row := HBoxContainer.new()
 	rules_row.add_theme_constant_override("separation", 14)
 	rules_row.add_child(_fixed(UiKit.label("Ruleset", 22), 140))
-	for i in AppConfig.RULESETS.size():
-		var b := UiKit.button(["Normal", "Rush"][i], func() -> void: _set_ruleset(AppConfig.RULESETS[i]), 118)
+	for i in AppConfig.RACING_RULESETS.size():
+		var b := UiKit.button(["Normal", "Rush"][i], func() -> void: _set_ruleset(AppConfig.RACING_RULESETS[i]), 118)
 		b.toggle_mode = true
 		rules_row.add_child(b)
 		_rules_buttons.append(b)
@@ -137,9 +137,9 @@ func _ready() -> void:
 
 
 func _set_ruleset(r: String) -> void:
-	GameState.ruleset = r if r in AppConfig.RULESETS else AppConfig.RULESET_NORMAL
+	GameState.ruleset = r if r in AppConfig.RACING_RULESETS else AppConfig.RULESET_NORMAL
 	for k in _rules_buttons.size():
-		_rules_buttons[k].set_pressed_no_signal(AppConfig.RULESETS[k] == GameState.ruleset)
+		_rules_buttons[k].set_pressed_no_signal(AppConfig.RACING_RULESETS[k] == GameState.ruleset)
 	var rush := GameState.ruleset == AppConfig.RULESET_RUSH
 	_rush_row.visible = rush
 	_rules_note.text = ("Rush: an easier cave and a clock. When it runs out, one qualifier is Champion by default; none means no Champion. Every other option still applies."

@@ -56,6 +56,8 @@ var bots: Array[Node3D] = []
 var remotes: Array[Node3D] = []
 var hud: RaceHUD
 var duel: FreedomDuel
+var battle: BattleMode
+var battle_hud: BattleHUD
 var duel_hud: DuelHUD
 var pause_menu: PauseMenu
 ## Racer name -> {boxes, moves_used, damage_taken, colour, is_bot}. Offline and on a client
@@ -184,8 +186,20 @@ func _ready() -> void:
 		box.net_client = net_role == "client"
 	for tile: CrumbleTile in WorldScope.nodes(self, "crumble_tiles"):
 		tile.net_client = net_role == "client"
+	for gift: SprintGift in WorldScope.nodes(self, "sprint_gifts"):
+		gift.net_client = net_role == "client"
 
-	if duel_enabled and AppConfig.DUEL_ENABLED and match_controller.racers.size() >= 2:
+	if ruleset == AppConfig.RULESET_BATTLE:
+		# Master Prompt 4: no exit, no qualification, no Freedom Duel.
+		battle = BattleMode.new()
+		battle.name = "BattleMode"
+		battle.net_client = net_role == "client"
+		add_child(battle)
+		match_controller.finish_enabled = false
+		match_controller.battle = battle
+		battle.setup(self, match_controller, graph)
+		battle.place_everyone()
+	elif duel_enabled and AppConfig.DUEL_ENABLED and match_controller.racers.size() >= 2:
 		duel = FreedomDuel.new()
 		duel.name = "FreedomDuel"
 		duel.net_client = net_role == "client"
@@ -193,7 +207,7 @@ func _ready() -> void:
 		duel.setup(self, match_controller)
 		match_controller.duel = duel
 
-	if ruleset == AppConfig.RULESET_RUSH:
+	if ruleset == AppConfig.RULESET_RUSH or ruleset == AppConfig.RULESET_BATTLE:
 		match_controller.cave_time_limit = float(rush_seconds)
 	match_controller.cave_time_up.connect(_on_cave_time_up)
 
@@ -216,6 +230,10 @@ func _ready() -> void:
 	hud.setup(self, _player, match_controller)
 	for box: MysteryBox in WorldScope.nodes(self, "mystery_boxes"):
 		box.clue_granted.connect(hud.on_clue)
+	if battle != null:
+		battle_hud = BattleHUD.new()
+		add_child(battle_hud)
+		battle_hud.setup(self, battle, _player, hud)
 	if duel != null:
 		duel_hud = DuelHUD.new()
 		add_child(duel_hud)
@@ -617,6 +635,9 @@ const EMOTES: Array[String] = ["hey!", "GG", "catch me!"]
 
 ## Held fire repeats at the blaster's own rate; Axis Lock fires on press.
 func _tick_duel_input() -> void:
+	if battle != null:
+		_tick_battle_input()
+		return
 	if duel == null or not duel.is_fighting() or not duel.fighters.has(_player):
 		return
 	if (pause_menu != null and pause_menu.is_open()) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -626,6 +647,22 @@ func _tick_duel_input() -> void:
 		_local_fire("pulse")
 	if Input.is_action_just_pressed("duel_lock") and float(st["lock_cd"]) <= 0.0:
 		_local_fire("lock")
+
+
+func _tick_battle_input() -> void:
+	if not battle.is_alive(_player) or match_controller.phase != MatchController.Phase.RACING:
+		return
+	if (pause_menu != null and pause_menu.is_open()) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return
+	if not Input.is_action_pressed("duel_fire") or float(battle.fighters[_player]["pulse_cd"]) > 0.0:
+		return
+	var from := _player.head.global_position
+	var dir := -_player.camera.global_basis.z
+	if net_role == "client":
+		battle.fighters[_player]["pulse_cd"] = AppConfig.PULSE_COOLDOWN
+		net_match.send_battle_fire(from, dir)
+	else:
+		battle.fire(_player, from, dir)
 
 
 func _local_fire(kind: String) -> void:
@@ -820,6 +857,11 @@ func record_tag() -> String:
 
 ## Prompt 3, Rush: the cave phase is over.
 func _on_cave_time_up(qualifiers: int) -> void:
+	if battle != null:
+		# Battle Mode: the clock is the finish line. The Battle HUD announces the result.
+		if not _is_server():
+			GameState.last_time_up = false
+		return
 	if not _is_server():
 		GameState.last_time_up = qualifiers < 2
 	print("rush time up: %d qualifier(s)" % qualifiers)
@@ -844,6 +886,8 @@ var _last_heart_armed_until: float = -1.0
 func request_heart_exchange(body: PlayerController) -> String:
 	if net_role == "client":
 		return "the server decides"
+	if battle != null:
+		return "not in Battle Mode"
 	if match_controller.phase != MatchController.Phase.RACING or match_controller.cave_expired:
 		return "only while racing in the cave"
 	var r := {}

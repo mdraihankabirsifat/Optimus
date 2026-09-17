@@ -28,7 +28,8 @@ const STATE_NAMES := ["Offline", "Connecting", "Connected", "Reconnecting", "Fai
 ## rather than failing in confusing ways mid-race.
 ## 2: Freedom Duel messages (c_duel_fire, s_duel_state, s_duel_event).
 ## 3: Prompt 3 -- heart exchange (c_exchange, s_exchange), grace in s_racer_state, rulesets.
-const PROTOCOL_VERSION := 3
+## 4: Master Prompt 4 -- Battle Mode (c_battle_fire, s_battle_state, s_battle_event), Sprint Gifts (s_gift).
+const PROTOCOL_VERSION := 4
 const HELLO_TIMEOUT := 10.0
 const SILENT_TIMEOUT := 20.0
 const PING_INTERVAL := 3.0
@@ -560,6 +561,15 @@ func c_emote(k: int) -> void:
 		m.server_on_emote(id, k)
 
 
+## Master Prompt 4: this client's racer fired in Battle Mode. The server decides the hit.
+@rpc("any_peer", "call_remote", "reliable")
+func c_battle_fire(origin: Vector3, dir: Vector3) -> void:
+	var id := _sender()
+	var m := _match_for(id)
+	if m != null:
+		m.server_on_battle_fire(id, origin, dir)
+
+
 ## Prompt 3: trade a heart for a Move. The server decides.
 @rpc("any_peer", "call_remote", "reliable")
 func c_exchange() -> void:
@@ -856,6 +866,24 @@ func s_box(box_index: int, rid: int, reward: String, description: String) -> voi
 func s_clue(direction: Vector3, vertical: int) -> void:
 	if client_match != null:
 		client_match.client_on_clue(direction, vertical)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_battle_state(rows: Array) -> void:
+	if client_match != null:
+		client_match.client_on_battle_state(rows)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_battle_event(kind: String, args: Array) -> void:
+	if client_match != null:
+		client_match.client_on_battle_event(kind, args)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_gift(gift_index: int, rid: int, available: bool) -> void:
+	if client_match != null:
+		client_match.client_on_gift(gift_index, rid, available)
 
 
 @rpc("authority", "call_remote", "reliable")

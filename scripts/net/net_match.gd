@@ -41,6 +41,7 @@ var local_rid: int = -1
 
 var _boxes: Dictionary = {}          # box_index -> MysteryBox
 var _tiles: Array[CrumbleTile] = []
+var _gifts: Array[SprintGift] = []
 var _spiders: Array[SpiderEnemy] = []
 var _pistons: Array[PistonHazard] = []
 var _send_timer: float = 0.0
@@ -85,6 +86,8 @@ func setup(p_world: Node3D) -> void:
 		_boxes[(box as MysteryBox).box_index] = box
 	for tile: Node in WorldScope.nodes(world, "crumble_tiles"):
 		_tiles.append(tile as CrumbleTile)
+	for gift: Node in WorldScope.nodes(world, "sprint_gifts"):
+		_gifts.append(gift as SprintGift)
 	for s: Node in WorldScope.nodes(world, "spiders"):
 		_spiders.append(s as SpiderEnemy)
 	_spiders.sort_custom(func(a: SpiderEnemy, b: SpiderEnemy) -> bool: return a.spider_id < b.spider_id)
@@ -148,6 +151,11 @@ func _setup_server(config: Dictionary) -> void:
 				NetManager.server_send(peer, "s_clue", [direction, vertical]))
 	for i in _tiles.size():
 		_tiles[i].crumbling_started.connect(func() -> void: _broadcast("s_crumble", [i]))
+	for gift: SprintGift in _gifts:
+		gift.taken.connect(func(g: SprintGift, racer: PlayerController) -> void:
+			_broadcast("s_gift", [g.gift_index, racers.find(racer), false]))
+		gift.restored.connect(func(g: SprintGift) -> void:
+			_broadcast("s_gift", [g.gift_index, -1, true]))
 
 	mc.countdown_tick.connect(func(v: int) -> void: _broadcast("s_countdown", [v]))
 	mc.match_started.connect(func() -> void: _broadcast("s_go", [mc.elapsed]))
@@ -159,6 +167,7 @@ func _setup_server(config: Dictionary) -> void:
 		_broadcast("s_eliminated", [rid, time, gone]))
 	mc.match_ended.connect(_server_send_results)
 	_setup_server_duel()
+	_setup_server_battle()
 
 
 ## The server owns the duel. Every decision -- qualification, freedom, hits, locks, cores,
@@ -196,6 +205,65 @@ func _setup_server_duel() -> void:
 	_duel.duel_ended.connect(func(c: PlayerController, r: PlayerController, reason: String) -> void:
 		_send_duel_state()
 		_broadcast("s_duel_event", ["end", [racers.find(c), racers.find(r) if r != null else -1, reason]]))
+
+
+## Master Prompt 4: the server's BattleMode decides every hit, kill, respawn and score; this
+## relays each once, from the one place it happened.
+var _battle: BattleMode
+var _battle_timer := 0.0
+var _battle_dirty := false
+var _last_battle_fire: Dictionary = {}
+
+
+func _setup_server_battle() -> void:
+	_battle = world.get("battle")
+	if _battle == null:
+		return
+	_battle.shot.connect(func(sh: PlayerController, from: Vector3, to: Vector3, hit: PlayerController) -> void:
+		_broadcast("s_battle_event", ["shot", [racers.find(sh), from, to, racers.find(hit) if hit != null else -1]]))
+	_battle.killed.connect(func(k: PlayerController, v: PlayerController) -> void:
+		_broadcast("s_battle_event", ["kill", [racers.find(k) if k != null else -1, racers.find(v)]])
+		_battle_dirty = true)
+	_battle.respawned.connect(func(b: PlayerController, pos: Vector3) -> void:
+		# Hold a human's server copy at the spawn so its client's old pose is corrected there.
+		_last_correction.erase(racers.find(b))
+		_broadcast("s_battle_event", ["respawn", [racers.find(b), pos]])
+		_battle_dirty = true)
+	_battle.scores_changed.connect(func() -> void: _battle_dirty = true)
+
+
+func server_on_battle_fire(peer: int, origin: Vector3, dir: Vector3) -> void:
+	var b := _human_body(peer)
+	if b == null or _battle == null:
+		return
+	if not origin.is_finite() or not dir.is_finite() or dir.length_squared() < 0.25:
+		return
+	var rid := _rid_for(peer)
+	# Retried or duplicated requests inside one cooldown are dropped here as well as by the
+	# blaster's own cooldown, so one trigger pull can never score twice.
+	if _server_time - float(_last_battle_fire.get(rid, -INF)) < AppConfig.PULSE_COOLDOWN * 0.8:
+		return
+	_last_battle_fire[rid] = _server_time
+	if origin.distance_to(b.net_target_position) > DUEL_AIM_SLACK:
+		origin = b.net_target_position + Vector3(0, 0.6, 0)
+	_battle.fire(b, origin, dir.normalized())
+
+
+func send_battle_fire(origin: Vector3, dir: Vector3) -> void:
+	if role == "client":
+		NetManager.send_to_server("c_battle_fire", [origin, dir])
+
+
+func client_on_battle_state(rows: Array) -> void:
+	var b: BattleMode = world.get("battle")
+	if b != null:
+		b.net_apply_state(rows)
+
+
+func client_on_battle_event(kind: String, args: Array) -> void:
+	var b: BattleMode = world.get("battle")
+	if b != null:
+		b.net_event(kind, args)
 
 
 func _send_duel_state() -> void:
@@ -248,6 +316,13 @@ func _server_process(delta: float) -> void:
 	if _send_timer <= 0.0:
 		_send_timer = 1.0 / SEND_RATE
 		_broadcast("s_snapshot", [mc.elapsed, _server_time, _pose_list(), _spider_list()])
+
+	if _battle != null:
+		_battle_timer -= delta
+		if _battle_dirty or _battle_timer <= 0.0:
+			_battle_dirty = false
+			_battle_timer = 0.2
+			_broadcast("s_battle_state", [_battle.net_state()])
 
 	if _duel != null and _duel.phase != FreedomDuel.Phase.OFF:
 		_duel_timer -= delta
@@ -662,6 +737,16 @@ func client_on_clue(direction: Vector3, vertical: int) -> void:
 	var hud: RaceHUD = world.get("hud")
 	if hud != null and _local() != null:
 		hud.on_clue(_local(), direction, vertical)
+
+
+## Master Prompt 4: the server decided who took a Sprint Gift. Show it, and if it was this
+## client's racer, open its sprint window here, where its movement runs.
+func client_on_gift(gift_index: int, rid: int, available: bool) -> void:
+	for gift: SprintGift in _gifts:
+		if gift.gift_index == gift_index:
+			gift.set_available(available)
+	if not available and rid == local_rid and _local() != null:
+		_local().grant_sprint_gift()
 
 
 func client_on_crumble(tile_index: int) -> void:
