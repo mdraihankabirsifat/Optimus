@@ -20,6 +20,11 @@ func _ready() -> void:
 	add_child(world)
 	await get_tree().process_frame
 	(world.get("_player") as PlayerController).set_physics_process(false)
+	for bb: Node3D in world.bots:
+		var body := bb as PlayerController
+		body.health.damaged.connect(func(amount: float, source: String) -> void:
+			print("DAMAGE %s %.1f from %s at cell %s hearts %.1f t=%.1f" % [body.display_name, amount, source,
+				CaveBuilder.world_to_cell(body.global_position), body.health.hearts, world.match_controller.elapsed]))
 	var g: CaveGraph = world.graph
 	print("spawn %s finish %s" % [g.spawn_cell, g.finish_cell])
 	for arg in OS.get_cmdline_user_args():

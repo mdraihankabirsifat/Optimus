@@ -322,6 +322,7 @@ func _observe(cell: Vector3i) -> void:
 
 func _replan(cell: Vector3i) -> void:
 	_think_timer = think_interval
+	_planner.hearts = _body.health.hearts
 	_path = _planner.plan_from(knowledge, cell, _grav(), _body.gravity.charges)
 	_path_gravs = _planner.last_gravities.duplicate()
 

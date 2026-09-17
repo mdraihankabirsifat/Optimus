@@ -285,7 +285,8 @@ func _test_protected_vacuum() -> void:
 	var racer: PlayerController = load("res://scenes/player/player.tscn").instantiate()
 	racer.is_local_player = false
 	add_child(racer)
-	racer.global_position = Vector3(0, 1.0, 0)
+	# Clear of the suite's main racer at the origin: racers are solid to each other (Prompt 3).
+	racer.global_position = Vector3(6, 1.0, 6)
 	for i in 90:
 		await get_tree().physics_frame
 	var gc := racer.gravity

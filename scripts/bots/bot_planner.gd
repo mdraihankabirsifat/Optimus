@@ -28,6 +28,10 @@ const FLIP_EXTRA_COST := 0.0
 const REVISIT_PENALTY := 2.5
 ## A cell the bot has seen fire, a piston or a spider in. Worth a few steps of detour.
 const HAZARD_COST := 5.0
+## Prompt 3: the bot's own hearts. Fire and spiders live on the world floor, so a known hazard
+## costs its full price only when crossed under normal gravity, a fifth of it from a wall or
+## the ceiling -- and the fewer hearts left, the more it is worth a Move to go round.
+var hearts: float = 5.0
 ## Charges held back while still exploring. Climbing a shaft on your last Move strands you
 ## up there with no way down, which is the single biggest cause of a bot never finishing.
 ## Once the exit is actually in sight the reserve is released and the bot commits.
@@ -152,7 +156,7 @@ func _dijkstra(knowledge: BotKnowledge, from: Vector3i, start_g: int,
 
 			var step: float = STEP_COST \
 				+ REVISIT_PENALTY * float(knowledge.visit_count(neighbour)) \
-				+ (HAZARD_COST if knowledge.is_hazard(neighbour) else 0.0)
+				+ (_hazard_cost(grav) if knowledge.is_hazard(neighbour) else 0.0)
 			var next_key := _key(neighbour, grav)
 			var next_cost: float = best + step
 			if next_cost < float(dist.get(next_key, INF)):
@@ -181,6 +185,12 @@ func _relax_shift(cell: Vector3i, grav: int, flipped: int, best: float, dist: Di
 
 static func _is_flip(a: int, b: int) -> bool:
 	return GRAV_TO_DIR[a] == CaveGraph.opposite(GRAV_TO_DIR[b])
+
+
+func _hazard_cost(grav: int) -> float:
+	var danger := clampf(AppConfig.HEARTS_MAX / maxf(hearts, 0.5), 1.0, 5.0)
+	var surface := 1.0 if grav == GRAV_DOWN else 0.2
+	return HAZARD_COST * danger * surface
 
 
 ## Gravities the search may use.
