@@ -15,10 +15,45 @@ godot res://tests/theme_shot.tscn                 # (window) one screenshot per 
 godot --headless res://tests/test_net_lobby.tscn  # lobby rules, no sockets
 godot --headless res://tests/test_net_sim.tscn    # server authority and client mirror, no sockets
 godot --headless res://tests/test_net.tscn        # real WebSocket race: server + 2 clients, ~60 s
-godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=20   # physical bot races, ~3 min
+godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=20   # physical bot races
+godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=10 rush=180   # Rush caves
+godot --headless --fixed-fps 60 res://tests/test_prompt3.tscn   # Prompt 3 physics, trades, hints, compass, pits
+godot --headless res://tests/cave_metrics.tscn -- seeds=60 size=1 rush=180   # cave shape numbers
 ```
 
-## Results after Master Prompt 2 (17 September 2026, Windows 11, Godot 4.7.2)
+## Results after Master Prompt 3 (17 September 2026, Windows 11, Godot 4.7.2)
+
+Run with `--headless --fixed-fps 60` except `test_net` (real sockets, wall clock). Every count
+below was produced by an actual run of the committed code.
+
+| Suite | Checks | Result |
+|---|---|---|
+| test_gravity | 338 | pass (one vacuum-test racer moved off the origin: racers now collide) |
+| test_cave | 134 (adds Rush profiles for every size and length vs Normal) | pass |
+| test_match | 45 (Normal has no limit; Rush expires) | pass |
+| test_bot | 30 | pass |
+| test_duel | 92 (adds Rush expiry with 0/1/2 qualifiers; Normal waits with no limit) | pass |
+| test_flow | 46 | pass |
+| test_themes | 30 | pass |
+| test_wallwalk | 3 | pass |
+| test_net_lobby | 41 (adds name rules: blank refused, Unicode, markup, 20 characters) | pass |
+| test_net_sim | 80 | pass |
+| test_net | 43: server + host + guest + a second arena; codes, double create, bad codes, synced Rush 8 min, heart trade through the server, Freedom Duel | pass |
+| **test_prompt3** (new) | 71: fire ceiling/wall bypass and floor burn; racers collide on six surfaces and separate; non-solid racers pass; spikes block and sting once; crystals block; heart trade rules and last-heart deadline; remapped hints; world compass; bots escape a ledge by ceiling and by wall; zero-Move regen wait, heart trade, last-heart refusal | pass |
+
+Physical bot races (`tests/bot_physical.tscn`, 10 caves x 4 Hard bots, duel off, 150 s cap):
+
+| Run | Finished | Average time | DNFs |
+|---|---|---|---|
+| Normal (Standard) | 33 / 40 (83%) | 1:15 | 3 eliminated by hazards, 4 still moving with no Moves at the cap; no unexplained stalls |
+| Rush 3 min (Standard) | 40 / 40 (100%) | 0:33 | none |
+
+These are simulated bots, not human play. Human checks still needed: Rush navigability and
+collision feel at a keyboard, the Freedom Duel's feel, fullscreen -> windowed -> minimise ->
+restore on a standalone Windows build, the web build in a browser, and online play against a
+deployed public server.
+
+### Results after Master Prompt 2 (17 September 2026, Windows 11, Godot 4.7.2)
 
 Run with `--headless --fixed-fps 60` except `test_net` (real sockets, wall clock).
 
