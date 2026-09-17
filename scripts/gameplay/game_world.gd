@@ -294,6 +294,9 @@ func _is_server() -> bool:
 ## during the countdown, when a stutter is invisible, instead.
 func _prewarm_effects() -> void:
 	await get_tree().process_frame
+	# Quitting or restarting during the countdown can free the racer while this waits.
+	if not is_instance_valid(_player) or graph == null:
+		return
 	var up := _player.gravity.local_up()
 	var ahead := _player.global_position - _player.camera.global_basis.z * 2.0
 	Vfx.dust_puff(self, ahead, up, 0.3)
@@ -903,6 +906,9 @@ func _restart() -> void:
 	GameState.theme_id = theme_id
 	GameState.ruleset = ruleset
 	GameState.rush_seconds = rush_seconds
+	# Restart means the same race, so the rules it was launched with come along too.
+	GameState.move_regen = _move_regen
+	GameState.bot_skill = bot_skill
 	GameState.prepare_match(seed_value, bot_count)
 	AudioManager.stop_ambience()
 	SceneRouter.start_match()

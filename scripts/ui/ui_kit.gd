@@ -332,6 +332,7 @@ const ACTION_LABELS := {
 	"move_forward": "Forward", "move_back": "Back", "move_left": "Left", "move_right": "Right",
 	"jump": "Jump / flip", "sprint": "Sprint", "gravity_mod": "Gravity Move",
 	"interact": "Open box", "toggle_map": "Map", "exchange_heart": "Heart for a Move",
+	"duel_fire": "Duel: fire", "duel_lock": "Duel: Axis Lock",
 }
 
 

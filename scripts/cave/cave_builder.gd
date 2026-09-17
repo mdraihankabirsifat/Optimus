@@ -451,11 +451,13 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 		"stalagmite", "stalactite":
 			var hanging := kind == "stalactite"
 			if (hanging and not has_ceiling) or (not hanging and not has_floor):
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			# Prompt 3: spikes are solid and sharp, so they live only in landmark chambers. In
 			# a 4-unit tunnel one would close the wall or ceiling line a racer walks, and the
 			# spawn and exit chambers stay free of anything that hurts.
 			if not is_chamber(graph, c) or c == graph.spawn_cell or c == graph.finish_cell:
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			var spike := 1.2 + float(v % 4) * 0.45
 			var mesh := CylinderMesh.new()
@@ -469,6 +471,7 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			root.position = centre + off + Vector3(0, ceil_y if hanging else floor_y, 0)
 		"crystal":
 			if not has_floor or not is_chamber(graph, c):
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			var crystals: Array = kit["crystals"]
 			var mat: StandardMaterial3D = crystals[v % crystals.size()]
@@ -483,6 +486,7 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			root.position = centre + off + Vector3(0, floor_y, 0)
 		"moss":
 			if not has_floor:
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			var patch := CylinderMesh.new()
 			patch.top_radius = 1.1 + 0.2 * float(v)
@@ -493,6 +497,7 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			root.position = centre + off * 0.8 + Vector3(0, floor_y, 0)
 		"ember":
 			if not has_floor:
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			for k in 4:
 				var pebble := SphereMesh.new()
@@ -512,6 +517,7 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 					wall = candidate
 					break
 			if wall == -1:
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			var n := Vector3(CaveGraph.DIRS[wall])
 			var stick := CylinderMesh.new()
@@ -564,6 +570,7 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 					wall = candidate
 					break
 			if wall == -1:
+				root.free()  # nothing to place here; do not leak the node
 				return null
 			var n := Vector3(CaveGraph.DIRS[wall])
 			var right := n.cross(Vector3.UP).normalized()
@@ -586,6 +593,7 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			root.position = centre + n * (h - 0.02) \
 				+ right * (float(v % 5) - 2.0) * (h / CHAMBER_HALF) + Vector3(0, floor_y + height, 0)
 		_:
+			root.free()  # nothing to place here; do not leak the node
 			return null
 	return root
 

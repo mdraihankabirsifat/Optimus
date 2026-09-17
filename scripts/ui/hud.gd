@@ -73,7 +73,8 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 	_prompt_label = _anchored_label(Control.PRESET_CENTER, 22, Vector2(0, 60), Color(1, 0.9, 0.6))
 	_banner_label = _anchored_label(Control.PRESET_CENTER_BOTTOM, 22, Vector2(0, -70))
 	_grace_label = _anchored_label(Control.PRESET_CENTER_TOP, 30, Vector2(0, 96), UiKit.DANGER)
-	_exchange_hint = _anchored_label(Control.PRESET_TOP_LEFT, 16, Vector2(30, 175), UiKit.SKY)
+	# Sits in the left column above the racer list; the list starts below it.
+	_exchange_hint = _anchored_label(Control.PRESET_TOP_LEFT, 16, Vector2(20, 176), UiKit.SKY)
 	_banner_label.add_theme_constant_override("outline_size", 6)
 
 	_toasts = VBoxContainer.new()
@@ -137,7 +138,7 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 		_go_burst = 1.0)
 
 	_racer_list = VBoxContainer.new()
-	_racer_list.position = Vector2(20, 176)
+	_racer_list.position = Vector2(20, 206)
 	_racer_list.add_theme_constant_override("separation", 2)
 	_racer_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_racer_list)
@@ -424,7 +425,8 @@ func _draw_stats(c: Control) -> void:
 			-1, 18, UiKit.SKY if _player.speed_multiplier > 1.0 else UiKit.DANGER)
 
 	_draw_gravity_gauge(c, Vector2(c.size.x - 70, 190))
-	_draw_compass(c, Vector2(c.size.x - 70, 300))
+	# The map opens bottom-right; lift the compass clear of it rather than overlap.
+	_draw_compass(c, Vector2(c.size.x - 70, 300 if not _map_open else 190))
 
 
 ## A ring showing where the world's own floor is, from your point of view. When you are

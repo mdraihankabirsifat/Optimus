@@ -48,6 +48,8 @@ func _ready() -> void:
 		world.queue_free()
 		await get_tree().process_frame
 
+	_test_fog_readability()
+
 	print("-- online rooms carry the environment")
 	var room := LobbyState.new("THEM", LobbyState.MODE_MIXED)
 	room.add_human(1, "Host")
@@ -60,6 +62,23 @@ func _ready() -> void:
 	print("  ART-012 THEMES   passed: %d   failed: %d" % [_passed, _failed])
 	print("==================================================")
 	get_tree().quit(1 if _failed > 0 else 0)
+
+
+## ART-008: every environment must read at three distances. A cell is 8 units.
+## Near (the cell you are in and the doorway ahead) stays legible; three cells away is
+## clearly hazier; far is mostly fog but never a solid wall of it.
+func _test_fog_readability() -> void:
+	print("-- fog gradient reads at every distance")
+	for id: String in ["stone_age", "jungle", "dark_cave", "city_drain"]:
+		var t := CaveTheme.by_id(id)
+		var near := t.fog_factor(8.0)
+		var mid := t.fog_factor(24.0)
+		var far := t.fog_factor(56.0)
+		_check(near <= 0.25, "%s: the next cell stays clear (%.2f)" % [id, near])
+		_check(mid > near and mid >= 0.15 and mid <= 0.75, "%s: three cells away reads as distance (%.2f)" % [id, mid])
+		_check(far > mid, "%s: fog keeps deepening with distance (%.2f)" % [id, far])
+		_check(t.fog_factor(0.0) == 0.0, "%s: nothing fogs at the camera" % id)
+		_check(t.fog_begin >= 4.0 and t.fog_end > t.fog_begin, "%s: sane fog range" % id)
 
 
 func _check(condition: bool, label: String) -> void:

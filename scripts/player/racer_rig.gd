@@ -36,6 +36,11 @@ func _ready() -> void:
 	_outline.cull_mode = BaseMaterial3D.CULL_FRONT
 	_outline.grow = true
 	_outline.grow_amount = 0.035
+	# Up close the grown shell reads as a floating slab around the racer, not an outline.
+	# Dither it out near the camera; it still marks racers at range, which is its job.
+	_outline.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+	_outline.distance_fade_min_distance = 2.0
+	_outline.distance_fade_max_distance = 5.0
 	var hair := StandardMaterial3D.new()
 	hair.albedo_color = Color(0.2, 0.12, 0.07)
 	var leather := StandardMaterial3D.new()

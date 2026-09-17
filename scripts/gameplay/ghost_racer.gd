@@ -36,7 +36,13 @@ static func load_for(p_seed: int, size: int, tag: String = "") -> GhostRacer:
 
 
 static func save(p_seed: int, size: int, frames: Array, tag: String = "") -> void:
-	DirAccess.make_dir_recursive_absolute(DIR)
+	# make_dir_recursive_absolute fails where user:// is sandboxed; opening user:// first
+	# and making the directory relative to it works in both cases.
+	var user_dir := DirAccess.open("user://")
+	if user_dir != null:
+		user_dir.make_dir_recursive("ghosts")
+	else:
+		DirAccess.make_dir_recursive_absolute(DIR)
 	var f := FileAccess.open(path_for(p_seed, size, tag), FileAccess.WRITE)
 	if f != null:
 		f.store_var(frames)

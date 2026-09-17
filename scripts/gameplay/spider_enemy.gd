@@ -149,7 +149,7 @@ func _physics_process(delta: float) -> void:
 	var a := clampf(rel.dot(_axis), -_half_length, _half_length)
 	var l := clampf(rel.dot(_lateral), -_half_width, _half_width)
 	global_position = _centre + _axis * a + _lateral * l
-	if move.length_squared() > 0.01:
+	if move.length_squared() > 0.01 and absf(move.normalized().dot(Vector3.UP)) < 0.99:
 		var face := Basis.looking_at(move.normalized(), Vector3.UP)
 		global_basis = global_basis.slerp(face, 1.0 - exp(-10.0 * delta))
 	var gait := speed * 3.2

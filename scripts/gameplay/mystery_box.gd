@@ -149,6 +149,11 @@ func net_apply_open(racer: PlayerController, reward: String, description: String
 			racer.apply_speed_effect(AppConfig.SPEED_BOOST_MULTIPLIER, AppConfig.SPEED_BOOST_TIME)
 		elif reward == "slow":
 			racer.apply_speed_effect(AppConfig.SLOW_MULTIPLIER, AppConfig.SLOW_TIME)
+		elif reward == "clue":
+			# Offline this fires from _apply_reward; online the server rolled it, so fire it
+			# here or anything listening to the box itself stays silent on the client.
+			var info := _coarse_clue(racer.global_position)
+			clue_granted.emit(racer, info["direction"], info["vertical"])
 	opened.emit(racer, reward, description)
 
 

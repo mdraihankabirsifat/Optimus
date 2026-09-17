@@ -44,7 +44,22 @@ extends Resource
 @export var ambient_colour := Color(0.62, 0.58, 0.54)
 @export var ambient_energy: float = 1.1
 @export var fog_colour := Color(0.12, 0.1, 0.11)
-@export var fog_density: float = 0.008
+## ART-008: depth fog as a gradient, not a flat haze. Nothing fogs before `fog_begin`, so the
+## cell you stand in and the doorway ahead stay crisp; past `fog_end` the fog reaches
+## `fog_density`, which stays below 1 so distant geometry fades rather than disappearing.
+## Cells are 8 units, so these read as: clear for a cell or two, hazy by three, far by seven.
+@export var fog_begin: float = 8.0
+@export var fog_end: float = 60.0
+@export var fog_curve: float = 1.15
+@export var fog_density: float = 0.9
+
+
+## How much fog sits between the camera and something this far away, 0 to 1. The engine
+## computes the same curve; this exists so the readability targets can be tested.
+func fog_factor(distance: float) -> float:
+	var span: float = maxf(0.001, fog_end - fog_begin)
+	var t: float = clampf((distance - fog_begin) / span, 0.0, 1.0)
+	return pow(t, fog_curve) * fog_density
 ## A light carried by the local racer, 0 for none. Moves with the racer onto walls and
 ## ceilings, so the lamp always lights whatever that racer calls "ahead".
 @export var personal_light_energy: float = 0.0
@@ -103,7 +118,10 @@ static func jungle() -> CaveTheme:
 	t.ambient_colour = Color(0.55, 0.66, 0.5)
 	t.ambient_energy = 1.05
 	t.fog_colour = Color(0.08, 0.13, 0.08)
-	t.fog_density = 0.014
+	t.fog_begin = 8.0
+	t.fog_end = 56.0
+	t.fog_curve = 1.2
+	t.fog_density = 0.95
 	t.ambience_pitch = 1.15
 	return t
 
@@ -133,7 +151,11 @@ static func dark_cave() -> CaveTheme:
 	t.ambient_colour = Color(0.36, 0.38, 0.48)
 	t.ambient_energy = 0.55
 	t.fog_colour = Color(0.02, 0.02, 0.04)
-	t.fog_density = 0.03
+	# The dark cave closes in: clear for one cell, gone by four.
+	t.fog_begin = 5.0
+	t.fog_end = 34.0
+	t.fog_curve = 1.0
+	t.fog_density = 1.0
 	t.personal_light_energy = 2.2
 	t.personal_light_colour = Color(1.0, 0.86, 0.62)
 	t.ambience_pitch = 0.8
@@ -169,7 +191,10 @@ static func city_drain() -> CaveTheme:
 	t.ambient_colour = Color(0.56, 0.6, 0.62)
 	t.ambient_energy = 1.0
 	t.fog_colour = Color(0.09, 0.11, 0.1)
-	t.fog_density = 0.012
+	t.fog_begin = 9.0
+	t.fog_end = 60.0
+	t.fog_curve = 1.25
+	t.fog_density = 0.92
 	t.ambience_pitch = 0.9
 	return t
 
@@ -182,5 +207,10 @@ func apply_environment(env: Environment) -> void:
 	env.ambient_light_color = ambient_colour
 	env.ambient_light_energy = ambient_energy
 	env.fog_enabled = true
+	env.fog_mode = Environment.FOG_MODE_DEPTH
 	env.fog_light_color = fog_colour
+	env.fog_depth_begin = fog_begin
+	env.fog_depth_end = fog_end
+	env.fog_depth_curve = fog_curve
 	env.fog_density = fog_density
+	env.fog_sky_affect = 0.0

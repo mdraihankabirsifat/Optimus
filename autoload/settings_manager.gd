@@ -43,15 +43,19 @@ const TITLE_BAR_ROOM := 48
 const QUALITY_NAMES: Array[String] = ["Low", "Medium", "High"]
 ## Actions a player may rebind from Settings.
 const REMAPPABLE: Array[String] = ["move_forward", "move_back", "move_left", "move_right", "jump",
-	"sprint", "gravity_mod", "interact", "toggle_map", "exchange_heart"]
+	"sprint", "gravity_mod", "interact", "toggle_map", "exchange_heart", "duel_fire", "duel_lock"]
 
 var _default_keys: Dictionary = {}
+var _default_events: Dictionary = {}
 var _window_checked := false
 
 
 func _ready() -> void:
 	for action: String in REMAPPABLE:
 		_default_keys[action] = _first_key(action)
+		# Some actions ship with more than one default -- the duel fires on left mouse and
+		# locks on right mouse or Q. Keep every default event so a reset restores them all.
+		_default_events[action] = InputMap.action_get_events(action).duplicate()
 	load_settings()
 	apply()
 
@@ -132,7 +136,12 @@ func remap_action(action: String, physical_keycode: int) -> String:
 
 func reset_keys() -> void:
 	for action: String in REMAPPABLE:
-		_bind(action, int(_default_keys[action]))
+		if _default_events.has(action):
+			InputMap.action_erase_events(action)
+			for ev: InputEvent in _default_events[action]:
+				InputMap.action_add_event(action, ev)
+		else:
+			_bind(action, int(_default_keys[action]))
 	key_bindings.clear()
 	save_settings()
 	changed.emit()
@@ -141,10 +150,18 @@ func reset_keys() -> void:
 func _bind(action: String, physical_keycode: int) -> void:
 	if not InputMap.has_action(action) or physical_keycode == 0:
 		return
+	# A rebind replaces the keyboard binding but keeps any mouse button the action had, so
+	# rebinding the duel's Axis Lock key does not take the mouse button away with it.
+	var kept: Array[InputEvent] = []
+	for existing: InputEvent in InputMap.action_get_events(action):
+		if not (existing is InputEventKey):
+			kept.append(existing)
 	InputMap.action_erase_events(action)
 	var ev := InputEventKey.new()
 	ev.physical_keycode = physical_keycode as Key
 	InputMap.action_add_event(action, ev)
+	for extra: InputEvent in kept:
+		InputMap.action_add_event(action, extra)
 
 
 func _first_key(action: String) -> int:
@@ -164,12 +181,24 @@ func apply() -> void:
 	# Headless test runs have no window; only touch it when one exists.
 	if DisplayServer.get_name() != "headless":
 		_apply_window_mode()
+		_apply_frame_pacing()
 	var vp := get_viewport()
 	if vp != null:
 		# GL Compatibility: bilinear 3D scaling and MSAA are the two cheap, reliable levers.
 		vp.scaling_3d_scale = 0.75 if graphics_quality == 0 else 1.0
 		vp.msaa_3d = Viewport.MSAA_2X if graphics_quality == 2 else Viewport.MSAA_DISABLED
 	changed.emit()
+
+
+## macOS runs GL Compatibility on Apple's OpenGL-over-Metal layer, which does not honour the
+## vsync swap interval: frames arrived 6-19 ms apart on a 60 Hz MacBook (about 94 fps), so
+## motion judders and tears. Capping to the display's refresh rate restores even 16.7 ms
+## frames (late frames 9.8% -> 1.6%, measured). Windows and web already pace correctly.
+func _apply_frame_pacing() -> void:
+	if OS.get_name() != "macOS":
+		return
+	var hz := roundi(DisplayServer.screen_get_refresh_rate())
+	Engine.max_fps = clampi(hz, 30, 240) if hz > 0 else 60
 
 
 ## Prompt 3: fullscreen OFF must be a normal decorated window -- title bar, minimise,

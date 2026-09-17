@@ -274,10 +274,28 @@ func _yield_to_racers(delta: float) -> void:
 		if o == null or o == _body or o.collision_layer == 0:
 			continue
 		var rel := o.global_position - _body.global_position
-		if rel.length() < 1.4 and rel.normalized().dot(wish) > 0.5 and _body.get_instance_id() > o.get_instance_id():
+		if rel.length() < 1.4 and rel.normalized().dot(wish) > 0.5 and _gives_way_to(o):
 			_yield_dir = (axes["right"] as Vector3)
 			_yield_timer = 0.7
 			return
+
+
+## Who steps aside. Instance ids alone can form a cycle -- A waits for B, B for C, C for A --
+## which reads as three bots jittering in a doorway. The racer with less left to walk has
+## right of way; a human always does; ids only break an exact tie, and that order is total.
+func _gives_way_to(other: PlayerController) -> bool:
+	var their_controller := other.get_node_or_null("BotController") as BotController
+	if their_controller == null:
+		return true
+	var mine := _path.size()
+	var theirs: int = their_controller.remaining_steps()
+	if mine != theirs:
+		return mine > theirs
+	return _body.get_instance_id() > other.get_instance_id()
+
+
+func remaining_steps() -> int:
+	return _path.size()
 
 
 ## A box within arm's reach is something the bot can plainly see, so opening it breaks no
