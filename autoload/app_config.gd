@@ -101,7 +101,8 @@ const BOOST_PAD_TIME := 3.0
 const BOX_DENSITY := 0.22
 const BOX_MIN_SPAWN_DISTANCE := 1
 const INTERACT_RANGE := 3.6
-## Relative weights. Clue must stay clearly rare (about 5%).
+## Relative weights. A clue used to be a 5% rarity nobody ever saw; it is the one reward that
+## helps you find the exit, so it is now about one box in seven.
 const LOOT_TABLE := {
 	"heart": 24,
 	"move": 22,
@@ -109,7 +110,7 @@ const LOOT_TABLE := {
 	"shield": 10,
 	"slow": 10,
 	"lose_move": 6,
-	"clue": 5,
+	"clue": 14,
 	"second_chance": 3,
 }
 const HEART_REFILL_AMOUNT := 1.0
@@ -130,8 +131,9 @@ const LAST_HEART_GRACE := 20.0
 const HEART_EXCHANGE_DEBOUNCE := 0.25
 ## How long the "press again to spend your last heart" confirmation stays armed.
 const LAST_HEART_CONFIRM := 2.5
-## How long the clue arrow stays on screen. Coarse direction only, never the exit itself.
-const CLUE_TIME := 9.0
+## How long the clue marker stays on screen. Coarse direction, rough distance in rooms, never
+## the exit cell itself. It used to fade after 9 s, which was gone before you could use it.
+const CLUE_TIME := 45.0
 
 # --- Match pacing -------------------------------------------------------------
 ## Once the local player has finished or been eliminated, the race ends after this many

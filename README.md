@@ -33,12 +33,12 @@ fight where getting out first earned you the third degree of freedom, and the wi
 - Four environments: Stone Age, Jungle, Dark Cave (carry a lamp), City Drain. Same seed, same cave in each
 - Gravity-aware solvability: every cave is proven reachable within 5 Moves, no loot needed
 - Hazards: fire, pistons, spiders, crumbling floors, wind; boost pads
-- Mystery boxes: Heart Refill, Move Refill, speed, shield, Second Chance, penalties, rare clues
+- Mystery boxes: Heart Refill, Move Refill, speed, shield, Second Chance, penalties, and clues that name the exit's compass direction, how many levels up or down it is, and roughly how many rooms away
 - 5 hearts with half-hearts, elimination, spectator camera
 - Bots that only know what they have seen, use Moves and their own clues, three skill levels
 - **Bot Race** offline, **Online Race** 2-5 humans, **Mixed Race** humans + bots, room codes
 - Authoritative WebSocket server; runs from the exe, from source, or in Docker for Render
-- HUD with DOF readout, gravity preview, racer list, discovered-only map; ghost of your best run
+- HUD with DOF readout, gravity preview, racer list, corner mini-map and a full discovered-only map; ghost of your best run
 - Synthesised music and sound; no third-party assets
 
 ## Game modes
@@ -63,7 +63,7 @@ Every race has 2-5 racers. The host sets the count, adds or removes bots, picks 
 | **G + W / A / S / D** | Gravity Move: rotate 90° toward that side of your view |
 | **G + Space** | Gravity Move: flip 180° (ceiling becomes floor) |
 | E | Open a mystery box |
-| M | Discovered-only map |
+| M | Full map of the level you are on (a small one is always in the corner) |
 | 1 2 3 | Emotes |
 | Esc | Menu (offline it pauses; online the race keeps running) |
 | Tab | Next racer while spectating |
@@ -112,7 +112,11 @@ shows only your own facing, never the exit.
 - A 180° into a void costs one heart and returns you to safe ground. It never eliminates you outright.
 - Fire burns half a heart per tick. Walk the clear edge, or shift onto a wall and walk over it.
 - Heart Refill never brings back an eliminated racer.
-- The exit is never shown on the HUD or the map. Clues are rare and coarse.
+- The exit is never shown until you find it. The map draws only rooms you have walked and the
+  openings you saw from them; it marks the exit only once you have stood in it or looked into it
+  from next door, and it marks passages you have not taken yet so you can see where there is
+  still something to find. A clue from a mystery box gives a compass direction, how many levels
+  up or down, and a rough number of rooms -- never the cell and never a path.
 - The first finisher is **Qualified 1st**, not the winner: they wait safely in the duel arena. The
   second finisher starts the **Freedom Duel**; everyone else stops and watches.
 - Duel: 5 fresh hearts each, no Gravity Moves. Qualified 1st 3DOF, Qualified 2nd 2DOF plus a one-hit

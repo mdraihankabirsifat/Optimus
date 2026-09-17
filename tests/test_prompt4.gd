@@ -16,6 +16,7 @@ func _ready() -> void:
 	await _test_battle()
 	await _test_battle_ties()
 	_test_cave_floors()
+	await _test_map_and_clues()
 	print("")
 	print("==================================================")
 	print("  PROMPT 4   passed: %d   failed: %d" % [_passed, _failed])
@@ -247,6 +248,55 @@ func _test_cave_floors() -> void:
 			cuts += gen.last_long_cuts
 		_check("size %d: every cave's shortest route is at or over its floor (fastest %.0f s >= %.0f s)" % [size_index, fastest, gen.min_route_seconds], ok)
 		_check("size %d: long-cut detours are carved (%d over 12 caves)" % [size_index, cuts], cuts > 0)
+
+
+## The map and the clue: what the judges actually navigate with. The map must never show a room
+## nobody has seen, and a clue must say something a person can act on.
+func _test_map_and_clues() -> void:
+	_section("the map and the clue")
+	var world: Node3D = load("res://scenes/game/game_world.tscn").instantiate()
+	world.randomise_seed = false
+	world.fixed_seed = SEED
+	world.bot_count = 1
+	add_child(world)
+	await get_tree().process_frame
+	var hud: RaceHUD = world.hud
+	var graph: CaveGraph = world.graph
+	var player: PlayerController = world.local_player()
+	player.set_physics_process(false)
+	var d := hud._map_data()
+	_check("at the start the map holds only the spawn room", int(d["visited"].size()) == 1 and d["visited"].has(graph.spawn_cell))
+	_check("the exit is not marked before anyone has seen it", not bool(d["exit_seen"]))
+	_check("every opening out of the spawn is marked as a passage not taken", d["frontier"].size() >= 1)
+	for cell: Vector3i in d["frontier"]:
+		_check("a passage not taken is never drawn as a room you walked (%s)" % cell, not d["visited"].has(cell))
+		break
+
+	# Walk into the exit: only then may the map name it.
+	world.visited_cells[graph.finish_cell] = true
+	player.global_position = CaveBuilder.cell_to_world(graph.finish_cell)
+	await get_tree().physics_frame
+	d = hud._map_data()
+	_check("once you have stood in the exit, the map marks it", bool(d["exit_seen"]))
+	_check("the map only ever draws the level you are on", int(hud._level_count(d)) <= int(d["visited"].size()))
+
+	var box := MysteryBox.new()
+	box.finish_position = Vector3(0, 0, -80)
+	var info := box._coarse_clue(Vector3.ZERO)
+	_check("a clue names a compass direction", String(info["compass"]) == "north")
+	_check("a clue says roughly how far, in rooms (%s)" % info["distance_text"], int(info["rooms"]) >= 2)
+	box.finish_position = Vector3(40, CaveBuilder.CELL_SIZE * 2.0, 40)
+	info = box._coarse_clue(Vector3.ZERO)
+	_check("a clue counts the levels, not just up or down (%s)" % info["level_text"],
+		int(info["vertical"]) == 1 and String(info["level_text"]).contains("2 levels up"))
+	_check("a clue never hands over the exit cell", not info.has("cell") and not info.has("path"))
+	hud.on_clue(world.local_player(), Vector3(0, 0, -1), 1, 6)
+	_check("the clue reaches the HUD and stays long enough to use",
+		hud._clue_rooms == 6 and hud._clue_timer > 30.0 and AppConfig.CLUE_TIME >= 30.0)
+	_check("clues are common enough to matter", int(AppConfig.LOOT_TABLE["clue"]) >= 10)
+	box.free()
+	world.queue_free()
+	await _frames(2)
 
 
 func _section(title: String) -> void:

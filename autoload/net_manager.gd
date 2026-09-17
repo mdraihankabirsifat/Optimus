@@ -863,9 +863,9 @@ func s_box(box_index: int, rid: int, reward: String, description: String) -> voi
 
 
 @rpc("authority", "call_remote", "reliable")
-func s_clue(direction: Vector3, vertical: int) -> void:
+func s_clue(direction: Vector3, vertical: int, rooms: int) -> void:
 	if client_match != null:
-		client_match.client_on_clue(direction, vertical)
+		client_match.client_on_clue(direction, vertical, rooms)
 
 
 @rpc("authority", "call_remote", "reliable")

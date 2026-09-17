@@ -145,10 +145,10 @@ func _setup_server(config: Dictionary) -> void:
 	for box: MysteryBox in _boxes.values():
 		box.opened.connect(func(racer: PlayerController, reward: String, description: String) -> void:
 			_broadcast("s_box", [box.box_index, racers.find(racer), reward, description]))
-		box.clue_granted.connect(func(racer: PlayerController, direction: Vector3, vertical: int) -> void:
+		box.clue_granted.connect(func(racer: PlayerController, direction: Vector3, vertical: int, rooms: int) -> void:
 			var peer := int(_peer_of_rid.get(racers.find(racer), 0))
 			if peer != 0:
-				NetManager.server_send(peer, "s_clue", [direction, vertical]))
+				NetManager.server_send(peer, "s_clue", [direction, vertical, rooms]))
 	for i in _tiles.size():
 		_tiles[i].crumbling_started.connect(func() -> void: _broadcast("s_crumble", [i]))
 	for gift: SprintGift in _gifts:
@@ -733,10 +733,10 @@ func client_on_box(box_index: int, rid: int, reward: String, description: String
 	box.net_apply_open(racer, reward, description)
 
 
-func client_on_clue(direction: Vector3, vertical: int) -> void:
+func client_on_clue(direction: Vector3, vertical: int, rooms: int) -> void:
 	var hud: RaceHUD = world.get("hud")
 	if hud != null and _local() != null:
-		hud.on_clue(_local(), direction, vertical)
+		hud.on_clue(_local(), direction, vertical, rooms)
 
 
 ## Master Prompt 4: the server decided who took a Sprint Gift. Show it, and if it was this

@@ -11,7 +11,8 @@ func _ready() -> void:
 	UiKit.text_page(self, "How to Play", "\n".join([
 		"[font_size=24]%sThe race[/color][/font_size]" % E,
 		"You and the bots spawn in the same cave. Nobody knows where the exit is -- not even the bots. "
-			+ "Find the [b]glowing amber pillar[/b] inside its ring of standing stones. It is never shown on the HUD or the map.",
+			+ "Find the [b]glowing amber pillar[/b] inside its ring of standing stones. Nothing points at it until you "
+			+ "find it: the map marks the exit only once you have stood in it or looked into it from next door.",
 		"The exit does not crown a winner. The [b]first two[/b] racers to reach it [b]qualify for the Freedom Duel[/b], "
 			+ "and the duel decides the [b]Champion[/b].",
 		"",
@@ -44,9 +45,20 @@ func _ready() -> void:
 		"    [b]Wind[/b] pushes along a corridor: free speed one way, a fight the other.",
 		"    [b]Blue chevron pads[/b] give a short speed boost.",
 		"",
+		"[font_size=24]%sThe map[/color][/font_size]" % S,
+		"A small map sits in the corner all race: it shows the level you are on and which way you are facing. "
+			+ "Press [b]%s[/b] for the full one." % k("toggle_map"),
+		"It draws [b]only what you have seen[/b]. Brown rooms are where you have walked. A [b]yellow square with a ?[/b] "
+			+ "is a passage you have seen but not taken -- those are where the cave still has something for you. "
+			+ "Blue triangles are shafts up and down, the grey dot is the start, and the [b]green EXIT[/b] appears only once "
+			+ "you have stood in the exit or looked into it from the room next door. North on the map is north in the cave, "
+			+ "whatever your gravity is doing.",
+		"",
 		"[font_size=24]%sMystery boxes[/color][/font_size]" % E,
 		"Heart refill, Move refill, speed boost, shield, or a rare [b]Second Chance[/b] that survives one fatal hit -- "
-			+ "or a slow, or a drained Move. Very rarely, a [b]clue[/b] points roughly toward the exit.",
+			+ "or a slow, or a drained Move. About one box in seven holds a [b]CLUE[/b]: it names the exit's compass "
+			+ "direction, how many levels up or down it is, and roughly how many rooms away. The arrow stays on screen "
+			+ "for 45 seconds and is drawn on the map too. It never gives you the room or the way there.",
 		"Dead ends hide boxes more often than corridors do.",
 		"",
 		"[font_size=24]%sSprint Gifts[/color][/font_size]" % E,

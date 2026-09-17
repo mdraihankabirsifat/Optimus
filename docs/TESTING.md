@@ -21,6 +21,7 @@ godot --headless --fixed-fps 60 res://tests/test_prompt3.tscn   # Prompt 3 physi
 godot --headless res://tests/cave_metrics.tscn -- seeds=60 size=1 rush=180   # cave shape numbers
 godot --headless --fixed-fps 60 res://tests/test_prompt4.tscn   # Prompt 4: Sprint Gifts, Battle Mode, cave floors
 godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=8 size=2 limit=300   # per-size completion times
+godot res://tests/map_shot.tscn                   # (window) mini-map, clue marker, full map
 ```
 
 ## Results after Master Prompt 4 (18 September 2026, Windows 11, Godot 4.7.2)
@@ -30,7 +31,7 @@ was produced by an actual run of this code.
 
 | Suite | Checks | Result |
 |---|---|---|
-| **test_prompt4** (new) | 38: Sprint Gift gating, the exact 5 s window, refresh without stacking, expiry mid-hold, pickup and regrowth; Battle spawns 16+ units apart, one point per kill, no double kill, respawn delay and placement away from the killer, spawn protection, cave deaths credit nobody, no heart trade, no exit, a kill as the clock stops, tie-breaks and a draw, two Battle worlds kept apart; per-size cave floors and long cuts | pass |
+| **test_prompt4** (new) | 50: Sprint Gift gating, the exact 5 s window, refresh without stacking, expiry mid-hold, pickup and regrowth; Battle spawns 16+ units apart, one point per kill, no double kill, respawn delay and placement away from the killer, spawn protection, cave deaths credit nobody, no heart trade, no exit, a kill as the clock stops, tie-breaks and a draw, two Battle worlds kept apart; per-size cave floors and long cuts; the map shows only what you have seen, marks the exit only once you have, and a clue names a direction, the levels and the rooms | pass |
 | test_gravity | 338 | pass |
 | test_cave | 134 (new generator: long cuts, route floors, Rush still easier) | pass |
 | test_match | 45 | pass |

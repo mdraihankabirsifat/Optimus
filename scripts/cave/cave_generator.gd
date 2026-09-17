@@ -107,14 +107,15 @@ func _build() -> bool:
 ## Named cave sizes for the lobby.
 ## Master Prompt 4: the three sizes are the difficulty tiers (Short = Easy, Standard = Normal,
 ## Long = Hard). `route_s` is the floor on the shortest route's walking time; ordinary,
-## exploring play runs roughly twice that, which is where the 90 / 120 / 150 s targets come from.
+## exploring play runs longer still, which is how the 90 / 120 / 150 s targets are met: the floor
+## alone already clears 90 s on the easiest size once a Gravity Move or two is counted.
 const SIZE_PRESETS := [
 	{"name": "Short", "size": Vector3i(9, 3, 9), "min_distance": 24, "branches": 10, "loops": 1,
-		"long_cuts": 2, "boxes": 9, "fires": 6, "vertical": Vector2i(2, 3), "run": Vector2i(3, 6), "route_s": 45.0},
+		"long_cuts": 2, "boxes": 9, "fires": 6, "vertical": Vector2i(2, 3), "run": Vector2i(3, 6), "route_s": 60.0},
 	{"name": "Standard", "size": Vector3i(11, 4, 11), "min_distance": 32, "branches": 14, "loops": 2,
-		"long_cuts": 2, "boxes": 13, "fires": 9, "vertical": Vector2i(3, 4), "run": Vector2i(4, 7), "route_s": 60.0},
+		"long_cuts": 2, "boxes": 13, "fires": 9, "vertical": Vector2i(3, 4), "run": Vector2i(4, 7), "route_s": 80.0},
 	{"name": "Long", "size": Vector3i(13, 5, 13), "min_distance": 40, "branches": 18, "loops": 3,
-		"long_cuts": 3, "boxes": 17, "fires": 12, "vertical": Vector2i(4, 5), "run": Vector2i(4, 8), "route_s": 75.0},
+		"long_cuts": 3, "boxes": 17, "fires": 12, "vertical": Vector2i(4, 5), "run": Vector2i(4, 8), "route_s": 100.0},
 ]
 
 
@@ -165,7 +166,9 @@ func apply_battle_profile() -> void:
 func apply_rush_profile(seconds: int) -> void:
 	var s: int = seconds if seconds in AppConfig.RUSH_DURATIONS else AppConfig.RUSH_DEFAULT
 	var t := float(s) / 480.0   # 0.375, 0.625, 1.0
-	branch_count = maxi(2, roundi(float(branch_count) * (0.2 + 0.2 * t)))
+	# Normal now carries long cuts and more dead ends, so Rush trims harder to stay the cave
+	# that reads at a glance: fewer side branches and no long cut at all.
+	branch_count = maxi(2, roundi(float(branch_count) * (0.14 + 0.16 * t)))
 	branch_len_max = mini(branch_len_max, 2 + roundi(t))
 	branch_len_min = mini(branch_len_min, branch_len_max)
 	loop_count = clampi(roundi(float(loop_count) * 0.5), 1, 2)
@@ -178,9 +181,10 @@ func apply_rush_profile(seconds: int) -> void:
 	run_max = maxi(run_min, run_max - 1)
 	max_boxes = maxi(4, roundi(float(max_boxes) * 0.6))
 	max_fires = maxi(2, roundi(float(max_fires) * 0.5))
-	# Rush keeps a time floor too, lower than Normal's so Rush stays the easier read.
-	min_route_seconds *= 0.5 + 0.2 * t
-	long_cut_count = mini(long_cut_count, 1)
+	# Rush keeps a time floor too, but a Rush cave is a third of the size, so the floor is a
+	# fraction of Normal's -- pushed any higher, the profile cannot build a cave that long.
+	min_route_seconds *= 0.30 + 0.12 * t
+	long_cut_count = 0
 	profile = "rush%d" % s
 
 

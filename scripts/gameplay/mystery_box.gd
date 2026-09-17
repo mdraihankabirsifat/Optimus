@@ -7,7 +7,7 @@ extends Area3D
 ## server exists, the server rolls and clients only display. Nothing here trusts the racer.
 
 signal opened(racer: PlayerController, reward: String, description: String)
-signal clue_granted(racer: PlayerController, direction: Vector3, vertical: int)
+signal clue_granted(racer: PlayerController, direction: Vector3, vertical: int, rooms: int)
 ## Online client: E was pressed on this box. The server decides whether it opens and what
 ## is inside; nothing on this machine rolls or applies a reward.
 signal open_requested(box: MysteryBox, racer: PlayerController)
@@ -153,7 +153,7 @@ func net_apply_open(racer: PlayerController, reward: String, description: String
 			# Offline this fires from _apply_reward; online the server rolled it, so fire it
 			# here or anything listening to the box itself stays silent on the client.
 			var info := _coarse_clue(racer.global_position)
-			clue_granted.emit(racer, info["direction"], info["vertical"])
+			clue_granted.emit(racer, info["direction"], info["vertical"], int(info["rooms"]))
 	opened.emit(racer, reward, description)
 
 
@@ -197,13 +197,13 @@ func _apply_reward(reward: String, racer: PlayerController) -> String:
 			return "Second Chance  survive one fatal hit"
 		"clue":
 			var info := _coarse_clue(racer.global_position)
-			clue_granted.emit(racer, info["direction"], info["vertical"])
-			return "CLUE  the exit lies %s%s" % [info["compass"], info["level_text"]]
+			clue_granted.emit(racer, info["direction"], info["vertical"], int(info["rooms"]))
+			return "CLUE  the exit is %s%s, %s" % [info["compass"], info["level_text"], info["distance_text"]]
 	return "Nothing"
 
 
-## A coarse hint only: one of eight compass directions plus above/below/same level.
-## It never gives distance or the exact cell.
+## A coarse hint: one of eight compass directions, how many levels up or down, and a rough
+## distance in rooms rounded to the nearest two. Never the exit cell itself, and never a path.
 func _coarse_clue(from: Vector3) -> Dictionary:
 	var delta := finish_position - from
 	var flat := Vector3(delta.x, 0.0, delta.z)
@@ -218,15 +218,23 @@ func _coarse_clue(from: Vector3) -> Dictionary:
 		idx += 8
 	var vertical := 0
 	var level_text := ""
-	if delta.y > CaveBuilder.CELL_SIZE * 0.6:
+	var levels := int(roundf(delta.y / CaveBuilder.CELL_SIZE))
+	if levels > 0:
 		vertical = 1
-		level_text = ", above you"
-	elif delta.y < -CaveBuilder.CELL_SIZE * 0.6:
+		level_text = ", %d level%s up" % [levels, "" if levels == 1 else "s"]
+	elif levels < 0:
 		vertical = -1
-		level_text = ", below you"
+		level_text = ", %d level%s down" % [-levels, "" if levels == -1 else "s"]
+	var rooms := int(roundf((absf(delta.x) + absf(delta.z)) / CaveBuilder.CELL_SIZE / 2.0)) * 2
+	rooms = maxi(2, rooms)
+	var distance_text := "about %d rooms away" % rooms
+	if rooms <= 2:
+		distance_text = "very close"
+	elif rooms >= 12:
+		distance_text = "a long way off (%d rooms)" % rooms
 	return {
-		"direction": direction, "vertical": vertical,
-		"compass": compass_names[idx], "level_text": level_text,
+		"direction": direction, "vertical": vertical, "rooms": rooms,
+		"compass": compass_names[idx], "level_text": level_text, "distance_text": distance_text,
 	}
 
 

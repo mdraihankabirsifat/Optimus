@@ -38,6 +38,7 @@ var _deny_text_timer: float = 0.0
 var _centre_timer: float = 0.0
 var _clue_dir := Vector3.ZERO
 var _clue_vertical: int = 0
+var _clue_rooms: int = 0
 var _clue_timer: float = 0.0
 var _heart_pulse: float = 0.0
 var _last_dof: int = -1
@@ -172,12 +173,37 @@ func on_box_opened(racer: PlayerController, reward: String, description: String)
 	toast(description, colour, 4.5 if reward == "clue" else 3.0)
 
 
-func on_clue(racer: PlayerController, direction: Vector3, vertical: int) -> void:
+func on_clue(racer: PlayerController, direction: Vector3, vertical: int, rooms: int = 0) -> void:
 	if racer != _player:
 		return
 	_clue_dir = direction
 	_clue_vertical = vertical
+	_clue_rooms = rooms
 	_clue_timer = AppConfig.CLUE_TIME
+
+
+## What the clue says, in as few words as fit next to an arrow.
+func _clue_short() -> String:
+	var parts := PackedStringArray([_compass_name(_clue_dir)])
+	if _clue_vertical > 0:
+		parts.append("up")
+	elif _clue_vertical < 0:
+		parts.append("down")
+	if _clue_rooms > 0:
+		parts.append("~%d rooms" % _clue_rooms)
+	return " · ".join(parts)
+
+
+## The world compass never renames north, so a clue can be read the same way on any surface.
+func _compass_name(dir: Vector3) -> String:
+	var flat := Vector2(dir.x, dir.z)
+	if flat.length() < 0.05:
+		return "here"
+	var names := ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+	var idx := int(roundf(atan2(flat.x, -flat.y) / (PI * 0.25))) % 8
+	if idx < 0:
+		idx += 8
+	return names[idx]
 
 
 func toggle_map() -> void:
@@ -441,8 +467,8 @@ func _draw_stats(c: Control) -> void:
 			-1, 18, UiKit.SKY if _player.speed_multiplier > 1.0 else UiKit.DANGER)
 
 	_draw_gravity_gauge(c, Vector2(c.size.x - 70, 190))
-	# The map opens bottom-right; lift the compass clear of it rather than overlap.
-	_draw_compass(c, Vector2(c.size.x - 70, 300 if not _map_open else 190))
+	# The big map is centred now; the compass keeps its own place at the top right.
+	_draw_compass(c, Vector2(c.size.x - 70, 300))
 
 
 ## A ring showing where the world's own floor is, from your point of view. When you are
@@ -543,55 +569,228 @@ func _draw_overlay(c: Control) -> void:
 		c.draw_line(mid + Vector2(0, 3), mid + Vector2(0, 9), ch, 2.0)
 	if _player.gravity_armed and _player.input_enabled:
 		c.draw_arc(mid, 60, 0, TAU, 40, Color(UiKit.SKY, 0.6), 2.0)
-	if _clue_timer > 0.0:
+	if _clue_timer > 0.0 and not _map_open:
 		_draw_clue(c, Vector2(mid.x, 150))
 	if _map_open:
 		_draw_map(c)
+	elif _match.battle == null:
+		# In Battle Mode the scoreboard owns this corner, and there is no exit to find anyway.
+		_draw_mini_map(c)
 
 
-## UI-015: a top-down map of your current level, drawn only from cells you have stood in and
-## the openings you saw from them. The exit is never marked, even if you walked through it.
-func _draw_map(c: Control) -> void:
+## UI-015 / Prompt 4 follow-up: the map judges can actually read. Drawn only from cells you have
+## stood in and the openings you saw from them, so it never solves the cave for you -- but it now
+## fits the whole explored level on screen, names your level, marks the start, marks passages you
+## have not taken yet, and marks the exit once you have seen it. A small always-on version sits in
+## the corner so you always know where you are; the map key opens the big one.
+const MAP_FLOOR := Color(0.45, 0.4, 0.34, 0.95)
+const MAP_FRONTIER := Color(0.95, 0.78, 0.35)
+const MAP_EXIT := Color(0.45, 0.95, 0.55)
+
+
+func _map_data() -> Dictionary:
 	var visited: Dictionary = _world.visited_cells
 	var g: CaveGraph = _world.graph
 	var here: Vector3i = _world.player_cell()
-	var cell_px := 34.0
-	var panel := Rect2(c.size.x - 320, c.size.y - 330, 300, 310)
-	c.draw_rect(panel, Color(0.05, 0.04, 0.05, 0.82))
-	c.draw_rect(panel, Color(UiKit.PANEL_EDGE, 1.0), false, 2.0)
+	var frontier := {}
 	var levels := {}
+	var lo := Vector2i(here.x, here.z)
+	var hi := lo
 	for cell: Vector3i in visited:
 		levels[cell.y] = true
-	c.draw_string(ThemeDB.fallback_font, panel.position + Vector2(12, 22),
-		"MAP  ·  level %d  ·  %d cells found  [%s]" % [here.y + 1, visited.size(), UiKit.binding_text("toggle_map")],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiKit.TEXT_DIM)
-	var origin := panel.position + panel.size * 0.5 + Vector2(0, 14) - Vector2(here.x, here.z) * cell_px
+		if cell.y != here.y:
+			continue
+		lo = Vector2i(mini(lo.x, cell.x), mini(lo.y, cell.z))
+		hi = Vector2i(maxi(hi.x, cell.x), maxi(hi.y, cell.z))
+		for d: int in CaveGraph.FLAT_DIRS:
+			if not g.is_linked(cell, d):
+				continue
+			var n: Vector3i = cell + CaveGraph.DIRS[d]
+			if not visited.has(n):
+				frontier[n] = true
+				lo = Vector2i(mini(lo.x, n.x), mini(lo.y, n.z))
+				hi = Vector2i(maxi(hi.x, n.x), maxi(hi.y, n.z))
+	# The exit is marked only once you have stood in it or looked into it from next door.
+	var exit_seen: bool = visited.has(g.finish_cell) or frontier.has(g.finish_cell)
+	return {"visited": visited, "graph": g, "here": here, "frontier": frontier,
+		"levels": levels, "lo": lo, "hi": hi, "exit_seen": exit_seen}
+
+
+## The big map. Auto-fits the level you are on, with a legend.
+func _draw_map(c: Control) -> void:
+	var d := _map_data()
+	var lo: Vector2i = d["lo"]
+	var hi: Vector2i = d["hi"]
+	var span := Vector2(hi - lo) + Vector2.ONE * 2.0
+	var room := Vector2(minf(940.0, c.size.x * 0.82), minf(700.0, c.size.y * 0.82))
+	var cell_px := clampf(minf((room.x - 36.0) / span.x, (room.y - 112.0) / span.y), 16.0, 64.0)
+	var size := Vector2(clampf(span.x * cell_px + 36.0, 520.0, room.x),
+		clampf(span.y * cell_px + 112.0, 300.0, room.y))
+	var panel := Rect2((c.size - size) * 0.5, size)
+	c.draw_rect(panel, Color(0.05, 0.04, 0.05, 0.93))
+	c.draw_rect(panel, Color(UiKit.PANEL_EDGE, 1.0), false, 2.0)
+	var body := panel.grow(-18)
+	body.position.y += 34
+	body.size.y -= 78
+	var here: Vector3i = d["here"]
+	var centre := Vector2(lo + hi) * 0.5
+	var origin := body.position + body.size * 0.5 - centre * cell_px
+	var font := ThemeDB.fallback_font
+	var sorted_levels: Array = (d["levels"] as Dictionary).keys()
+	sorted_levels.sort()
+	c.draw_string(font, panel.position + Vector2(16, 26),
+		"MAP   ·   LEVEL %d   ·   %d rooms walked here   ·   levels seen: %s"
+			% [here.y + 1, _level_count(d), _level_list(sorted_levels)],
+		HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 180, 17, UiKit.TEXT)
+	c.draw_string(font, panel.position + Vector2(panel.size.x - 150, 26),
+		"[%s] close" % UiKit.binding_text("toggle_map"), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, UiKit.TEXT_DIM)
+	if _clue_timer > 0.0:
+		c.draw_string(font, panel.position + Vector2(16, 48),
+			"CLUE   ·   EXIT %s   ·   %ds left" % [_clue_short(), ceili(_clue_timer)],
+			HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - 32, 15, UiKit.EMBER)
+	_draw_map_body(c, d, body, origin, cell_px, false)
+	_draw_map_legend(c, d, Vector2(panel.position.x + 16, panel.position.y + panel.size.y - 30), font)
+
+
+## The corner map, always on, so you always know where you are without stopping to read.
+func _draw_mini_map(c: Control) -> void:
+	var d := _map_data()
+	var panel := Rect2(c.size.x - 250, c.size.y - 250, 230, 230)
+	c.draw_rect(panel, Color(0.05, 0.04, 0.05, 0.72))
+	c.draw_rect(panel, Color(UiKit.PANEL_EDGE, 0.8), false, 1.5)
+	var here: Vector3i = d["here"]
+	var body := panel.grow(-8)
+	body.position.y += 18
+	body.size.y -= 18
+	var cell_px := 26.0
+	var origin := body.position + body.size * 0.5 - Vector2(here.x, here.z) * cell_px
+	c.draw_string(ThemeDB.fallback_font, panel.position + Vector2(10, 16),
+		"LEVEL %d   ·   [%s] full map" % [here.y + 1, UiKit.binding_text("toggle_map")],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiKit.TEXT_DIM)
+	_draw_map_body(c, d, body, origin, cell_px, true)
+
+
+func _level_count(d: Dictionary) -> int:
+	var here: Vector3i = d["here"]
+	var n := 0
+	for cell: Vector3i in d["visited"]:
+		if cell.y == here.y:
+			n += 1
+	return n
+
+
+func _level_list(levels: Array) -> String:
+	var parts: PackedStringArray = []
+	for y: int in levels:
+		parts.append(str(y + 1))
+	return ", ".join(parts)
+
+
+func _draw_map_body(c: Control, d: Dictionary, body: Rect2, origin: Vector2, cell_px: float, compact: bool) -> void:
+	var g: CaveGraph = d["graph"]
+	var here: Vector3i = d["here"]
+	var visited: Dictionary = d["visited"]
+	var font := ThemeDB.fallback_font
+	var half := cell_px * 0.34
 	for cell: Vector3i in visited:
 		if cell.y != here.y:
 			continue
 		var p := origin + Vector2(cell.x, cell.z) * cell_px
-		if not panel.grow(-8).has_point(p):
+		if not body.has_point(p):
 			continue
-		var box := Rect2(p - Vector2.ONE * cell_px * 0.34, Vector2.ONE * cell_px * 0.68)
-		c.draw_rect(box, Color(0.45, 0.4, 0.34, 0.9))
-		for d: int in CaveGraph.FLAT_DIRS:
-			if g.is_linked(cell, d):
-				var dv := Vector2(CaveGraph.DIRS[d].x, CaveGraph.DIRS[d].z)
-				c.draw_line(p + dv * cell_px * 0.34, p + dv * cell_px * 0.5, Color(0.45, 0.4, 0.34, 0.9), cell_px * 0.3)
+		c.draw_rect(Rect2(p - Vector2.ONE * half, Vector2.ONE * half * 2.0), MAP_FLOOR)
+		for dir: int in CaveGraph.FLAT_DIRS:
+			if not g.is_linked(cell, dir):
+				continue
+			var dv := Vector2(CaveGraph.DIRS[dir].x, CaveGraph.DIRS[dir].z)
+			var n: Vector3i = cell + CaveGraph.DIRS[dir]
+			var col: Color = MAP_FLOOR if visited.has(n) else Color(MAP_FRONTIER, 0.75)
+			c.draw_line(p + dv * half, p + dv * cell_px * 0.5, col, cell_px * 0.28)
+		# Shafts change your level, so they are worth shouting about.
 		if g.is_linked(cell, CaveGraph.DIR_UP):
-			c.draw_string(ThemeDB.fallback_font, p + Vector2(-5, -1), "^", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, UiKit.SKY)
+			_map_triangle(c, p + Vector2(0, -cell_px * 0.15), cell_px * 0.15, true, UiKit.SKY)
 		if g.is_linked(cell, CaveGraph.DIR_DOWN):
-			c.draw_string(ThemeDB.fallback_font, p + Vector2(-4, 12), "v", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiKit.SKY)
+			_map_triangle(c, p + Vector2(0, cell_px * 0.15), cell_px * 0.15, false, UiKit.SKY)
 		if cell == g.spawn_cell:
-			c.draw_circle(p, 4, UiKit.TEXT_DIM)
+			c.draw_circle(p, cell_px * 0.16, UiKit.TEXT_DIM)
+			if not compact:
+				c.draw_string(font, p + Vector2(-cell_px * 0.5, cell_px * 0.75), "START",
+					HORIZONTAL_ALIGNMENT_CENTER, cell_px, 12, UiKit.TEXT_DIM)
+
+	# Openings you have seen but not walked: telling you where there is still something to find
+	# is the map's real job, and it is the one thing the old map never did.
+	for cell: Vector3i in d["frontier"]:
+		var p := origin + Vector2(cell.x, cell.z) * cell_px
+		if not body.has_point(p):
+			continue
+		var box := Rect2(p - Vector2.ONE * half, Vector2.ONE * half * 2.0)
+		c.draw_rect(box, Color(MAP_FRONTIER, 0.14))
+		c.draw_rect(box, Color(MAP_FRONTIER, 0.8), false, 1.5)
+		c.draw_string(font, p - Vector2(cell_px * 0.5, -cell_px * 0.18), "?",
+			HORIZONTAL_ALIGNMENT_CENTER, cell_px, int(maxf(11.0, cell_px * 0.45)), MAP_FRONTIER)
+
+	if bool(d["exit_seen"]) and g.finish_cell.y == here.y:
+		var p := origin + Vector2(g.finish_cell.x, g.finish_cell.z) * cell_px
+		if body.has_point(p):
+			var pulse := 0.6 + 0.4 * sin(_time * 4.0)
+			c.draw_rect(Rect2(p - Vector2.ONE * half, Vector2.ONE * half * 2.0), Color(MAP_EXIT, 0.85))
+			c.draw_arc(p, cell_px * 0.55, 0, TAU, 24, Color(MAP_EXIT, pulse), 2.0)
+			c.draw_string(font, p - Vector2(cell_px * 0.5, -cell_px * 0.2), "EXIT",
+				HORIZONTAL_ALIGNMENT_CENTER, cell_px, int(maxf(10.0, cell_px * 0.3)), Color(0.04, 0.1, 0.05))
+
+	# You, and which way you are facing.
 	var me := origin + Vector2(here.x, here.z) * cell_px
 	var look := -_player.camera.global_basis.z
 	var f := Vector2(look.x, look.z)
 	f = f.normalized() if f.length() > 0.05 else Vector2(0, -1)
 	var side := Vector2(-f.y, f.x)
-	c.draw_colored_polygon(PackedVector2Array([me + f * 11, me - f * 7 + side * 7, me - f * 7 - side * 7]), UiKit.SKY)
-	c.draw_string(ThemeDB.fallback_font, panel.position + Vector2(12, panel.size.y - 10),
-		"N ^    other levels: %d" % maxi(0, levels.size() - 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiKit.TEXT_DIM)
+	var r := cell_px * 0.36
+	c.draw_arc(me, cell_px * 0.5, 0, TAU, 20, Color(UiKit.SKY, 0.4 + 0.25 * sin(_time * 3.0)), 2.0)
+	c.draw_colored_polygon(PackedVector2Array([me + f * r, me - f * r * 0.65 + side * r * 0.65,
+		me - f * r * 0.65 - side * r * 0.65]), UiKit.SKY)
+
+	# A live clue points from you toward the exit, on the map as well as on the screen. The arrow
+	# is clamped inside the panel so it never runs over the header.
+	if _clue_timer > 0.0:
+		var cd := Vector2(_clue_dir.x, _clue_dir.z)
+		if cd.length() > 0.05:
+			cd = cd.normalized()
+			var reach := cell_px * 1.7
+			var inner := body.grow(-cell_px * 0.5)
+			while reach > cell_px * 0.5 and not inner.has_point(me + cd * reach):
+				reach -= cell_px * 0.2
+			var tip := me + cd * reach
+			c.draw_line(me, tip, Color(UiKit.EMBER, 0.9), 3.0)
+			var cs := Vector2(-cd.y, cd.x)
+			c.draw_colored_polygon(PackedVector2Array([tip + cd * cell_px * 0.3,
+				tip + cs * cell_px * 0.18, tip - cs * cell_px * 0.18]), UiKit.EMBER)
+
+	# North stays north whatever your gravity is doing.
+	var nw := body.position + Vector2(body.size.x - 26, 22)
+	c.draw_line(nw, nw + Vector2(0, 18), Color(UiKit.TEXT_DIM, 0.9), 2.0)
+	c.draw_string(font, nw - Vector2(14, 4), "N", HORIZONTAL_ALIGNMENT_CENTER, 28, 14, UiKit.TEXT_DIM)
+
+
+func _map_triangle(c: Control, at: Vector2, r: float, up: bool, colour: Color) -> void:
+	var s := -1.0 if up else 1.0
+	c.draw_colored_polygon(PackedVector2Array([at + Vector2(0, s * r),
+		at + Vector2(r * 0.9, -s * r * 0.7), at + Vector2(-r * 0.9, -s * r * 0.7)]), colour)
+
+
+func _draw_map_legend(c: Control, d: Dictionary, at: Vector2, font: Font) -> void:
+	var x := at.x
+	var items := [
+		[UiKit.SKY, "you"],
+		[MAP_FLOOR, "rooms you walked"],
+		[MAP_FRONTIER, "passage not taken yet"],
+		[UiKit.SKY, "shaft up / down"],
+		[MAP_EXIT, "exit" if bool(d["exit_seen"]) else "exit (not found yet)"],
+	]
+	for item: Array in items:
+		c.draw_rect(Rect2(Vector2(x, at.y - 9), Vector2(12, 12)), item[0] as Color)
+		var text: String = item[1]
+		c.draw_string(font, Vector2(x + 18, at.y + 2), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiKit.TEXT_DIM)
+		x += 26.0 + font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
 
 
 ## HEALTH-006: red creeping in from the edges, breathing with the heartbeat.
@@ -635,6 +834,8 @@ func _draw_speed_lines(c: Control) -> void:
 		c.draw_line(p0, p1, Color(1, 1, 1, 0.22 * amount), 2.0)
 
 
+## The clue marker. It stays up long enough to act on, says how far and how many levels, and
+## counts itself down so nobody wonders whether it is still true.
 func _draw_clue(c: Control, at: Vector2) -> void:
 	var alpha := clampf(_clue_timer, 0.0, 1.0)
 	var local := _player.camera.global_basis.inverse() * _clue_dir
@@ -643,10 +844,20 @@ func _draw_clue(c: Control, at: Vector2) -> void:
 	var side := Vector2(-fwd.y, fwd.x)
 	var tri := PackedVector2Array([at + fwd * 34, at - fwd * 18 + side * 20, at - fwd * 18 - side * 20])
 	c.draw_circle(at, 46, Color(0, 0, 0, 0.5 * alpha))
+	c.draw_arc(at, 46, -PI * 0.5, -PI * 0.5 + TAU * clampf(_clue_timer / AppConfig.CLUE_TIME, 0.0, 1.0),
+		48, Color(UiKit.EMBER, 0.55 * alpha), 3.0)
 	c.draw_colored_polygon(tri, Color(UiKit.EMBER, alpha))
-	var extra := " (above)" if _clue_vertical > 0 else (" (below)" if _clue_vertical < 0 else "")
-	c.draw_string(ThemeDB.fallback_font, at + Vector2(-150, 70), "exit this way" + extra,
-		HORIZONTAL_ALIGNMENT_CENTER, 300, 16, Color(UiKit.EMBER, alpha))
+	var font := ThemeDB.fallback_font
+	var level_text := ""
+	if _clue_vertical > 0:
+		level_text = "  ·  a level or more above you"
+	elif _clue_vertical < 0:
+		level_text = "  ·  a level or more below you"
+	var rooms_text := "  ·  about %d rooms" % _clue_rooms if _clue_rooms > 0 else ""
+	c.draw_string(font, at + Vector2(-260, 70), "EXIT  %s%s%s" % [_compass_name(_clue_dir), level_text, rooms_text],
+		HORIZONTAL_ALIGNMENT_CENTER, 520, 18, Color(UiKit.EMBER, alpha))
+	c.draw_string(font, at + Vector2(-260, 90), "clue from a mystery box  ·  %ds left" % ceili(_clue_timer),
+		HORIZONTAL_ALIGNMENT_CENTER, 520, 13, Color(UiKit.TEXT_DIM, alpha))
 
 
 func _full_rect_drawer(fn: Callable) -> Control:
