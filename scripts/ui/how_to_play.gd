@@ -53,6 +53,14 @@ func _ready() -> void:
 			+ "but the vertical ones cost Moves.",
 		"",
 		"[font_size=24]%sModes[/color][/font_size]" % E,
-		"Set bots to zero for a [b]Time Trial[/b]. Finish a cave faster than before and your [b]ghost[/b] races you next time. "
-			+ "[b]Daily[/b] gives everyone the same cave today. Share a seed and size to race a friend's cave.",
+		"[b]Bot Race[/b] works offline: you against 0-4 bots. Zero bots is a [b]Time Trial[/b], and beating your best "
+			+ "on a cave saves a [b]ghost[/b] that races you next time. [b]Daily[/b] gives everyone the same cave today.",
+		"[b]Online Race[/b]: 2-5 humans. One player creates a room and shares its four-letter code; the others join with it. "
+			+ "[b]Mixed Race[/b] adds bots -- the host can [b]fill empty slots with bots[/b]. "
+			+ "Online, Esc opens the menu but the race keeps running.",
+		"Pick an [b]environment[/b] in the lobby: Stone Age, Jungle, Dark Cave (you carry a lamp) or City Drain. "
+			+ "It changes the look, never the cave: the same seed is the same race in all four.",
+		"",
+		"[font_size=24]%sSpectating[/color][/font_size]" % S,
+		"Finished or out of hearts? The camera follows another racer in their own gravity. [b]Tab[/b] switches racer.",
 	]))
