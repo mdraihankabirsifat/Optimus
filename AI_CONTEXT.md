@@ -47,31 +47,40 @@ These came from the team's design document. Do not alter them without an explici
 | Player body | `CharacterBody3D`, `up_direction` driven by local gravity, custom gravity integration |
 | Orientation maths | Quaternion/basis slerp. **Never Euler angles** for body orientation. |
 | Transition time | 0.35 s, movement locked during it |
-| Networking | Godot `WebSocketMultiplayerPeer`, server-authoritative, headless Godot on Render |
-| Offline mode | Must run with zero network code paths active. This is the judging fallback. |
-| Art | Stone Age only. Jungle / Dark Cave / City Drain are out of scope for the jam. |
+| Networking | Godot `WebSocketMultiplayerPeer`, server-authoritative, headless Godot, Docker for Render. See `docs/NETWORKING.md`. |
+| Offline mode | `GameWorld.net_role == ""`. Never calls `NetManager`. This is the judging fallback. |
+| Rooms | Each server race runs in its own `SubViewport` world; group lookups go through `WorldScope`. |
+| Solvability | Built solvable by construction **and** checked by `CaveValidator` over (cell, gravity, Moves). |
+| Art | Stone Age only. Jungle / Dark Cave / City Drain are future work (`future_implementation_suggestion.txt`). |
 
-## Current state
+## Current state (17 Sept, commit after 48b93d5)
 
-**Tier 1 and Tier 2 are playable end to end** (17 Sept). Splash → menu → lobby → race →
-results → rematch, with no editor. Seeded cave with fire, mystery boxes and decor; 1-4
-non-omniscient bots at three skill levels; full HUD with DOF readout and gravity preview;
-pause menu; settings persisted; synthesised audio; How to Play, About and Credits screens.
-Title is **Six Ways Down** (`AppConfig.GAME_TITLE`).
+**Everything in Tiers 1-3 is built and tested.** Splash → Play (Bot Race / Online Race / Mixed
+Race) → lobby → race → results → rematch or back to the room, with no editor.
 
-Not done: exported builds verified on Windows/web, video, screenshots for itch.io, submission.
-Online multiplayer (Tier 3) was never started and is out.
+- Offline Bot Race: 0-4 bots at three skills, seeded cave, fire, pistons, spiders, crumbling
+  floors, wind, boost pads, boxes, clues, ghost, daily seed, discovered-only map, spectating.
+- Online Race and Mixed Race: room codes, 2-5 racers, fill with bots, server-owned Moves,
+  hearts, boxes, clues, placements; bot takeover on disconnect. Verified with a real
+  three-process WebSocket race and against the Docker image.
+- Gravity-aware cave validation; bots use their own clues.
+- Settings: volumes, sensitivity, invert Y, fullscreen, window size, quality, key remapping.
+- Windows exe verified as game and as dedicated server on the dev machine. Web export builds.
 
-Check `docs/TASK_BOARD.md` for detail. That board is the authority on progress.
+Not done: Render deployment (needs an account), bots using 90° wall-walks, extra environment
+themes, the video, itch.io submission, a clean-machine Windows test, a browser test of the web
+build after networking.
+
+Check `docs/TASK_BOARD.md` for detail and `docs/TESTING.md` for the latest test results.
 
 ## Current priority
 
-Ship: export Windows + web, play-test by a human, record the video, submit.
+Ship: clean-machine Windows test, record the video, screenshots, itch.io page
+(`docs/SUBMISSION_CHECKLIST.md`), submit before 11:59 PM. Deploy to Render only if time allows.
 
-## Time reality — read before planning anything
+## Scope history
 
-The original master prompt (`OPTIMUS_GAMEJAM_MASTER_IMPLEMENTATION_PROMPT.txt`) describes
-roughly three to four weeks of work for four people. There are under two days left. That
-document is the **design source of truth**, but its scope is not achievable. `docs/MVP_SCOPE.md`
-holds the version the team is actually shipping. When the two conflict, MVP_SCOPE wins on
-scope and the master prompt wins on rules.
+The team first cut online play to a gated Tier 3 (`docs/MVP_SCOPE.md`). On 17 September the
+team decided to build the full master prompt instead, and online and mixed races were built and
+tested that day. The master prompt (`OPTIMUS_GAMEJAM_MASTER_IMPLEMENTATION_PROMPT.txt`) is the
+source of truth for rules and scope; MVP_SCOPE is kept as a record of the earlier plan.

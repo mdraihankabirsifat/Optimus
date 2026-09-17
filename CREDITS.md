@@ -7,9 +7,16 @@
 - Sadman Sakib
 - Ashraf Hossain Chowdhury
 
-## Engine
+## Engine and tools
 
-- **Godot Engine 4.7.2**, MIT licence, <https://godotengine.org/license>
+| Dependency | Licence | Used for |
+|---|---|---|
+| **Godot Engine 4.7.2** | MIT, <https://godotengine.org/license> | The game, the dedicated server, exports |
+| Godot 4.7.2 Linux binary, downloaded at Docker build time from <https://github.com/godotengine/godot/releases> | MIT | Running the headless server in the container. Not stored in the repository. |
+| Debian `bookworm-slim` Docker image | Debian free software licences, <https://www.debian.org/legal/licenses/> | Container base for the server. Not stored in the repository. |
+| `ca-certificates`, `wget`, `unzip`, `libfontconfig1` Debian packages | Their Debian licences | Installed in the container to fetch and run Godot |
+
+No Godot plugins, addons or third-party GDScript are used.
 
 ## Assets
 
@@ -18,6 +25,6 @@ None. Every asset in the game is generated at runtime by project code:
 | Asset | Source |
 |---|---|
 | Cave geometry and stone textures | `scripts/cave/cave_builder.gd` (noise textures, primitive meshes) |
-| Fire, mystery boxes, crystals, torches | `scripts/gameplay/*.gd`, `scripts/cave/cave_builder.gd` |
+| Fire, pistons, spiders, mystery boxes, crystals, torches, racers | `scripts/gameplay/*.gd`, `scripts/player/racer_rig.gd`, `scripts/cave/cave_builder.gd` |
 | Music, ambience, all sound effects | `autoload/audio_manager.gd` (synthesised from sine waves and noise) |
-| UI | Godot's built-in default font; styles in `scripts/ui/ui_kit.gd` |
+| Logo and UI | `scripts/ui/ui_kit.gd`; Godot's built-in default font |

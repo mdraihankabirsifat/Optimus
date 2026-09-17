@@ -127,17 +127,30 @@ everything above is complete and committed, and it is bound by the abort gate in
 | SHIP-006 | 60–90 s gameplay video | P0 | Tier 2 | Title, core loop, gravity mechanic, theme connection |
 | SHIP-007 | itch.io submission | P0 | all SHIP | Submitted before 11:59 PM, 17 Sept |
 
-### Tier 3 — gated, unscheduled
+### Online — built 17 September (was Tier 3)
 
 | ID | Task | Pri | Deps | Definition of Done |
 |---|---|---|---|---|
-| NET-001 | `WebSocketMultiplayerPeer` client/server connection | P3 | Tier 2 complete | Two local clients connect |
-| NET-002 | Headless authoritative server + lobby/room codes | P3 | NET-001 | Room code joins a live lobby |
-| NET-003 | Sync transforms, gravity, health, charges, finish | P3 | NET-002 | Two clients see each other's gravity correctly |
-| NET-004 | Dockerfile + Render deployment | P3 | NET-003 | Public endpoint reachable |
-| NET-005 | Mixed human/bot lobbies, fill-with-bots | P3 | NET-003, BOT-005 | 2 humans + 2 bots races correctly |
+| NET-001 | `WebSocketMultiplayerPeer` client/server connection | P1 | — | Two local clients connect |
+| NET-002 | Headless authoritative server + lobby/room codes | P1 | NET-001 | Room code joins a live lobby |
+| NET-003 | Sync transforms, gravity, health, charges, boxes, finish, results | P1 | NET-002 | Two clients see each other's gravity correctly |
+| NET-004 | Dockerfile + Render deployment | P1 | NET-003 | Image runs the server; public endpoint reachable |
+| NET-005 | Mixed human/bot lobbies, fill-with-bots, bot takeover | P1 | NET-003, BOT-005 | 2 humans + 2 bots races correctly |
+| NET-006 | Play screen + online lobby UI with connection states | P1 | NET-002 | Connecting / Connected / Reconnecting / Failed shown |
+| NET-007 | Deploy to Render | P2 | NET-004 | `wss://` address works from two machines |
 | ENEMY-001 | Spider on a fixed corridor rail, no nav mesh | P3 | HAZ-001 | Patrols and lunges, cannot stun-lock |
 | SPEC-001 | Spectator camera cycling after elimination | P3 | HEALTH-003 | Cycles active racers, affects nothing |
+
+### Still open
+
+| ID | Task | Pri | Definition of Done |
+|---|---|---|---|
+| NET-007 | Deploy the server to Render | P2 | Needs the team's Render account. Steps in docs/NETWORKING.md |
+| BOT-011 | Bots use 90° wall-walks | P2 | Planner over six gravities; test_bot still ≥ 90% |
+| ART-012 | Jungle / Dark Cave / City Drain themes as data | P3 | Theme picked in lobby, generator untouched |
+| SHIP-001 | Windows exe on a machine without Godot | P0 | Plays a race to results |
+| SHIP-006 | 60-90 s video | P0 | Shot list in docs/SUBMISSION_CHECKLIST.md |
+| SHIP-007 | itch.io submission | P0 | Before 11:59 PM, 17 Sept |
 
 ---
 
@@ -205,6 +218,21 @@ Completed 16 September 2026.
 | — | Bot skill levels. Seed 4242 with 4 bots: Easy 1:21–1:39, Normal 0:50–1:01, Hard 0:36–0:44 |
 | — | `tests/test_flow.gd` — **30 assertions**: every screen, lobby → race → box → pause → results |
 | SHIP-003/004 | README, CREDITS.md, AI_DISCLOSURE.md |
+
+Completed 17 September 2026.
+
+| ID | Note |
+|---|---|
+| NET-001..005 | WebSocket server and client, rooms with codes, 2-5 racers, Online (humans only) and Mixed (fill with bots), server-owned Moves/hearts/boxes/clues/placements/results, plausibility checks and corrections, bot takeover or DISCONNECTED on drop, several rooms at once in separate physics worlds. `test_net` 26/26 (real three-process race), `test_net_sim` 56/56, `test_net_lobby` 37/37 |
+| NET-004 | Dockerfile builds and runs the server; two Windows clients raced through the container. Linux server and Windows clients agree on the cave hash. `render.yaml` written, not deployed |
+| NET-006 | Play screen (Bot / Online / Mixed), online lobby with slots, colours by name, ready state, host controls, connection state and latency |
+| LEVEL-014 | `CaveValidator`: gravity-aware solvability over (cell, gravity, Moves), structural checks, wired into generation. Every one of 200 seeds solvable within 5 Moves |
+| AXIS-011 | `test_wallwalk`: the real controller walks up a wall into a shaft and drops through open floors, as the validator assumes |
+| BOT-010 | Bots use clues from boxes they open themselves |
+| UI-016 | Pause menu Controls page; online pause never pauses the race |
+| UI-017 | Settings: invert Y, window size, graphics quality, key remapping with swap |
+| SHIP-001a | Windows exe launches as the game and as a dedicated server (dev machine) |
+| SHIP-009 | NETWORKING, CAVE_GENERATION, TESTING, SUBMISSION_CHECKLIST docs, future_implementation_suggestion.txt |
 
 ### How to run what exists
 

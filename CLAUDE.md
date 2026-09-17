@@ -34,7 +34,18 @@ godot --headless res://tests/test_cave.tscn      # 200 seeds
 godot --headless res://tests/test_match.tscn     # 29 assertions
 godot --headless res://tests/test_bot.tscn       # 60 caves
 godot --headless res://tests/test_flow.tscn      # every screen + a full race
+godot --headless res://tests/test_wallwalk.tscn  # physics agrees with CaveValidator
+godot --headless res://tests/test_net_lobby.tscn # lobby rules
+godot --headless res://tests/test_net_sim.tscn   # server authority, client mirror
+godot --headless res://tests/test_net.tscn       # real server + 2 clients over WebSocket (~60 s)
+
+# Dedicated server (source or exported exe)
+godot --headless --path . -- --server --port=8910
 ```
+
+Online play is built: see `docs/NETWORKING.md`. Race code must work in all three
+`GameWorld` roles (offline, client, server), and must find race objects with `WorldScope`,
+never tree-wide groups.
 
 Run the relevant test after any change. Gravity and cave code especially — both have
 failure modes that are invisible by eye.

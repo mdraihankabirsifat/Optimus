@@ -1,4 +1,11 @@
-# MVP_SCOPE — What Is Actually Shipping
+# MVP_SCOPE — The 16 September Plan (historical)
+
+> **Superseded on 17 September 2026.** The team decided to build the full master prompt.
+> Online Race, Mixed Race, the dedicated server, Docker/Render files, the spider, spectating,
+> Second Chance and a gravity-aware state-graph validator were all built and tested that day.
+> Still not built from the "cut" list: Jungle, Dark Cave, City Drain, and controller support.
+> Current state lives in `AI_CONTEXT.md` and `docs/TASK_BOARD.md`. This file is kept as the
+> record of the earlier plan and its reasoning.
 
 **Written 16 September 2026. Deadline 17 September 2026, 11:59 PM.**
 

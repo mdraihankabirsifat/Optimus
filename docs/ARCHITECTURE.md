@@ -52,10 +52,25 @@ Six, and no more. Every autoload added after this is a coupling problem for some
 | `SettingsManager` | User prefs, persistence | Know about gameplay |
 | `AudioManager` | Bus volumes, `play_sfx(name, position)` | Decide when sounds happen |
 | `SceneRouter` | All scene changes | Hold gameplay state |
-| `NetManager` | Tier 3 networking. **No-op stub until Phase 5.** | Be required by offline play |
+| `NetManager` | WebSocket peer, rooms, every RPC (server and client) | Be required by offline play |
 
-**`NetManager` must remain a stub that offline mode never calls.** The offline Bot Race is the
-judging fallback; if it can break when networking breaks, the fallback is worthless.
+**Offline race code never calls `NetManager`.** The offline Bot Race is the judging fallback; if
+it can break when networking breaks, the fallback is worthless. Menus may ask `NetManager` whether
+you are in a room; the race itself only reads `GameWorld.net_role`.
+
+## Race roles
+
+`game_world.tscn` runs in one of three roles, set by `net_role`:
+
+| Role | Local player | Other racers | Decides outcomes |
+|---|---|---|---|
+| `""` offline | simulated, local input | bots simulated here | this machine |
+| `"client"` | simulated, local input, health from server | puppets following snapshots | the server |
+| `"server"` | none | humans are puppets of their clients, bots simulated here | here |
+
+`scripts/net/net_match.gd` is added only in the two online roles. Every running server race lives
+in its own `SubViewport` world, and race code finds boxes, spiders, finish triggers and racers
+through `WorldScope`, never tree-wide groups. Full detail: `docs/NETWORKING.md`.
 
 ---
 
@@ -123,7 +138,7 @@ HUD listens. HUD never polls, and never writes.
 
 ---
 
-## Authority (Tier 3, when networking exists)
+## Authority (online races)
 
 Server owns: seed, countdown, timer, **charge deduction**, damage, health, box contents and
 contention, clue grants, finish detection, placements, elimination, bot decisions.

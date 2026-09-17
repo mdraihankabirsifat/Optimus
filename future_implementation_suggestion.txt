@@ -1,0 +1,114 @@
+SIX WAYS DOWN - FUTURE IMPLEMENTATION SUGGESTIONS
+Team Optimus, BUET Robotics Society GameJam 2026
+
+What the jam build does not do yet, roughly in the order worth doing it. Rules that must not
+change while doing any of this: 5 hearts, 5 Moves, one Move per shift, private per-racer gravity,
+six cardinal gravities, the protected vacuum-180 rule, a seeded solvable cave, and bots that only
+know what they have discovered. Offline Bot Race must keep working with no network.
+
+
+1. ENVIRONMENT MODES (in this order, each only once the previous one is stable)
+
+1.1 Jungle mode
+    - Lift every Stone Age colour, material, light and decor choice out of cave_builder.gd into a
+      CaveTheme resource (albedo/roughness per surface, noise settings, fog colour and density,
+      ambient light, torch colour, decor kinds and weights, ambience track).
+    - Jungle theme: damp green-brown stone, hanging roots on ceilings, ferns in dead ends, water
+      drips, softer warm-green light shafts, bird and insect ambience.
+    - Root curtains as a soft hazard: slow, never damage.
+    - Theme picked in the lobby and sent in the online match config; the generator is unchanged.
+
+1.2 Dark Cave mode
+    - Much lower ambient light; racers carry a small personal light that follows their own
+      local up. Torches rarer and more valuable as landmarks.
+    - Glow-worm ceilings as navigation cues; heavier fog; creaks and distant rumbles.
+    - Keep readability: the HUD and the gravity preview must never get harder to read.
+
+1.3 City Drain mode
+    - Concrete and brick materials, pipes along walls, grates over shafts (crumble tiles become
+      rusting grates), sodium-orange lighting, trickling water.
+    - Rats instead of spiders using the same rail logic; steam vents instead of fire.
+
+
+2. BOTS
+
+- 90-degree wall-walks for bots. CaveValidator already models (cell, any of 6 gravities) and
+  tests/test_wallwalk.gd proves the controller can walk up a wall into a shaft. The planner would
+  search six gravities, return (cell, gravity) steps, and the controller would request the
+  gravity the next step needs. Measure with test_bot and race_diag before shipping.
+- Difficulty personalities that change choices, never information: a cautious bot that hoards
+  Moves, a gambler that shifts early, a box hunter that detours for boxes it has seen.
+- A proper utility score (exploration, clue alignment, expected box value, novelty, travel cost,
+  hazard risk, Move cost, revisit penalty) with weights tuned from logged races.
+- Bots reading other racers: following someone who just shifted into a shaft is information any
+  human could also see.
+
+
+3. CAVE AND LEVELS
+
+- More modules and landmarks: collapsed halls, bridges across tall chambers, spiral shafts,
+  large multi-cell chambers with pillars to walk around on any surface.
+- Deliberate 90-degree puzzles: wall-only routes where a floor is missing, so wall-walking is
+  sometimes the best route rather than just a trick.
+- Stronger Move economy: non-aligned shafts so one inversion no longer climbs everything.
+- Stronger exit cues that grow with proximity: airflow particles, a faint hum, warm light.
+- Developer visualisation overlay: cells, edges, spine, vertical links, hazards, boxes, and a
+  selected bot's discovered graph drawn in 3D behind a debug flag.
+
+
+4. HAZARDS, BOXES, ABILITIES
+
+- More hazards: falling stalactites, rolling boulders along corridors, flooding shafts.
+- More box outcomes: short disorientation, harmless scare, a one-shot "gravity lock" shield,
+  a directional pulse clue, an approximate graph-distance clue.
+- Strong traps of up to 1.5 hearts, always telegraphed.
+- Loot tables per theme, all data-driven in AppConfig or a resource.
+
+
+5. CHARACTERS, COSMETICS, ACCESSIBILITY
+
+- Several character silhouettes, hats and trails; choose a colour in the lobby.
+- Colour-blind palettes, a high-contrast HUD option, UI scale slider, subtitles for audio cues.
+- Reduced-motion option that shortens the camera slerp and removes screen effects entirely.
+- Controller support: sticks for move and look, a held shoulder button as the gravity modifier,
+  face buttons for directions, remappable through InputMap.
+
+
+6. MAP AND SPECTATING
+
+- The discovered-only map exists (M). Next: per-level slicing controls, marks for boxes you saw,
+  and a shared team map in a co-op mode. Never the exit.
+- Spectator improvements: free camera, picture-in-picture of the leader, a race timeline.
+- Replays: record inputs or poses per racer from the server and play back a whole race.
+
+
+7. MODES
+
+- Time Trial leaderboards per seed (local now; online later).
+- Daily cave online leaderboard.
+- Co-op: a team shares Moves and must get everyone out.
+- Tag / hunter mode: one racer hunts the others, every catch transfers the role.
+- Ranked play and matchmaking only if there is ever a real player base; persistent accounts only
+  then, never for the jam build.
+
+
+8. NETWORKING
+
+- Client-side reconciliation: replay local inputs after a server correction instead of snapping.
+- Lag compensation for box and finish-line contention using server timestamps of client poses.
+- Rejoin a race in progress after a drop (keep the racer slot for a short grace period).
+- Spectate a running race from the lobby.
+- Server health endpoint for Render readiness checks (a small HTTP responder beside the WebSocket).
+- Scale out: one room per process behind a tiny room directory, or several Render instances with
+  room codes that encode the instance.
+- Bandwidth: pack snapshots into PackedByteArray, delta-compress, send far racers less often.
+- Region selection and a public server list.
+
+
+9. PERFORMANCE AND PLATFORMS
+
+- Profile on a low-end Intel iGPU laptop: draw calls, light counts per object, particle counts.
+- Distance-disable decor, spider animation and torch flicker outside a few cells.
+- Occlusion by cave cell: only draw cells within N hops of the camera.
+- Web: smaller textures, fewer lights, audio worklet checks, a loading progress bar.
+- Mobile only with a control scheme designed for it.

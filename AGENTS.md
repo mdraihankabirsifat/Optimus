@@ -4,7 +4,8 @@ For Claude, Codex, ChatGPT, or any other agent asked to modify this project.
 
 ## Before coding
 
-1. Read `AI_CONTEXT.md`. Then `docs/CORE_MECHANICS.md`. Then `docs/MVP_SCOPE.md`.
+1. Read `AI_CONTEXT.md`. Then `docs/CORE_MECHANICS.md`, `docs/ARCHITECTURE.md`, and
+   `docs/NETWORKING.md` if you touch anything a race runs. `docs/MVP_SCOPE.md` is history.
 2. Read `docs/TASK_BOARD.md` to find out what actually exists. Do not assume a system is
    built because a document describes it.
 3. Work against a Task ID. If the request has no Task ID, find the matching one or add a row.
@@ -25,20 +26,28 @@ For Claude, Codex, ChatGPT, or any other agent asked to modify this project.
 9. Keep bot knowledge separate. `bot_planner.gd` and `bot_knowledge.gd` must never hold a
    reference to the real cave graph. If you find yourself passing one in, stop — that is the
    fairness of the whole race.
-10. Keep the server authoritative over charges, health, loot and placements once networking
-    exists. Clients never award themselves anything.
+10. Keep the server authoritative over charges, health, loot and placements. Clients never
+    award themselves anything. New state that decides a race goes through `NetMatch` on the
+    server and is mirrored to clients; see `docs/NETWORKING.md`.
 11. **Offline Bot Race must work with networking entirely absent.** It is the judging
-    fallback. If your change makes offline play depend on `NetManager`, the change is wrong.
+    fallback. Race code checks `GameWorld.net_role`; it never calls `NetManager` offline.
+    If your change makes offline play depend on `NetManager`, the change is wrong.
+11a. Never use tree-wide groups to find race objects. The dedicated server runs several rooms
+    in one process; use `WorldScope.nodes(self, group)` so a room only sees itself.
+11b. Anything a race needs must work in all three `GameWorld` roles: offline, client, server.
+    The server has no local player and no HUD.
 12. Respect the ownership table in `docs/ARCHITECTURE.md`. Each script has a "must not" column.
 13. Tunables go in `AppConfig` or `@export`. No inline magic numbers.
-14. Prefer the simple version. This is a jam with under two days left; a working simple system
-    beats an elegant unfinished one every time.
-15. No plugins. No new dependencies.
+14. Prefer the simple version. A working simple system beats an elegant unfinished one.
+15. No plugins. No new dependencies. Docker's base image and the Godot binary it downloads are
+    recorded in `CREDITS.md`.
 
 ## After coding
 
 16. Run the project and read the output. Fix every error and every warning you introduced.
-17. Test the changed system in isolation, then in a real match.
+17. Test the changed system in isolation, then in a real match. The suites are listed in
+    `docs/TESTING.md`. If you touched networking, run `test_net_sim` and `test_net`; if you
+    touched generation, `test_cave` and `test_wallwalk`.
 18. If you touched gravity, re-run AXIS-007: all six orientations, 20+ chained shifts, verify
     the basis is still orthonormal and the camera has not rolled.
 19. Update `docs/TASK_BOARD.md` status.
