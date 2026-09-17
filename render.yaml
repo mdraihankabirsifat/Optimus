@@ -1,10 +1,13 @@
+# NOTE: the live service is named six-ways-down-server and AppConfig.PUBLIC_SERVER_URL points
+# at it. Renaming the service creates a NEW url and breaks online play for anyone on the old
+# build, so this stays as deployed even though the game is now called Escave.
 # Render Blueprint for the Escave dedicated server.
 # Render builds the Dockerfile at the repository root and routes public HTTPS/WSS traffic
 # to the port it passes in PORT. Players connect to wss://<service-name>.onrender.com.
 # Nothing here is secret. See docs/NETWORKING.md for the step-by-step deployment.
 services:
   - type: web
-    name: escave-server
+    name: six-ways-down-server
     runtime: docker
     plan: free
     dockerfilePath: ./Dockerfile

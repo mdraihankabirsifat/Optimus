@@ -174,10 +174,10 @@ Not deployed by the team yet: it needs a Render account. Steps:
 
 1. Push the repository to GitHub (done).
 2. Render dashboard: New, Blueprint, pick the repository. `render.yaml` creates a free Docker
-   web service named `escave-server`. (Or: New, Web Service, Docker runtime, root
+   web service named `six-ways-down-server` (the name the live service already uses; renaming it changes the url). (Or: New, Web Service, Docker runtime, root
    Dockerfile, no start command.)
 3. Render sets `PORT` and terminates TLS. The server listens on `PORT` automatically.
-4. When it is live, players connect to `wss://escave-server.onrender.com`.
+4. When it is live, players connect to `wss://six-ways-down-server.onrender.com`.
 5. Optional: put that address in `AppConfig.PUBLIC_SERVER_URL` so it is the default, or open the
    web build with `?server=wss://...`, or run the exe with `-- --server-url=wss://...`.
 
