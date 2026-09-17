@@ -113,7 +113,10 @@ func default_server_url() -> String:
 			"new URLSearchParams(window.location.search).get('server') || ''", true)
 		if from_page is String and String(from_page) != "":
 			return String(from_page)
-	if SettingsManager.server_url != "":
+	# A browser page served over https may only open wss:// sockets, so a saved plain ws://
+	# address (a local test server) is skipped there rather than failing silently.
+	if SettingsManager.server_url != "" \
+			and not (OS.has_feature("web") and SettingsManager.server_url.begins_with("ws://")):
 		return SettingsManager.server_url
 	if AppConfig.PUBLIC_SERVER_URL != "":
 		return AppConfig.PUBLIC_SERVER_URL

@@ -72,9 +72,11 @@ address is under "Server settings" for LAN or local play) -> **Create Arena** or
 
 Verified locally with a real server and three client processes (`tests/test_net.gd`): two arenas at
 once, a double Create click, a bad and an unknown code, the host's Rush 8 minutes shown in the guest's
-lobby and applied in the guest's race, and a heart trade through the server. **Public internet play
-is not verified**: `AppConfig.PUBLIC_SERVER_URL` is empty until the team deploys the server (see
-Render below). Until then "the shared service" is whatever address is configured.
+lobby and applied in the guest's race, and a heart trade through the server. **Public server:** `AppConfig.PUBLIC_SERVER_URL` is `wss://six-ways-down-server.onrender.com`,
+the default for every client (desktop and browser). A web page on https can only open `wss://`,
+so a saved plain `ws://` address is ignored in the browser. Verified from this machine with
+`tests/public_probe.tscn`: one client created an arena on the Render server and a second joined it
+by code. A free Render instance may take up to a minute to wake on the first connection.
 
 ## Racer ids
 
