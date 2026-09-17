@@ -9,18 +9,22 @@ After submitting, the build and the final commit are frozen.
 ## Before submitting
 
 ### Build
-- [ ] Pull `main` on the machine that will export. Run the headless test suites (docs/TESTING.md).
-- [ ] Export Windows: `godot --headless --export-release "Windows Desktop" builds/windows/Escave.exe`
+- [x] Pull `main` on the machine that will export. Run the headless test suites (docs/TESTING.md).
+      (17 Sep, Windows, commit ac863e7: all 12 suites green -- 338, 134, 45, 30, 92, 46, 50, 3, 41, 80, 71, 43.)
+- [x] Export Windows: `godot --headless --export-release "Windows Desktop" builds/windows/Escave.exe`
+      (starts as a dedicated server: "ESCAVE listening ... protocol 3")
 - [ ] Copy `Escave.exe` to a Windows machine **without Godot**. Launch, play one Bot Race to results.
-- [ ] Export Web: `godot --headless --export-release "Web" builds/web/index.html`
-- [ ] If submitting web: upload `builds/web` as a zip on itch.io, "This file will be played in the browser",
+- [x] Export Web: `godot --headless --export-release "Web" builds/web/index.html`
+- [ ] If submitting web: upload `builds/Escave-Web.zip` (built, `index.html` at the zip root) on itch.io, "This file will be played in the browser",
       enable SharedArrayBuffer only if the page needs it (the export has threads off, so it does not).
       Play one Bot Race in Chrome from the itch.io page.
-- [ ] Zip the Windows exe as `Escave-Windows.zip` and upload.
-- [ ] Check no secrets or private URLs: `git grep -iE "token|secret|password|apikey"` should find only docs.
+- [x] Zip the Windows exe as `Escave-Windows.zip` (built in `builds/`)
+- [ ] Upload `Escave-Windows.zip` to itch.io.
+- [x] Check no secrets or private URLs: `git grep -iE "token|secret|password|apikey"` should find only docs.
 
 ### Online (optional for judging)
-- [ ] Deploy the server to Render (docs/NETWORKING.md). Note its `wss://` address.
+- [x] Deploy the server to Render (docs/NETWORKING.md). Live at `wss://six-ways-down-server.onrender.com`,
+      the default in `AppConfig.PUBLIC_SERVER_URL`. Create + join by code verified with `tests/public_probe.tscn`.
 - [ ] Two machines: Play, Mixed Race, that address, create and join a room, race to results.
 - [ ] If it works, put the address on the itch.io page. If not, say online needs a local server,
       and judge with Bot Race.
@@ -32,10 +36,12 @@ After submitting, the build and the final commit are frozen.
 
 ### Page and media
 - [ ] Title, short description, long description (itch.io copy below)
-- [ ] Cover image 630 x 500 and at least 5 screenshots (list below; 14 are in `builds/trailer/`)
+- [x] Cover image 630 x 500 (`builds/trailer/cover_630x500.png`) and 14 screenshots in `builds/trailer/`
+- [ ] Upload the cover and screenshots to the itch.io page
 - [ ] 60-90 s gameplay video uploaded (YouTube unlisted or itch.io) and linked
       (`builds/trailer/trailer.avi`, 80 s, ends on the Champion. Convert to mp4 before uploading;
-      there is no ffmpeg on the dev Mac, so QuickTime or a converter is the quickest route.)
+      there is no ffmpeg on the dev Mac or the Windows machine, so HandBrake, VLC or an online
+      converter is the quickest route. Re-recorded on Windows 17 Sep with the Escave build.)
 - [ ] GitHub link, engine and tools, controls, run instructions, credits, AI disclosure, known bugs,
       team members
 - [ ] Submitted to the jam, not only published

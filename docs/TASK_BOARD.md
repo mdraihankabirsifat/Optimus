@@ -89,8 +89,8 @@ everything above is complete and committed, and it is bound by the abort gate in
 | DUEL-013 | Server-authoritative duel online (`c_duel_fire`, `s_duel_state`, `s_duel_event`) | DONE | `tests/test_net_sim.gd`; real WebSocket duel in `tests/test_net.gd` |
 | DUEL-014 | Duel audio (qualified, intro, blaster, lock, core, shift, sudden death, hits, champion) and duel music | DONE | `AudioManager`, all synthesised |
 | DUEL-015 | Docs, How to Play, About, itch copy, shot list | DONE | this commit |
-| SHIP-P2-1 | Human online duel playtest, Windows and Web re-export, clean-machine and browser checks | TODO | |
-| SHIP-P2-2 | Final screenshots and the 60-90 s video ending on the Champion | TODO | shot list in `docs/SUBMISSION_CHECKLIST.md` |
+| SHIP-P2-1 | Human online duel playtest, Windows and Web re-export, clean-machine and browser checks | PARTLY DONE | Escave Windows and Web re-exported and zipped (`builds/Escave-*.zip`); web build driven in headless Chrome (6822713); Render create/join verified. Still a person: clean machine, human online duel. |
+| SHIP-P2-2 | Final screenshots and the 60-90 s video ending on the Champion | DONE (local files) | `tests/trailer.gd` recorded `builds/trailer/trailer.avi` (80 s) and 14 store shots plus a 630x500 cover. Convert the AVI to mp4 and upload. |
 
 ---
 
