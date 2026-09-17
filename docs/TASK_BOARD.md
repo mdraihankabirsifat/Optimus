@@ -66,10 +66,10 @@ everything above is complete and committed, and it is bound by the abort gate in
 | DUEL-010 | Spectator view and duel HUD | DONE | `scripts/ui/duel_hud.gd` |
 | DUEL-011 | Results: Champion, runner-up, cave order, duel stats; "Qualified", never "Winner" | DONE | `scripts/ui/results.gd`, `MatchController.build_results` |
 | DUEL-012 | Bot finalists fight | DONE | bot-vs-bot duel resolves in `tests/test_duel.gd` |
-| DUEL-013 | Server-authoritative duel online (`c_duel_fire`, `s_duel_state`, `s_duel_event`) | DONE, sim-tested | `tests/test_net_sim.gd`; not yet played over real sockets |
+| DUEL-013 | Server-authoritative duel online (`c_duel_fire`, `s_duel_state`, `s_duel_event`) | DONE | `tests/test_net_sim.gd`; real WebSocket duel in `tests/test_net.gd` |
 | DUEL-014 | Duel audio (qualified, intro, blaster, lock, core, shift, sudden death, hits, champion) and duel music | DONE | `AudioManager`, all synthesised |
 | DUEL-015 | Docs, How to Play, About, itch copy, shot list | DONE | this commit |
-| SHIP-P2-1 | Real-socket online duel playtest, Windows and Web re-export, clean-machine and browser checks | TODO | |
+| SHIP-P2-1 | Human online duel playtest, Windows and Web re-export, clean-machine and browser checks | TODO | |
 | SHIP-P2-2 | Final screenshots and the 60-90 s video ending on the Champion | TODO | shot list in `docs/SUBMISSION_CHECKLIST.md` |
 
 ---

@@ -43,6 +43,9 @@ The server owns everything that decides the race:
   on the server: it sets their arena spawn as the accepted pose and corrects any cave pose still
   in flight, which is what moves the client. Hits resolve against the server's copy of the target.
   While anyone has qualified the "all humans resolved" grace is off; the duel's own limits end it.
+  A finalist who disconnects has already finished the cave, so no bot takes it over: it forfeits
+  and the other finalist is Champion ("opponent left"). A disconnect while waiting simply leaves
+  Qualified 1st waiting for someone else.
 
 Clients own: their own movement, look, and everything rendered. A client's pose is accepted
 only if it is plausible: under 75 units/s of travel, inside world bounds, finite. Otherwise the

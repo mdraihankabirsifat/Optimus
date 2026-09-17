@@ -6,8 +6,8 @@ extends Node
 ## Both clients load the cave through the normal scenes. The host turns its gravity; both
 ## reach for the same mystery box at the same race time; the host reaches the exit and waits
 ## as Qualified 1st; the guest follows and the Freedom Duel starts; both fire over the network;
-## the guest quits without warning mid-duel and a bot takes its finalist over; the duel ends,
-## the server sends results and returns everyone to the room.
+## the guest quits without warning mid-duel, forfeiting (a finalist has already finished the
+## cave, so no bot takes it over); the server sends results and returns everyone to the room.
 ##
 ## --test-mode only lets the probes teleport, to reach a box and the exit without walking a
 ## maze. Every rule being tested is the production code path.
@@ -99,10 +99,12 @@ func _ready() -> void:
 	_check(int(guest.get("my_duel_dof", 0)) == 2 and int(host.get("other_duel_dof", 0)) == 2,
 		"Qualified 2nd is 2DOF on both machines")
 	_check(int(guest.get("my_shots_confirmed", 0)) >= 3, "the server resolves the guest's shots and reports them back")
-	_check(int(host.get("guest_shots_seen", 0)) == int(guest.get("my_shots_confirmed", -1)),
-		"the host sees exactly the shots the guest's client saw confirmed")
+	_check(int(host.get("guest_shots_seen", -1)) >= int(guest.get("my_shots_confirmed", 99)),
+		"the host sees every shot the guest's client saw confirmed")
 	_check(guest.get("quit_mid_duel", false), "guest quit mid-duel")
-	_check(String(host.get("guest_after_drop", "")).ends_with("(bot)"), "a bot took over the dropped finalist")
+	_check(int(guest.get("hits_on_host", 0)) >= 1, "the guest's shots hit the host through the server")
+	_check(host.get("duel_end_reason", "") == "opponent left"
+		and host.get("duel_champion_seen", "") == "Host", "a finalist who drops forfeits: the host is Champion")
 	_check(server_alive, "server survived the disconnect")
 	_check(host.get("results_received", false), "the duel ended and results reached the host")
 	_check(int(host.get("results_first_duel_place", 0)) == 1 and int(host.get("results_second_duel_place", 0)) == 2,

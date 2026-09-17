@@ -18,7 +18,32 @@ godot --headless res://tests/test_net.tscn        # real WebSocket race: server 
 godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=20   # physical bot races, ~3 min
 ```
 
-## Results on 17 September 2026 (Windows 11, Godot 4.7.2)
+## Results after Master Prompt 2 (17 September 2026, Windows 11, Godot 4.7.2)
+
+Run with `--headless --fixed-fps 60` except `test_net` (real sockets, wall clock).
+
+| Suite | Checks | Result |
+|---|---|---|
+| test_gravity | 338 (adds current-frame axes on six gravities, chained shifts, real walking on six faces) | pass |
+| test_cave | 59 plus per-seed assertions (adds cave shape per preset, long loops) | pass |
+| test_match | 43 | pass |
+| test_bot | 30, 60 caves | pass |
+| test_duel | 86 (qualification, DOF, health, weapons, lock immunity, core, shifts, sudden death, results, fallbacks, bot-vs-bot duel) | pass |
+| bot_physical | 10 caves x 4 Hard bots, duel off | 30/40 finish (75%); every cave has 2+ finishers |
+| test_flow | 46 | pass |
+| test_wallwalk | 3 (5 wall climbs, 5 drops) | pass |
+| test_themes | 30 | pass |
+| test_net_lobby | 37 | pass |
+| test_net_sim | 80 (adds server-owned duel: finalists, hits once, cooldown, garbage aim, lock, core owner, forfeit, client mirror) | pass |
+| test_net | 36: real server + 2 clients; host Qualified 1st, guest Qualified 2nd, FIGHT on both, DOF synced, 8/8 guest shots hit via the server, guest drops and forfeits, results lead with the Champion | pass |
+
+`godot --headless --fixed-fps 60 res://tests/test_duel.tscn` and
+`godot --headless res://tests/cave_metrics.tscn -- seeds=100 size=1` are new.
+
+Not yet re-verified after Prompt 2: Windows and Web exports, a clean machine, a browser, and
+human playtests of the duel's feel (weapon timing, bot difficulty, arena readability).
+
+### Prompt 1 results (for comparison)
 
 | Suite | Checks | Result |
 |---|---|---|

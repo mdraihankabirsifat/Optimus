@@ -131,6 +131,9 @@ func _run() -> void:
 	# and a bot takes its finalist over.
 	var duel: FreedomDuel = world.get("duel")
 	var finish := WorldScope.first(world, "finish_area") as Area3D
+	duel.duel_ended.connect(func(c: PlayerController, _r: PlayerController, reason: String) -> void:
+		obs["duel_champion_seen"] = c.display_name if c != null else ""
+		obs["duel_end_reason"] = reason)
 	var shots_by := {"me": 0, "other": 0, "hits_on_other": 0}
 	duel.shot.connect(func(sh: PlayerController, _k: String, _f: Vector3, _t: Vector3, hit: PlayerController) -> void:
 		if sh == me:
@@ -164,7 +167,8 @@ func _run() -> void:
 		# Fire a burst at the host through the real network path, then vanish.
 		for i in 8:
 			var eye := me.head.global_position
-			m.send_duel_fire("pulse", eye, (other.global_position - eye).normalized())
+			# At the head: aimed at the body, the waist-high cover in front of the host stops it.
+			m.send_duel_fire("pulse", eye, (other.head.global_position - eye).normalized())
 			await get_tree().create_timer(AppConfig.PULSE_COOLDOWN + 0.15).timeout
 		await get_tree().create_timer(1.0).timeout
 		obs["my_shots_confirmed"] = shots_by["me"]
@@ -174,30 +178,33 @@ func _run() -> void:
 		get_tree().quit(0)
 		return
 
-	var guest_gone := func() -> bool:
-		return String(m.mc.racers[other_rid]["name"]).ends_with("(bot)") \
-			or bool(m.mc.racers[other_rid]["disconnected"])
-	await _until(guest_gone, 25.0)
-	obs["guest_after_drop"] = String(m.mc.racers[other_rid]["name"])
-	obs["guest_shots_seen"] = shots_by["other"]
-	obs["hearts_after_guest_fire"] = me.health.hearts
-	obs["duel_still_running_after_drop"] = duel.phase == FreedomDuel.Phase.FIGHT or duel.phase == FreedomDuel.Phase.ENDED
-
-	# Keep shooting at whoever holds the other finalist now, until the duel ends.
+	# One loop until results arrive: keep shooting at whoever holds the other finalist, note
+	# the takeover, and stop touching the race the moment its scene is freed for results.
 	var have_results := func() -> bool:
 		return GameState.last_results_online and not GameState.last_results.is_empty()
-	var end := Time.get_ticks_msec() + int((AppConfig.DUEL_HARD_LIMIT + 30.0) * 1000.0)
+	obs["guest_after_drop"] = ""
+	var end := Time.get_ticks_msec() + int((AppConfig.DUEL_HARD_LIMIT + 40.0) * 1000.0)
 	while Time.get_ticks_msec() < end and not have_results.call():
-		if duel.phase == FreedomDuel.Phase.FIGHT and float(duel.fighters.get(me, {}).get("pulse_cd", 0.0)) <= 0.0:
+		if not is_instance_valid(m) or not is_instance_valid(duel):
+			await get_tree().process_frame
+			continue
+		var other_name := String(m.mc.racers[other_rid]["name"])
+		if other_name.ends_with("(bot)") or bool(m.mc.racers[other_rid]["disconnected"]):
+			if String(obs["guest_after_drop"]) == "":
+				obs["guest_after_drop"] = other_name
+				obs["guest_disconnected_flag"] = bool(m.mc.racers[other_rid]["disconnected"])
+		# Hold fire until the guest has gone, so the forfeit path is what ends this duel.
+		if String(obs["guest_after_drop"]) != "" and duel.phase == FreedomDuel.Phase.FIGHT \
+				and float(duel.fighters.get(me, {}).get("pulse_cd", 1.0)) <= 0.0:
 			var eye := me.head.global_position
 			m.send_duel_fire("pulse", eye, (other.global_position + Vector3(0, 0.3, 0) - eye).normalized())
 			duel.fighters[me]["pulse_cd"] = AppConfig.PULSE_COOLDOWN
+		obs["my_shots_confirmed"] = shots_by["me"]
+		obs["my_hits"] = shots_by["hits_on_other"]
+		obs["guest_shots_seen"] = shots_by["other"]
 		await get_tree().process_frame
-	obs["my_shots_confirmed"] = shots_by["me"]
-	obs["my_hits"] = shots_by["hits_on_other"]
 	var results_seen: bool = have_results.call()
 	obs["results_received"] = results_seen
-	obs["duel_champion_seen"] = duel.champion.display_name if duel.champion != null else ""
 	if results_seen:
 		var names: Array = []
 		for entry: Dictionary in GameState.last_results:
