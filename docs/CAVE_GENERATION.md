@@ -72,6 +72,41 @@ Physical bots in the new caves (`tests/bot_physical.tscn -- seeds=10`, four Hard
 30 of 40 finish, and every cave had at least two finishers, so every race reaches the Freedom Duel.
 Before the doorway funnels it was 17 of 40.
 
+## Rulesets: Normal and Rush profiles (Prompt 3)
+
+`CaveGenerator.configure(size, ruleset, rush_seconds)` is the only way a race configures the
+generator, on the server, on every client and in tests. Normal is exactly the size preset (its
+output is unchanged, checked seed by seed in `test_cave`). Rush applies `apply_rush_profile()` on
+top: fewer and shorter side branches, one or two loops, two planned vertical steps (three for
+8 minutes), shorter legs and runs, a shorter minimum route, fewer boxes and fires. The 3-minute
+profile is the gentlest. The exit is still hidden; Rush is easier to read, not solved.
+
+`CaveGenerator.profile` ("normal", "rush180", "rush300", "rush480") is part of the race's record key
+together with the generator version and Move regen (`GameState.make_record_tag`), so records and
+ghosts from different rules never mix. Old "seed:size" records stay in the file untouched.
+
+Measured, 60 seeds per row (`tests/cave_metrics.tscn -- seeds=60 size=N [rush=S]`):
+
+| Size | Rules | Cells | Route hops avg (min-median-max) | Dead ends | Loops | Off-route cells | Moves needed |
+|---|---|---|---|---|---|---|---|
+| Short | Normal | 53.8 | 22.2 (10-24-38) | 4.2 | 2.0 | 54% | 1.17 |
+| Short | Rush 3 min | 25.1 | 14.4 (7-14-23) | 2.0 | 1.0 | 33% | 1.02 |
+| Short | Rush 8 min | 28.1 | 16.0 (7-16-27) | 2.0 | 1.0 | 35% | 1.10 |
+| Standard | Normal | 82.9 | 27.6 (14-26-56) | 6.6 | 3.0 | 64% | 0.98 |
+| Standard | Rush 3 min | 33.0 | 15.4 (9-15-27) | 2.0 | 2.0 | 42% | 1.10 |
+| Standard | Rush 5 min | 36.4 | 15.7 (8-15-26) | 2.5 | 2.0 | 49% | 1.03 |
+| Standard | Rush 8 min | 39.9 | 18.9 (11-19-33) | 2.7 | 2.0 | 44% | 1.00 |
+| Long | Normal | 129.4 | 33.3 (20-32-56) | 9.9 | 5.0 | 72% | 1.13 |
+| Long | Rush 3 min | 39.5 | 18.9 (11-18-31) | 2.5 | 2.0 | 44% | 1.02 |
+| Long | Rush 8 min | 51.3 | 23.0 (14-22-42) | 4.3 | 2.0 | 49% | 1.13 |
+
+`tests/test_cave.gd` asserts, per size and Rush length over 30 seeds: every seed generates and is
+solvable, the same configuration gives the same cave, the route is under 80% of Normal's, fewer
+dead ends and a smaller off-route share, and every Rush cave still has a loop and climbs and descends.
+
+Prompt 3 decor rule: stalagmites, stalactites and crystal clusters are solid now, so they are placed
+only in chambers (spikes only in landmark chambers). Doorway funnels were already there.
+
 ## Validation
 
 | Invariant | Check |

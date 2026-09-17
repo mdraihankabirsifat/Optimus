@@ -51,6 +51,31 @@ Clients own: their own movement, look, and everything rendered. A client's pose 
 only if it is plausible: under 75 units/s of travel, inside world bounds, finite. Otherwise the
 server sends a correction. Gravity in a pose is ignored; the server's frame stands.
 
+## Arenas (Prompt 3)
+
+Play -> enter your name -> Online or Mixed -> Continue (the configured shared service; the server
+address is under "Server settings" for LAN or local play) -> **Create Arena** or **Join Arena**.
+
+- The server issues a 4-character code from an alphabet without look-alike characters, unique among
+  open arenas (64 bounded retries). The creator is host and sees the code large with **Copy Code**.
+- Repeated Create clicks within 2 s return the arena already made; joining an arena you are in
+  resends it; a code of the wrong shape, an unknown or closed code, a full arena and one mid-race are
+  each refused with a plain message. The client checks the code's shape first for instant feedback;
+  the server validates everything again.
+- Host-only actions (slots, bots, seed, size, skill, regen, environment, **ruleset**, **Rush length**,
+  start) check the sender. Rush length must be 180, 300 or 480; anything else is refused. The rules
+  are frozen into the match config at start and every client builds the same cave from it.
+- Names: 1-20 characters, any language, control characters and markup brackets removed, duplicates
+  suffixed ("Sam 2"). Validated on the server too; the peer id, not the name, is the identity.
+- An arena closes when its last human leaves, and its race world is freed with it.
+- Each arena's race runs in its own SubViewport world; group lookups go through `WorldScope`.
+
+Verified locally with a real server and three client processes (`tests/test_net.gd`): two arenas at
+once, a double Create click, a bad and an unknown code, the host's Rush 8 minutes shown in the guest's
+lobby and applied in the guest's race, and a heart trade through the server. **Public internet play
+is not verified**: `AppConfig.PUBLIC_SERVER_URL` is empty until the team deploys the server (see
+Render below). Until then "the shared service" is whatever address is configured.
+
 ## Racer ids
 
 Every racer has a `rid`: its slot index in the lobby, its index in `MatchController.racers`,
@@ -80,7 +105,8 @@ Server to client: `s_welcome`, `s_notice`, `s_pong`, `s_lobby(snapshot)`, `s_lef
 `s_crumble`, `s_finished`, `s_eliminated`, `s_replaced`, `s_correct`, `s_emote`, `s_results`,
 `s_duel_state(state)` (phase, finalist rids, clock, shift, core, and per finalist DOF, axis, lock,
 immunity, core boost, cooldowns, hearts, shield, stats) and `s_duel_event(kind, args)` (`shot`,
-`locked`, `resisted`, `core`, `end`). `PROTOCOL_VERSION` is 2.
+`locked`, `resisted`, `core`, `end`). Prompt 3 adds `c_exchange` / `s_exchange(reason)` and a
+fifth `grace_left` argument on `s_racer_state`. `PROTOCOL_VERSION` is 3.
 
 WebSocket runs over TCP, so every message arrives in order whatever transfer mode is declared.
 

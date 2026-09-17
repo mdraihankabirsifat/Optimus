@@ -46,7 +46,7 @@ fight where getting out first earned you the third degree of freedom, and the wi
 | Mode | Racers | Needs |
 |---|---|---|
 | Bot Race | you + 0-4 bots (0 is Time Trial) | nothing, fully offline |
-| Online Race | 2-5 humans | a server |
+| Online Race | 2-5 humans. **Create Arena** gives you a 4-character code (Copy Code); friends choose **Join Arena** and type it | a server |
 | Mixed Race | 2-5 racers, at least one human, fill empty slots with bots | a server |
 
 Every race has 2-5 racers. The host sets the count, adds or removes bots, picks the cave and starts.
@@ -67,14 +67,34 @@ Every race has 2-5 racers. The host sets the count, adds or removes bots, picks 
 | Esc | Menu (offline it pauses; online the race keeps running) |
 | Tab | Next racer while spectating |
 | Enter | End the race early once you are done (offline) |
+| **H** | Trade one full heart for one Move (off when Move regen is on) |
 | **Left mouse** | Freedom Duel: Pulse Blaster (hold to repeat) |
 | **Right mouse / Q** | Freedom Duel: Axis Lock |
 
-Keys can be remapped in Settings. Running from source, F3 shows the developer overlay (cave graph and bot knowledge); exported builds do not have it.
+These are the default keys. Every key can be remapped in Settings, and every hint in the game
+(box prompt, gravity preview, spectator and duel lines, map, tips, How to Play) shows the key you
+actually bound, the moment you change it. Settings also has invert Y, sensitivity, volumes,
+fullscreen and graphics quality. There is no window-size option: turn fullscreen off for a normal
+window with a title bar, and resize or maximise it like any other. Running from source, F3 shows the
+developer overlay; exported builds do not have it.
 
- Invert Y, sensitivity, volumes, window size and quality too.
+The HUD has a **compass** fixed to the world (N is -Z, E is +X). Changing your gravity never renames
+north, so a racer on the ceiling facing the same way as one on the floor reads the same bearing. It
+shows only your own facing, never the exit.
 
 ## Rules at a glance
+
+- **Enter your name** on the Play screen before any race (1-20 characters, any language). It is saved
+  and shown everywhere, offline and online.
+- **Normal or Rush**, for every mode. Normal: the full cave, no time limit, the clock counts up.
+  Rush: 3, 5 or 8 minutes on an easier cave (about 40% shorter route, a third to half the dead ends).
+  If time runs out with one qualifier they are Champion by default; with none, nobody is.
+- **Trade a heart for a Move** (H): one full heart for one Move. Trading your last heart still gives
+  the Move, then 20 seconds before elimination -- press twice, it cannot be cancelled, reaching the exit
+  in time qualifies you as normal. Switched off when Move regen is on.
+- Racers are **solid**: you cannot walk through another racer. Finished and eliminated racers stop
+  blocking. Stalagmites and stalactites (only in landmark chambers) are solid and sting; crystals are solid.
+- Floor fire is low enough to pass over on the ceiling or along the clear wall.
 
 - 5 hearts (half-hearts exist) and 5 Moves. A 90° and a 180° both cost one Move.
 - Moves work anywhere, even mid-air. Shifting into empty space is legal: you fall.

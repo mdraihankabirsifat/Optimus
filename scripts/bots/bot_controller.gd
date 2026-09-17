@@ -104,6 +104,23 @@ func _ready() -> void:
 	_body = get_parent() as PlayerController
 	assert(_body != null, "BotController must be a child of a PlayerController")
 	_body.is_local_player = false
+	_listen_for_damage.call_deferred()
+
+
+## Getting hurt somewhere is something the bot felt: that cell is dangerous from now on,
+## exactly as a person would remember it. And a stall that hurts must not wait politely.
+## Deferred: the racer's health node is only ready after this controller.
+func _listen_for_damage() -> void:
+	if _body == null or _body.health == null:
+		return
+	_body.health.damaged.connect(func(_amount: float, _source: String) -> void:
+		if _body.duel_dof > 0:
+			return
+		var here := CaveBuilder.world_to_cell(_body.global_position)
+		knowledge.observe_hazard(here)
+		if _stall >= STALL_REPLAN and _stage < 2:
+			_stage = 2
+			_stall = STALL_ESCAPE)
 
 
 func _physics_process(delta: float) -> void:

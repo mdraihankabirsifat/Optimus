@@ -41,6 +41,26 @@ everything above is complete and committed, and it is bound by the abort gate in
 
 ---
 
+## MASTER PROMPT 3 (17 September, on top of Prompt 2)
+
+`OPTIMUS_Master_Prompt_3.txt`, thirteen requests. Evidence is in `tests/test_prompt3.gd` unless noted.
+
+| ID | Request | Status | Root cause / evidence |
+|---|---|---|---|
+| P3-01 | Fire avoidable from the ceiling | DONE | The 2.4-unit flame box reached into a ceiling walker in a 4-unit tunnel. Flames are now at most a third of the cell height; real bodies cross on the ceiling and the clear wall unhurt, floor contact still burns once per tick. |
+| P3-02 | Normal and Rush | DONE | Normal: no cave limit (`test_match`: still racing at 15 min). Rush 3/5/8 min, easier generator profile (`test_cave`, `docs/CAVE_GENERATION.md` table), expiry with 0/1/2 qualifiers (`test_duel`), records keyed by rules, synced online (`test_net`). |
+| P3-03 | Create Arena / Join by code | DONE (local) | Copy Code, bounded unique codes, double-click and bad-code handling, two arenas at once, synced names and rules over real sockets (`test_net`). Public internet play needs the server deployed. |
+| P3-04 | Trade a heart for a Move | DONE | One transaction for player, server and bots; 20 s last-heart deadline; regen switches it off; server debounce (`test_prompt3`, `test_net`). |
+| P3-05 | Hints follow remapping | DONE | `MysteryBox.prompt_text()` hard-coded "[E]". All hints now use `UiKit.binding_text`; E->R, swap and reset tested. |
+| P3-06 | Remove overtake callouts | DONE | FUN-003 removed on request, not broken. |
+| P3-07 | World compass | DONE | N=-Z fixed; same bearing on every surface and through chained shifts; stable looking straight up/down. |
+| P3-08 | Racer, spike and crystal collision | DONE | Racers masked only the world (1). Now solid to each other on all six surfaces; finished/eliminated racers stop blocking; spikes solid and damaging, crystals solid, chambers only. |
+| P3-09 | Player name | DONE | Play screen field, saved, 1-20 characters, Unicode, markup removed, blank refused; server validates (`test_net_lobby`). |
+| P3-10 | Native title bar when windowed | DONE in code | Likely cause: a saved 1920x1080 window on a 1080p monitor put the title bar off-screen. Windowed mode now clears borderless and fits the window to the usable area. **Needs a person on a standalone Windows build.** |
+| P3-11 | Remove Window Size | DONE | Selector removed; old saved value ignored (screenshot `tests/shots/menu_settings_720.png`). |
+| P3-12 | Bots escape pits with gravity | DONE | Ledge too high to jump: ceiling flip, or wall turn and climb when there is no ceiling; one Move per shift; regen wait; heart trade; last-heart refusal. |
+| P3-13 | Bots that stop moving | DONE, keep measuring | Progress watchdog with staged recovery, blocked passages, head-on yielding, damage-learned hazards. Physical runs now end mostly in finishes or explained eliminations; see `docs/TESTING.md`. |
+
 ## MASTER PROMPT 2 (17 September, on top of `prompt1-complete`)
 
 `OPTIMUS_Master_Prompt_2.txt`. Status as of this commit.

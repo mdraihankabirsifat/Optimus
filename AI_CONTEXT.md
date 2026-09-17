@@ -54,7 +54,17 @@ These came from the team's design document. Do not alter them without an explici
 | Solvability | Built solvable by construction **and** checked by `CaveValidator` over (cell, gravity, Moves). |
 | Art | `CaveTheme` data: Stone Age, Jungle, Dark Cave, City Drain. Visual only; generation never reads it. |
 
-## Master Prompt 2 (17 Sept, in progress on top of tag `prompt1-complete`)
+## Master Prompt 3 (17 Sept, on top of Prompt 2)
+
+`OPTIMUS_Master_Prompt_3.txt`: thirteen requests. Built and tested: fire passable on the ceiling;
+solid racers, spikes and crystals; Normal and Rush rulesets (easier Rush generator profile, cave
+deadline, zero/one/two-qualifier expiry, records keyed by rules); Create Arena / Join Arena by code;
+trading a heart for a Move with a 20 s last-heart deadline; every key hint follows remapping; overtake
+callouts removed; world compass; name entry; decorated window when not fullscreen; no Window Size
+setting; bot watchdog with gravity escapes. See `docs/CORE_MECHANICS.md` section 12 and
+`docs/TASK_BOARD.md`. Needs a person: standalone Windows window check, public server deployment.
+
+## Master Prompt 2 (17 Sept, on top of tag `prompt1-complete`)
 
 `OPTIMUS_Master_Prompt_2.txt` is a delta on Prompt 1. Built so far:
 

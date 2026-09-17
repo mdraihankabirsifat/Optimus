@@ -132,8 +132,12 @@ duel), the major mechanics, and the theme connection.
 > - Four environments: Stone Age, Jungle, Dark Cave and City Drain
 > - Ghost of your best run, daily cave, three cave sizes, three bot skills
 >
-> **Controls:** Mouse look · WASD walk · Shift sprint · Space jump · G+WASD turn 90° · G+Space flip 180° ·
-> E open box · M map · Esc menu · Duel: left mouse Pulse Blaster, right mouse or Q Axis Lock
+> **Controls (default, all remappable):** Mouse look · WASD walk · Shift sprint · Space jump · G+WASD turn 90° ·
+> G+Space flip 180° · E open box · H trade a heart for a Move · M map · Esc menu · Duel: left mouse Pulse Blaster,
+> right mouse or Q Axis Lock
+>
+> **Normal or Rush:** race the full cave with no clock, or pick Rush for 3, 5 or 8 minutes on an easier cave.
+> Create an arena and share its code, or join a friend's.
 >
 > **Team Optimus:** Md. Raihan Kabir Sifat, Estiak Zaman Atul, Sadman Sakib, Ashraf Hossain Chowdhury
 >
@@ -163,3 +167,8 @@ local-multiplayer, godot, game-jam · **Engine:** Godot · **Platforms:** Window
 - Racers still in the cave when the Freedom Duel starts stop where they are; they are ranked by how
   close they were to the exit, not by finishing.
 - The duel arena is one fixed layout, the same in every environment.
+- Public online play needs the team to deploy the server; until then Online and Mixed Race use a
+  server address you run yourself (Offline Bot Race always works).
+- The windowed title bar fix (fullscreen off) is verified in code, not yet by a person on a standalone
+  Windows build.
+- Rival overtake callouts were removed on purpose (team request), not lost.

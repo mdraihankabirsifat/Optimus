@@ -29,12 +29,12 @@ func _ready() -> void:
 	col.add_child(_name_note)
 
 	var bot := _mode_card(col, "Bot Race",
-		"You against 1-4 bots. Offline, no internet needed.",
+		"You against 0-4 bots, Normal or Rush. Offline, no internet needed.",
 		func() -> void:
 			if _save_name():
 				SceneRouter.go_to(SceneRouter.LOBBY))
 	_mode_card(col, "Online Race",
-		"2-5 humans. Create a room and share its code, or join one.",
+		"2-5 humans. Create an arena and share its code, or join one.",
 		func() -> void: _online("online"))
 	_mode_card(col, "Mixed Race",
 		"Humans and bots together, 2-5 racers. Fill empty slots with bots.",

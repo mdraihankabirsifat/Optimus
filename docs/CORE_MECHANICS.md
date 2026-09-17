@@ -338,3 +338,55 @@ Duel stats per finalist: duration, damage dealt, Axis Locks landed, cores captur
 place it happened. Clients send `c_duel_fire(kind, origin, dir)`; the server checks the phase,
 the cooldown and that the muzzle is at the shooter, then resolves the hit. A client's
 `FreedomDuel` is a mirror that never resolves anything. See `docs/NETWORKING.md`.
+
+---
+
+## 12. Master Prompt 3: timers, the last-heart state, contact and bots
+
+**Four separate clocks, never mixed.**
+
+| Clock | Where | Runs | Ends |
+|---|---|---|---|
+| Elapsed | `MatchController.elapsed` | from GO | never ends the race in Normal |
+| Rush cave deadline | `MatchController.cave_time_limit` | from GO, Rush only (180/300/480 s) | `_expire_cave()` once |
+| Last-heart grace | `PlayerHealth.grace_left` | 20 s from the trade that spent the last heart | eliminates once; cleared on qualifying |
+| Duel | `FreedomDuel.duel_time` | from FIGHT | sudden death 60 s, decision 90 s |
+
+Rush expiry, exactly once, cave phase only: two qualifiers -> the duel keeps running and anyone
+still in the cave is DNF; one qualifier -> Champion by default ("Rush time up"); none -> race over,
+"Time up -- no qualifiers", no Champion. A finish at or before the deadline counts; later ones do
+not. Normal has no cave deadline and no waiting limit: Qualified 1st waits while anyone can still
+qualify, and the race resolves through elimination, disconnection or everyone resolving. Grace
+never extends a Rush deadline.
+
+**Heart for a Move.** `GameWorld.request_heart_exchange(body)` is the only transaction, used by
+the local player offline, by the server for `c_exchange`, and by bots. It checks: racing in the
+cave (not countdown, not finished, not eliminated, not a finalist, cave not expired), Move regen
+off, Moves below the cap, and at least one full heart. Then it takes exactly one heart
+(`PlayerHealth.exchange_heart()`, not the damage path: shields, invulnerability and Second Chance
+play no part) and adds exactly one Move. If that took the last heart, `grace_left` starts at 20 s.
+Health states: active (hearts > 0) -> last-heart grace (0 hearts from a trade, still playable) ->
+eliminated; or qualified (grace cleared) -> duel health. Nothing resets or extends the deadline;
+a Heart Refill restores hearts but the deadline still fires. A real hit at zero hearts during grace
+eliminates as usual. The player must press twice to spend the last heart; the server debounces
+repeated requests (0.25 s). Online, `s_racer_state` carries `grace_left` with hearts and Moves.
+
+**Contact.** Racers are on layer 2 and now mask layer 2 as well, so they collide with each other
+on every surface (`tests/test_prompt3.gd` walks one into another under all six gravities and pulls
+overlapping racers apart). `PlayerController.set_solid(false)` takes a finished or eliminated
+racer off layer 2: it stops blocking and stops triggering hazards but still stands on the world.
+Freedom Duel finalists are made solid again in the arena. Fire's damaging box is the flame you see
+and at most about a third of the cell's height (1.4 units in a tunnel), leaving a ceiling walker
+2.4 units of clearance. Spikes (`SpikeHazard`) have a solid core and a slightly larger damaging
+shell, half a heart per touch with a 1 s cooldown; crystal clusters have a box collider and do not
+hurt. Both are only placed in landmark chambers, so they can never close a route in a 4-unit tunnel.
+
+**Bots that stop.** `BotController._watchdog` tracks real progress (moving 1.2 units). An explained
+wait (countdown, easy-bot pause, gravity turn, waiting for a regenerated Move) never escalates.
+An unexplained stall escalates: 2.5 s replan; 5 s mark that passage blocked for 20 s
+(`BotKnowledge.block_edge`, which the planner skips) and hop; 8 s gravity escape -- flip onto the
+ceiling if the cell has one, else turn onto a solid wall and climb toward the old ceiling past the
+lip -- paid for with a Move (or waiting for regen, or trading a heart if legal and not the last
+one), at most two escapes per cell; 14 s cycle again. Two racers nose to nose: the higher instance
+id steps right for 0.7 s. `debug_state()` reports stage, note, wait reason and recovery count for
+tests and logs only.

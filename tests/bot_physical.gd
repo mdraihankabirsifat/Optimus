@@ -6,14 +6,17 @@ extends Node
 ##   seeds=N   how many caves (default 10)
 ##   walls=0/1 allow 90-degree wall-walk planning (default: the planner's own default)
 ##   skill=0-2 (default 2)
+##   rush=180/300/480   race a Rush cave of that length (the race limit becomes the Rush length)
+##   limit=S   race time limit in seconds (default 150)
 ## Exits non-zero if fewer than 75% of bots finish, which would mean bots are getting stuck.
 
-const RACE_LIMIT := 150.0
+var RACE_LIMIT := 150.0
 const BOTS := 4
 
 var _seeds := 10
 var _skill := 2
 var _walls := -1
+var _rush := 0
 
 
 func _ready() -> void:
@@ -26,6 +29,10 @@ func _ready() -> void:
 			"seeds": _seeds = int(kv[1])
 			"skill": _skill = int(kv[1])
 			"walls": _walls = int(kv[1])
+			"rush":
+				_rush = int(kv[1])
+				RACE_LIMIT = float(_rush)
+			"limit": RACE_LIMIT = float(kv[1])
 	if _walls >= 0:
 		BotPlanner.wall_walks_enabled = _walls == 1
 	print("\nphysical bot races: %d caves x %d bots, skill %d, wall-walks %s"
@@ -43,6 +50,9 @@ func _ready() -> void:
 		world.fixed_seed = s
 		world.bot_count = BOTS
 		world.bot_skill = _skill
+		if _rush > 0:
+			world.ruleset = AppConfig.RULESET_RUSH
+			world.rush_seconds = _rush
 		# Measures cave traversal only; the Freedom Duel would stop the field at two finishers.
 		world.duel_enabled = false
 		add_child(world)
