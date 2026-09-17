@@ -227,6 +227,7 @@ Completed 17 September 2026.
 | LEVEL-014 | `CaveValidator`: gravity-aware solvability over (cell, gravity, Moves), structural checks, wired into generation. Every one of 200 seeds solvable within 5 Moves |
 | AXIS-011 | `test_wallwalk`: the real controller walks up a wall into a shaft and drops through open floors, as the validator assumes |
 | BOT-010 | Bots use clues from boxes they open themselves |
+| UI-018 | Online lobby fits at 1280x720: compact host dropdowns, Start and Leave beside the room code. Checked by screenshot at 720p and 1080p |
 | LEVEL-015 | Developer overlay (F3, debug builds only): cells, edges, spine, shafts, spawn/exit, boxes, hazards, a bot's knowledge and plan. Screenshot reviewed |
 | ART-012 | `CaveTheme` data: Stone Age, Jungle (roots), Dark Cave (glow-worms, personal lamp), City Drain (pipes). Picked in both lobbies, sent in the online config. `test_themes` 30/30; screenshots reviewed |
 | BOT-011 | Planner searches all six gravities; bots turn onto a wall when it saves a Move (arch test). `tests/bot_physical.gd`: 77/80 physical bot races finish. Preferring walls outright dropped that to 70%, so it is not preferred |

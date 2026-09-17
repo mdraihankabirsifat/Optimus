@@ -21,8 +21,8 @@ func _ready() -> void:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right"]:
-		margin.add_theme_constant_override("margin_" + side, 70)
-	margin.add_theme_constant_override("margin_top", 24)
+		margin.add_theme_constant_override("margin_" + side, 36)
+	margin.add_theme_constant_override("margin_top", 12)
 	margin.add_theme_constant_override("margin_bottom", 20)
 	add_child(margin)
 	var scroll := ScrollContainer.new()
@@ -30,7 +30,7 @@ func _ready() -> void:
 	margin.add_child(scroll)
 	_body = VBoxContainer.new()
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_body.add_theme_constant_override("separation", 12)
+	_body.add_theme_constant_override("separation", 8)
 	scroll.add_child(_body)
 
 	# Bound methods, not lambdas: Godot drops these connections when this screen is freed.
@@ -66,7 +66,7 @@ func _rebuild() -> void:
 		child.queue_free()
 
 	var heading := "Mixed Race" if _mode() == LobbyState.MODE_MIXED else "Online Race"
-	_body.add_child(UiKit.title(heading, 52))
+	_body.add_child(UiKit.title(heading, 44))
 	_body.add_child(_status_label())
 
 	_notice = UiKit.label(keep_notice, 18, keep_colour)
@@ -220,7 +220,7 @@ func _build_room() -> void:
 	var mixed := String(lobby["mode"]) == LobbyState.MODE_MIXED
 
 	var code_row := _row()
-	code_row.add_child(UiKit.title("ROOM  %s" % lobby["code"], 44, UiKit.SKY))
+	code_row.add_child(UiKit.title("ROOM  %s" % lobby["code"], 36, UiKit.SKY))
 	code_row.add_child(UiKit.label("share this code", 17, UiKit.TEXT_DIM))
 
 	var columns := HBoxContainer.new()
@@ -230,7 +230,8 @@ func _build_room() -> void:
 
 	# Slots
 	var slots_panel := PanelContainer.new()
-	slots_panel.custom_minimum_size = Vector2(560, 0)
+	slots_panel.custom_minimum_size = Vector2(470, 0)
+	slots_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	columns.add_child(slots_panel)
 	var slots := VBoxContainer.new()
 	slots.add_theme_constant_override("separation", 6)
@@ -242,21 +243,22 @@ func _build_room() -> void:
 
 	# Settings
 	var cfg_panel := PanelContainer.new()
-	cfg_panel.custom_minimum_size = Vector2(520, 0)
+	cfg_panel.custom_minimum_size = Vector2(440, 0)
+	cfg_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	columns.add_child(cfg_panel)
 	var cfg := VBoxContainer.new()
-	cfg.add_theme_constant_override("separation", 8)
+	cfg.add_theme_constant_override("separation", 4)
 	cfg_panel.add_child(cfg)
 	if host:
 		_build_host_controls(cfg, lobby, mixed)
 	else:
 		_build_guest_view(cfg, lobby, mixed)
 
-	# Actions
-	var actions := _row()
+	# Actions sit beside the room code, so Start is on screen at 720p without scrolling.
+	var actions := code_row
 	if host:
 		var problem := String(lobby.get("start_problem", ""))
-		var start := UiKit.button("Start Race" if problem == "" else problem, func() -> void: NetManager.start_race(), 420)
+		var start := UiKit.button("Start Race" if problem == "" else problem, func() -> void: NetManager.start_race(), 300)
 		start.disabled = problem != ""
 		actions.add_child(start)
 		if problem == "":
@@ -265,10 +267,10 @@ func _build_room() -> void:
 		var me := _my_slot(filled)
 		var ready_now := bool(me.get("ready", false))
 		var ready := UiKit.button("Not ready" if ready_now else "Ready up", func() -> void:
-			NetManager.set_ready(not ready_now), 300)
+			NetManager.set_ready(not ready_now), 220)
 		actions.add_child(ready)
 		ready.grab_focus.call_deferred()
-	actions.add_child(UiKit.button("Leave room", func() -> void: NetManager.leave_room(), 220))
+	actions.add_child(UiKit.button("Leave", func() -> void: NetManager.leave_room(), 140))
 	if bool(lobby.get("in_match", false)):
 		_body.add_child(UiKit.title("A race is running in this room.", 20, UiKit.EMBER))
 
@@ -288,7 +290,7 @@ func _slot_row(index: int, slot: Dictionary) -> Control:
 	row.add_child(swatch)
 	var you := int(slot["id"]) == NetManager.local_peer_id
 	var name_text := String(slot["name"]) + ("  (you)" if you else "")
-	row.add_child(_fixed(UiKit.label(name_text, 20, LobbyState.COLOURS[colour_index]), 190))
+	row.add_child(_fixed(UiKit.label(name_text, 20, LobbyState.COLOURS[colour_index]), 170))
 	# Never state by colour alone: the colour's name, role and readiness are all words.
 	var role := "BOT" if slot["is_bot"] else ("HOST" if slot["host"] else "human")
 	row.add_child(_fixed(UiKit.label(role, 17, UiKit.EMBER if slot["host"] else UiKit.TEXT_DIM), 60))
@@ -303,73 +305,91 @@ func _slot_row(index: int, slot: Dictionary) -> Control:
 func _build_host_controls(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) -> void:
 	cfg.add_child(UiKit.label("You are the host", 20, UiKit.EMBER))
 
-	var slots_row := HBoxContainer.new()
-	slots_row.add_theme_constant_override("separation", 10)
-	slots_row.add_child(_fixed(UiKit.label("Total racers", 19), 150))
+	# Compact controls: at the 1280x720 layout size every host option must fit beside the slot
+	# list, with the Start button still on screen.
 	var total := int(lobby["total_slots"])
-	slots_row.add_child(UiKit.button("-", func() -> void: NetManager.host_action("slots", total - 1), 50))
-	slots_row.add_child(_fixed(UiKit.label(str(total), 22, UiKit.EMBER), 30))
-	slots_row.add_child(UiKit.button("+", func() -> void: NetManager.host_action("slots", total + 1), 50))
-	cfg.add_child(slots_row)
+	var slots_row := _cfg_row(cfg, "Total racers")
+	slots_row.add_child(_small("-", func() -> void: NetManager.host_action("slots", total - 1)))
+	slots_row.add_child(_fixed(UiKit.label(str(total), 22, UiKit.EMBER), 28))
+	slots_row.add_child(_small("+", func() -> void: NetManager.host_action("slots", total + 1)))
 
-	var mode_row := HBoxContainer.new()
-	mode_row.add_theme_constant_override("separation", 10)
-	mode_row.add_child(_fixed(UiKit.label("Mode", 19), 150))
-	for m: String in [LobbyState.MODE_ONLINE, LobbyState.MODE_MIXED]:
-		var b := UiKit.button("Humans only" if m == LobbyState.MODE_ONLINE else "Humans + bots",
-			func() -> void: NetManager.host_action("mode", m), 160)
-		b.toggle_mode = true
-		b.set_pressed_no_signal(String(lobby["mode"]) == m)
-		mode_row.add_child(b)
-	cfg.add_child(mode_row)
+	var modes: Array[String] = [LobbyState.MODE_ONLINE, LobbyState.MODE_MIXED]
+	_cfg_row(cfg, "Mode").add_child(_option(["Humans only", "Humans + bots"], modes.find(String(lobby["mode"])),
+		func(i: int) -> void: NetManager.host_action("mode", modes[i])))
 
 	if mixed:
-		var bot_row := HBoxContainer.new()
-		bot_row.add_theme_constant_override("separation", 8)
-		bot_row.add_child(UiKit.button("Add bot", func() -> void: NetManager.host_action("add_bot"), 120))
-		bot_row.add_child(UiKit.button("Remove bot", func() -> void: NetManager.host_action("remove_bot"), 140))
-		bot_row.add_child(UiKit.button("Fill empty slots with bots", func() -> void: NetManager.host_action("fill_bots"), 230))
-		cfg.add_child(bot_row)
-		cfg.add_child(_choice_row("Bot skill", SKILLS, int(lobby["bot_skill"]), "bot_skill"))
+		var bot_row := _cfg_row(cfg, "Bots")
+		bot_row.add_child(_small("Add", func() -> void: NetManager.host_action("add_bot")))
+		bot_row.add_child(_small("Remove", func() -> void: NetManager.host_action("remove_bot")))
+		bot_row.add_child(_small("Fill empty slots", func() -> void: NetManager.host_action("fill_bots")))
+		_cfg_row(cfg, "Bot skill").add_child(_option(SKILLS, int(lobby["bot_skill"]),
+			func(i: int) -> void: NetManager.host_action("bot_skill", i)))
 
 	var sizes: Array[String] = []
 	for p: Dictionary in CaveGenerator.SIZE_PRESETS:
 		sizes.append(String(p["name"]))
-	cfg.add_child(_choice_row("Cave size", sizes, int(lobby["cave_size"]), "cave_size"))
+	_cfg_row(cfg, "Cave size").add_child(_option(sizes, int(lobby["cave_size"]),
+		func(i: int) -> void: NetManager.host_action("cave_size", i)))
 
-	var theme_row := HBoxContainer.new()
-	theme_row.add_theme_constant_override("separation", 6)
-	theme_row.add_child(_fixed(UiKit.label("Environment", 19), 150))
+	var theme_names: Array[String] = []
 	for id: String in CaveTheme.IDS:
-		var b := UiKit.button(CaveTheme.by_id(id).display_name, func() -> void: NetManager.host_action("theme", id), 90)
-		b.toggle_mode = true
-		b.set_pressed_no_signal(String(lobby.get("theme", "stone_age")) == id)
-		theme_row.add_child(b)
-	cfg.add_child(theme_row)
+		theme_names.append(CaveTheme.by_id(id).display_name)
+	_cfg_row(cfg, "Environment").add_child(_option(theme_names,
+		CaveTheme.index_of(String(lobby.get("theme", "stone_age"))),
+		func(i: int) -> void: NetManager.host_action("theme", CaveTheme.IDS[i])))
 
-	var seed_row := HBoxContainer.new()
-	seed_row.add_theme_constant_override("separation", 8)
-	seed_row.add_child(_fixed(UiKit.label("Cave seed", 19), 150))
+	var seed_row := _cfg_row(cfg, "Cave seed")
 	_seed_edit = LineEdit.new()
 	_seed_edit.text = str(lobby["seed"])
 	_seed_edit.max_length = 9
-	_seed_edit.custom_minimum_size = Vector2(130, 42)
+	_seed_edit.custom_minimum_size = Vector2(120, 38)
 	_seed_edit.text_submitted.connect(func(_t: String) -> void: _apply_seed())
 	seed_row.add_child(_seed_edit)
-	seed_row.add_child(UiKit.button("Set", _apply_seed, 70))
-	seed_row.add_child(UiKit.button("Random", func() -> void: NetManager.host_action("random_seed"), 110))
-	cfg.add_child(seed_row)
+	seed_row.add_child(_small("Set", _apply_seed))
+	seed_row.add_child(_small("Random", func() -> void: NetManager.host_action("random_seed")))
 
 	var regen := CheckButton.new()
 	regen.text = "Move regen (+1 Move every %ds)" % int(AppConfig.MOVE_REGEN_INTERVAL)
+	regen.add_theme_font_size_override("font_size", 17)
 	regen.button_pressed = bool(lobby["move_regen"])
 	regen.toggled.connect(func(on: bool) -> void: NetManager.host_action("move_regen", on))
 	cfg.add_child(regen)
 	var replace := CheckButton.new()
 	replace.text = "A bot takes over anyone who disconnects"
+	replace.add_theme_font_size_override("font_size", 17)
 	replace.button_pressed = bool(lobby["replace_disconnected"])
 	replace.toggled.connect(func(on: bool) -> void: NetManager.host_action("replace_disconnected", on))
 	cfg.add_child(replace)
+
+
+func _cfg_row(cfg: VBoxContainer, text: String) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(_fixed(UiKit.label(text, 18), 118))
+	cfg.add_child(row)
+	return row
+
+
+func _small(text: String, on_press: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(44, 38)
+	b.add_theme_font_size_override("font_size", 18)
+	b.pressed.connect(func() -> void:
+		AudioManager.play_sfx("ui_click", -2.0)
+		on_press.call())
+	return b
+
+
+func _option(names: Array[String], current: int, on_pick: Callable) -> OptionButton:
+	var opt := OptionButton.new()
+	for n in names:
+		opt.add_item(n)
+	opt.selected = clampi(current, 0, names.size() - 1)
+	opt.custom_minimum_size = Vector2(200, 38)
+	opt.add_theme_font_size_override("font_size", 18)
+	opt.item_selected.connect(on_pick)
+	return opt
 
 
 func _build_guest_view(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) -> void:
@@ -386,18 +406,6 @@ func _build_guest_view(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) -> vo
 	for line: String in lines:
 		if line != "":
 			cfg.add_child(UiKit.label(line, 19))
-
-
-func _choice_row(text: String, names: Array[String], current: int, action: String) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	row.add_child(_fixed(UiKit.label(text, 19), 150))
-	for i in names.size():
-		var b := UiKit.button(names[i], func() -> void: NetManager.host_action(action, i), 100)
-		b.toggle_mode = true
-		b.set_pressed_no_signal(i == current)
-		row.add_child(b)
-	return row
 
 
 func _apply_seed() -> void:
