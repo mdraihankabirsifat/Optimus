@@ -111,18 +111,13 @@ emote_3={
 
 [physics]
 
-; Gravity is per-racer and integrated manually in player_controller.gd.
-; Nothing in this project may rely on the global gravity setting.
 3d/default_gravity=0.0
 
 [rendering]
 
-textures/vram_compression/import_etc2_astc=true
-
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-; Cave geometry is batched into chunks; each chunk may sit near several torches and
-; crystals, so the per-object light cap is raised from the default 8.
-limits/opengl/max_lights_per_object=16
+textures/vram_compression/import_etc2_astc=true
 anti_aliasing/quality/msaa_3d=1
+limits/opengl/max_lights_per_object=16
