@@ -49,7 +49,7 @@ everything above is complete and committed, and it is bound by the abort gate in
 |---|---|---|---|
 | P3-01 | Fire avoidable from the ceiling | DONE | The 2.4-unit flame box reached into a ceiling walker in a 4-unit tunnel. Flames are now at most a third of the cell height; real bodies cross on the ceiling and the clear wall unhurt, floor contact still burns once per tick. |
 | P3-02 | Normal and Rush | DONE | Normal: no cave limit (`test_match`: still racing at 15 min). Rush 3/5/8 min, easier generator profile (`test_cave`, `docs/CAVE_GENERATION.md` table), expiry with 0/1/2 qualifiers (`test_duel`), records keyed by rules, synced online (`test_net`). |
-| P3-03 | Create Arena / Join by code | DONE (local) | Copy Code, bounded unique codes, double-click and bad-code handling, two arenas at once, synced names and rules over real sockets (`test_net`). Public internet play needs the server deployed. |
+| P3-03 | Create Arena / Join by code | DONE | Copy Code, bounded unique codes, double-click and bad-code handling, two arenas at once, synced names and rules over real sockets (`test_net`). Public server wss://six-ways-down-server.onrender.com: create and join by code verified with `tests/public_probe.tscn`. |
 | P3-04 | Trade a heart for a Move | DONE | One transaction for player, server and bots; 20 s last-heart deadline; regen switches it off; server debounce (`test_prompt3`, `test_net`). |
 | P3-05 | Hints follow remapping | DONE | `MysteryBox.prompt_text()` hard-coded "[E]". All hints now use `UiKit.binding_text`; E->R, swap and reset tested. |
 | P3-06 | Remove overtake callouts | DONE | FUN-003 removed on request, not broken. |

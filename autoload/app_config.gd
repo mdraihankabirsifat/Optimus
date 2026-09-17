@@ -163,7 +163,7 @@ const DEFAULT_SERVER_URL := "ws://127.0.0.1:8910"
 ## The public server, once deployed to Render (wss://<service>.onrender.com). Empty means
 ## players type an address in the online lobby. Also overridable per launch with
 ## --server-url=... on the command line, or ?server=... in the web build's page address.
-const PUBLIC_SERVER_URL := ""
+const PUBLIC_SERVER_URL := "wss://six-ways-down-server.onrender.com"
 
 # --- Feature flags ------------------------------------------------------------
 ## Online and Mixed Race appear in the menu. Offline Bot Race never depends on this.
