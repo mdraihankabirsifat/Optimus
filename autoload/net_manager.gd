@@ -242,7 +242,7 @@ func _start_match(room: LobbyState) -> void:
 	var config := {
 		"room": room.code, "seed": room.seed_value, "cave_size": room.cave_size,
 		"bot_skill": room.bot_skill, "move_regen": room.move_regen, "mode": room.mode,
-		"theme": room.theme_id,
+		"theme": room.theme_id, "ruleset": room.ruleset, "rush_seconds": room.rush_seconds,
 		"roster": roster, "generator_version": CaveGenerator.VERSION,
 	}
 	var world: Node3D = load(SceneRouter.GAME).instantiate()
@@ -445,6 +445,16 @@ func c_host_action(action: String, value: Variant) -> void:
 		"theme":
 			if value is String and value in CaveTheme.IDS:
 				room.theme_id = value
+		"ruleset":
+			if value is String and value in AppConfig.RULESETS:
+				room.ruleset = value
+			else:
+				err = "Unknown ruleset"
+		"rush_seconds":
+			if value is int and value in AppConfig.RUSH_DURATIONS:
+				room.rush_seconds = value
+			else:
+				err = "Rush lasts 3, 5 or 8 minutes"
 		"replace_disconnected":
 			if value is bool:
 				room.replace_disconnected_with_bot = value
@@ -753,6 +763,8 @@ func s_match_start(config: Dictionary) -> void:
 	GameState.cave_size = int(config.get("cave_size", 1))
 	GameState.seed_value = int(config.get("seed", 0))
 	GameState.theme_id = String(config.get("theme", "stone_age"))
+	GameState.ruleset = String(config.get("ruleset", AppConfig.RULESET_NORMAL))
+	GameState.rush_seconds = int(config.get("rush_seconds", AppConfig.RUSH_DEFAULT))
 	GameState.last_results_online = false
 	SceneRouter.start_match()
 

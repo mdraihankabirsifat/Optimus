@@ -43,7 +43,7 @@ func _ready() -> void:
 	_check(a.get("_player") == null, "a server race has no local player")
 
 	var gen := CaveGenerator.new()
-	gen.apply_size_preset(1)
+	gen.configure(1, AppConfig.RULESET_NORMAL, AppConfig.RUSH_DEFAULT)
 	var fresh := gen.generate(SEED_A)
 	_check(fresh.graph_hash() == (a.get("graph") as CaveGraph).graph_hash(),
 		"server cave hash equals a client's freshly generated cave for the same seed")

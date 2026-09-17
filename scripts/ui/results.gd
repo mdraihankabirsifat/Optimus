@@ -38,6 +38,10 @@ func _ready() -> void:
 		else:
 			headline = "Did not finish"
 			headline_colour = UiKit.TEXT_DIM
+	var champion_entry := _entry_with(results, 1)
+	if GameState.last_time_up and champion_entry.is_empty():
+		headline = "Time up  -  no qualifiers"
+		headline_colour = UiKit.DANGER
 	col.add_child(UiKit.title(headline, 64, headline_colour))
 
 	# The race itself records the time (it also saves the ghost); results only report it.
@@ -85,7 +89,9 @@ func _ready() -> void:
 		grid.add_child(UiKit.label(racer_name, place_size, colour))
 		var result_text := "DNF"
 		var result_colour := UiKit.TEXT_DIM
-		if entry.get("stopped_by_duel", false):
+		if entry.get("stopped_by_time", false) and not entry["finished"] and not entry["eliminated"]:
+			result_text = "DNF  (time up)"
+		elif entry.get("stopped_by_duel", false):
 			result_text = "DNF  (%d from the exit)" % int(entry.get("progress", 0)) if int(entry.get("progress", 999)) < 999 else "DNF"
 		if entry["finished"]:
 			result_text = MatchController.format_time(float(entry["finish_time"]))
@@ -106,14 +112,15 @@ func _ready() -> void:
 	var highlights := _highlights(results)
 	if highlights != "":
 		col.add_child(UiKit.title(highlights, 18, UiKit.EMBER))
-	var board := [] if online else SettingsManager.leaderboard(GameState.last_match_seed, GameState.last_cave_size)
+	var board := [] if online else SettingsManager.leaderboard(GameState.last_match_seed, GameState.last_cave_size, GameState.last_record_tag())
 	if not board.is_empty():
 		var times: Array[String] = []
 		for t in board:
 			times.append(MatchController.format_time(float(t)))
 		col.add_child(UiKit.title("Your top times here:  " + "   ".join(times), 18, UiKit.SKY))
 	var size_name: String = CaveGenerator.SIZE_PRESETS[GameState.last_cave_size]["name"]
-	col.add_child(UiKit.title("%s cave  ·  seed %d" % [size_name, GameState.last_match_seed], 20, UiKit.TEXT_DIM))
+	col.add_child(UiKit.title("%s  ·  %s cave  ·  seed %d" % [UiKit.ruleset_text(GameState.last_ruleset, GameState.last_rush_seconds),
+		size_name, GameState.last_match_seed], 20, UiKit.TEXT_DIM))
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -132,6 +139,8 @@ func _ready() -> void:
 		return
 	var rematch := UiKit.button("Rematch  (same cave)", func() -> void:
 		GameState.cave_size = GameState.last_cave_size
+		GameState.ruleset = GameState.last_ruleset
+		GameState.rush_seconds = GameState.last_rush_seconds
 		GameState.prepare_match(GameState.last_match_seed, GameState.bot_count)
 		SceneRouter.start_match(), 280)
 	row.add_child(rematch)

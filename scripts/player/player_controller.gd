@@ -236,6 +236,13 @@ func _puppet_step(delta: float) -> void:
 	global_basis = Basis(current.slerp(net_target_rotation, t)).orthonormalized()
 
 
+## Prompt 3: racers are solid to each other while they race. A racer who has finished, been
+## eliminated or is spectating stops blocking anyone (and stops triggering hazards) but still
+## stands on the world.
+func set_solid(solid: bool) -> void:
+	collision_layer = CaveBuilder.LAYER_RACERS if solid else 0
+
+
 ## Jumping is the third degree of freedom in the duel. The cave always allows it.
 func can_jump() -> bool:
 	return duel_dof == 0 or duel_dof >= 3

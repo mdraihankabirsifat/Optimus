@@ -271,6 +271,13 @@ static func controls_table() -> Control:
 	return grid
 
 
+## "Normal" or "Rush, 5 minutes" -- one wording for lobbies, loading and results.
+static func ruleset_text(ruleset: String, rush_seconds: int) -> String:
+	if ruleset == AppConfig.RULESET_RUSH:
+		return "Rush, %d minutes" % (rush_seconds / 60)
+	return "Normal, no time limit"
+
+
 ## The first key bound to an action, as a player would read it.
 static func key_for(action: String) -> String:
 	if not InputMap.has_action(action):

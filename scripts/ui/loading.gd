@@ -38,9 +38,11 @@ func _ready() -> void:
 		mode = "%s  ·  %d humans, %d bots" % ["Mixed Race" if cfg.get("mode", "") == "mixed" else "Online Race",
 			humans, total - humans]
 	col.add_child(UiKit.title(mode, 44))
+	col.add_child(UiKit.title(UiKit.ruleset_text(GameState.ruleset, GameState.rush_seconds), 26,
+		UiKit.DANGER if GameState.ruleset == AppConfig.RULESET_RUSH else UiKit.EMBER))
 	col.add_child(UiKit.title("%s  ·  %s cave  ·  seed %d%s" % [CaveTheme.by_id(GameState.theme_id).display_name, preset["name"], GameState.seed_value,
 		("  ·  room %s" % GameState.net_config.get("room", "")) if online else ""], 22, UiKit.TEXT_DIM))
-	var best := 0.0 if online else SettingsManager.best_for(GameState.seed_value, GameState.cave_size)
+	var best := 0.0 if online else SettingsManager.best_for(GameState.seed_value, GameState.cave_size, GameState.pending_record_tag())
 	if best > 0.0:
 		col.add_child(UiKit.title("Your best here  %s  --  your ghost races with you" % MatchController.format_time(best),
 			18, UiKit.SKY))

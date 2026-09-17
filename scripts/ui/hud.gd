@@ -216,7 +216,12 @@ func _process(delta: float) -> void:
 		if _deny_text_timer <= 0.0:
 			_status_label.add_theme_color_override("font_color", UiKit.TEXT_DIM)
 
-	_timer_label.text = MatchController.format_time(_match.elapsed)
+	if _match.cave_time_limit > 0.0 and not _match.cave_expired:
+		var left := maxf(0.0, _match.cave_time_limit - _match.elapsed)
+		_timer_label.text = "RUSH  %s" % MatchController.format_time(left)
+		_timer_label.add_theme_color_override("font_color", UiKit.DANGER if left <= 30.0 else UiKit.EMBER)
+	else:
+		_timer_label.text = "Elapsed  %s" % MatchController.format_time(_match.elapsed)
 	if _deny_text_timer <= 0.0:
 		var active := 0
 		for r: Dictionary in _match.racers:

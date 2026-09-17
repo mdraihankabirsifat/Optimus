@@ -28,7 +28,7 @@ emission_energy_multiplier = 1.5
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
-collision_mask = 1
+collision_mask = 3
 script = ExtResource("1_controller")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]

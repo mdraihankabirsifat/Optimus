@@ -30,6 +30,11 @@ var end_when_one_left: bool = false
 ## Prompt 2: once anyone reaches the exit, the race ends through the Freedom Duel instead.
 ## Null for harnesses that want the old first-to-exit race.
 var duel: FreedomDuel
+## Prompt 3: the cave phase's deadline in seconds after GO. 0 in Normal: no limit at all.
+var cave_time_limit: float = 0.0
+## Set once when a Rush cave runs out, whatever happens next.
+var cave_expired: bool = false
+signal cave_time_up(qualifiers: int)
 
 var _countdown_remaining: float = 0.0
 var _last_tick: int = -1
@@ -95,12 +100,8 @@ func _process(delta: float) -> void:
 			_advance_countdown(delta)
 		Phase.RACING:
 			elapsed += delta
-			if elapsed >= AppConfig.MATCH_TIME_LIMIT:
-				if duel == null or duel.phase == FreedomDuel.Phase.OFF:
-					_end_match()
-				elif duel.phase == FreedomDuel.Phase.WAITING:
-					duel.resolve_by_default("race time limit")
-				# A duel already under way has its own hard limit.
+			if cave_time_limit > 0.0 and not cave_expired and elapsed >= cave_time_limit:
+				_expire_cave()
 		_:
 			pass
 
@@ -134,6 +135,9 @@ func _set_racers_active(active: bool) -> void:
 func _on_finish_body_entered(body: Node3D) -> void:
 	if phase != Phase.RACING:
 		return
+	# Rush: an arrival at or before the deadline counts, a later one does not.
+	if cave_expired or (cave_time_limit > 0.0 and elapsed > cave_time_limit):
+		return
 	var racer := _find_racer(body)
 	if racer.is_empty() or racer["finished"] or racer["eliminated"]:
 		return
@@ -146,6 +150,7 @@ func _on_finish_body_entered(body: Node3D) -> void:
 	# A finished racer stops competing but stays visible to the others.
 	if "input_enabled" in body:
 		body.input_enabled = false
+	_unsolid(body)
 
 	racer_finished.emit(racer["name"], racer["place"], racer["finish_time"])
 	if duel != null:
@@ -164,6 +169,7 @@ func _on_racer_eliminated(body: Node3D) -> void:
 	racer["elimination_time"] = elapsed
 	if "input_enabled" in body:
 		body.input_enabled = false
+	_unsolid(body)
 
 	racer_eliminated.emit(racer["name"], racer["elimination_time"])
 	_check_for_end()
@@ -186,6 +192,33 @@ func _check_for_end() -> void:
 		_end_match()
 
 
+## Rush expiry, exactly once. It ends the cave phase only: a duel already started keeps its own
+## timing, and nobody is crowned from distance to a hidden exit.
+##   two qualifiers  -> the duel is already running; unfinished racers were stopped as DNF
+##   one qualifier   -> Qualified 1st is Champion by default ("Rush time up")
+##   no qualifiers   -> the race ends: time up, no qualifiers, no Champion
+func _expire_cave() -> void:
+	cave_expired = true
+	var qualifiers := 0
+	for racer: Dictionary in racers:
+		if int(racer.get("qualified", 0)) > 0:
+			qualifiers += 1
+	cave_time_up.emit(qualifiers)
+	for racer: Dictionary in racers:
+		if racer["finished"] or racer["eliminated"]:
+			continue
+		var body: Node3D = racer["body"]
+		if duel != null and duel.is_finalist(body):
+			continue
+		racer["stopped_by_time"] = true
+		if is_instance_valid(body) and "input_enabled" in body:
+			body.input_enabled = false
+	if duel == null or duel.phase == FreedomDuel.Phase.OFF:
+		_end_match()
+	elif duel.phase == FreedomDuel.Phase.WAITING:
+		duel.resolve_by_default("Rush time up")
+
+
 ## Online server: a human dropped and was not replaced by a bot. They are out of the race,
 ## recorded as disconnected rather than as losing to a hazard.
 func mark_disconnected(body: Node3D) -> void:
@@ -202,6 +235,7 @@ func mark_disconnected(body: Node3D) -> void:
 	racer["elimination_time"] = elapsed
 	if "input_enabled" in body:
 		body.input_enabled = false
+	_unsolid(body)
 	racer_eliminated.emit(racer["name"], racer["elimination_time"])
 	_check_for_end()
 
@@ -243,6 +277,7 @@ func net_finish(rid: int, place: int, time: float) -> void:
 	var body: Node3D = racer["body"]
 	if is_instance_valid(body) and "input_enabled" in body:
 		body.input_enabled = false
+	_unsolid(body)
 	racer_finished.emit(racer["name"], place, time)
 
 
@@ -258,6 +293,7 @@ func net_eliminate(rid: int, time: float, disconnected: bool = false) -> void:
 	var body: Node3D = racer["body"]
 	if is_instance_valid(body) and "input_enabled" in body:
 		body.input_enabled = false
+	_unsolid(body)
 	racer_eliminated.emit(racer["name"], time)
 
 
@@ -344,6 +380,13 @@ func build_results() -> Array:
 	out.append_array(eliminated)
 	out.append_array(unresolved)
 	return out
+
+
+## Finished and eliminated racers stop blocking the living. FreedomDuel makes finalists
+## solid again in the arena.
+func _unsolid(body: Node3D) -> void:
+	if is_instance_valid(body) and body.has_method("set_solid"):
+		body.call("set_solid", false)
 
 
 func _find_racer(body: Node3D) -> Dictionary:

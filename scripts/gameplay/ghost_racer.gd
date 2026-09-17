@@ -14,12 +14,14 @@ var _mat := StandardMaterial3D.new()
 var _body: MeshInstance3D
 
 
-static func path_for(p_seed: int, size: int) -> String:
-	return "%s/%d_%d.ghost" % [DIR, p_seed, size]
+static func path_for(p_seed: int, size: int, tag: String = "") -> String:
+	if tag == "":
+		return "%s/%d_%d.ghost" % [DIR, p_seed, size]
+	return "%s/%s_%d_%d.ghost" % [DIR, tag, p_seed, size]
 
 
-static func load_for(p_seed: int, size: int) -> GhostRacer:
-	var path := path_for(p_seed, size)
+static func load_for(p_seed: int, size: int, tag: String = "") -> GhostRacer:
+	var path := path_for(p_seed, size, tag)
 	if not FileAccess.file_exists(path):
 		return null
 	var f := FileAccess.open(path, FileAccess.READ)
@@ -33,9 +35,9 @@ static func load_for(p_seed: int, size: int) -> GhostRacer:
 	return ghost
 
 
-static func save(p_seed: int, size: int, frames: Array) -> void:
+static func save(p_seed: int, size: int, frames: Array, tag: String = "") -> void:
 	DirAccess.make_dir_recursive_absolute(DIR)
-	var f := FileAccess.open(path_for(p_seed, size), FileAccess.WRITE)
+	var f := FileAccess.open(path_for(p_seed, size, tag), FileAccess.WRITE)
 	if f != null:
 		f.store_var(frames)
 

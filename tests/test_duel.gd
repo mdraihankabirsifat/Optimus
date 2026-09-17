@@ -41,6 +41,21 @@ func _make_world(bots: int, brains: bool = false) -> Node3D:
 	return world
 
 
+func _make_rush_world(bots: int, seconds: int) -> Node3D:
+	var world: Node3D = load("res://scenes/game/game_world.tscn").instantiate()
+	world.randomise_seed = false
+	world.fixed_seed = SEED
+	world.bot_count = bots
+	world.ruleset = AppConfig.RULESET_RUSH
+	world.rush_seconds = seconds
+	add_child(world)
+	await get_tree().process_frame
+	(world.match_controller as MatchController)._advance_countdown(10.0)
+	for b: Node3D in world.bots:
+		b.get_node("BotController").set_physics_process(false)
+	return world
+
+
 func _free_world(world: Node3D) -> void:
 	world.queue_free()
 	await get_tree().process_frame
@@ -273,15 +288,60 @@ func _test_fallbacks() -> void:
 	_check("results lead with the Champion", mc.build_results()[0]["body"] == bot)
 	await _free_world(world)
 
-	_section("fallback: qualification timeout")
+	_section("Normal: no waiting time limit")
 	world = await _make_world(2)
 	mc = world.match_controller
 	duel = world.duel
 	_finish(world, world.bots[0])
-	duel.wait_time = AppConfig.DUEL_QUALIFY_TIMEOUT - 0.01
+	duel.wait_time = 600.0
+	mc.elapsed = 900.0
 	await _frames(3)
-	_check("waiting times out to Champion by default", duel.phase == FreedomDuel.Phase.ENDED and duel.champion == world.bots[0])
-	_check("match ended after timeout", mc.phase == MatchController.Phase.ENDED)
+	_check("Normal: Qualified 1st still waits after 15 minutes while others can qualify",
+		duel.phase == FreedomDuel.Phase.WAITING and mc.phase == MatchController.Phase.RACING)
+	await _free_world(world)
+
+	_section("Rush expiry: one qualifier")
+	world = await _make_rush_world(2, 180)
+	mc = world.match_controller
+	duel = world.duel
+	_finish(world, world.bots[0])
+	mc.elapsed = 179.99
+	await _frames(3)
+	_check("Rush: time up with one qualifier -> Champion by default", duel.phase == FreedomDuel.Phase.ENDED
+		and duel.champion == world.bots[0] and duel.runner_up == null and duel.end_reason == "Rush time up")
+	_check("Rush: match ended once", mc.phase == MatchController.Phase.ENDED and mc.cave_expired)
+	var late := world.bots[1] as PlayerController
+	_finish(world, late)
+	_check("Rush: an arrival after the deadline does not count", not _racer(mc, late)["finished"])
+	await _free_world(world)
+
+	_section("Rush expiry: no qualifiers")
+	world = await _make_rush_world(2, 300)
+	mc = world.match_controller
+	duel = world.duel
+	var ups := [-1]
+	mc.cave_time_up.connect(func(q: int) -> void: ups[0] = q)
+	mc.elapsed = 300.5
+	await _frames(3)
+	_check("Rush: time up with nobody out ends the race, no Champion", mc.phase == MatchController.Phase.ENDED
+		and duel.champion == null and ups[0] == 0)
+	_check("Rush: results invent no Champion", int(mc.build_results()[0].get("duel_place", 0)) == 0)
+	await _free_world(world)
+
+	_section("Rush expiry: two qualifiers, the duel keeps its own clock")
+	world = await _make_rush_world(3, 180)
+	mc = world.match_controller
+	duel = world.duel
+	_finish(world, world.bots[0])
+	_finish(world, world.bots[1])
+	for i in 30:
+		duel._tick_intro(0.25)
+	mc.elapsed = 181.0
+	await _frames(3)
+	_check("Rush: the deadline does not end a duel already running", duel.phase == FreedomDuel.Phase.FIGHT
+		and mc.phase == MatchController.Phase.RACING and mc.cave_expired)
+	_check("Rush: a racer still in the cave is a DNF", not _racer(mc, world.bots[2])["finished"]
+		and not world.bots[2].input_enabled)
 	await _free_world(world)
 
 	_section("force end: waiting vs fighting")

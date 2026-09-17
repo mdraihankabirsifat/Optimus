@@ -186,22 +186,26 @@ func set_and_save(property: String, value: Variant) -> void:
 	save_settings()
 
 
-static func cave_key(p_seed: int, size: int) -> String:
-	return "%d:%d" % [p_seed, size]
+## `tag` (GameState.make_record_tag) separates rulesets, Rush lengths, generator versions
+## and regeneration. Without one the key is the old "seed:size" form, kept for old files.
+static func cave_key(p_seed: int, size: int, tag: String = "") -> String:
+	if tag == "":
+		return "%d:%d" % [p_seed, size]
+	return "%s:%d:%d" % [tag, p_seed, size]
 
 
-func best_for(p_seed: int, size: int) -> float:
-	return float(best_times.get(cave_key(p_seed, size), 0.0))
+func best_for(p_seed: int, size: int, tag: String = "") -> float:
+	return float(best_times.get(cave_key(p_seed, size, tag), 0.0))
 
 
 ## Top five times on one cave, fastest first.
-func leaderboard(p_seed: int, size: int) -> Array:
-	return (best_times.get(cave_key(p_seed, size) + ":board", []) as Array).duplicate()
+func leaderboard(p_seed: int, size: int, tag: String = "") -> Array:
+	return (best_times.get(cave_key(p_seed, size, tag) + ":board", []) as Array).duplicate()
 
 
 ## MATCH-006: records a finish on this cave. Returns true when it beats the previous best.
-func submit_cave_time(seconds: float, p_seed: int, size: int) -> bool:
-	var key := cave_key(p_seed, size)
+func submit_cave_time(seconds: float, p_seed: int, size: int, tag: String = "") -> bool:
+	var key := cave_key(p_seed, size, tag)
 	var board: Array = best_times.get(key + ":board", [])
 	board.append(seconds)
 	board.sort()

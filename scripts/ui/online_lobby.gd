@@ -331,6 +331,18 @@ func _build_host_controls(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) ->
 	_cfg_row(cfg, "Cave size").add_child(_option(sizes, int(lobby["cave_size"]),
 		func(i: int) -> void: NetManager.host_action("cave_size", i)))
 
+	var rules_row := _cfg_row(cfg, "Ruleset")
+	rules_row.add_child(_option(["Normal (no time limit)", "Rush (timed, easier cave)"],
+		AppConfig.RULESETS.find(String(lobby.get("ruleset", "normal"))),
+		func(i: int) -> void: NetManager.host_action("ruleset", AppConfig.RULESETS[i])))
+	if String(lobby.get("ruleset", "normal")) == AppConfig.RULESET_RUSH:
+		var lengths: Array[String] = []
+		for secs: int in AppConfig.RUSH_DURATIONS:
+			lengths.append("%d minutes" % (secs / 60))
+		_cfg_row(cfg, "Rush length").add_child(_option(lengths,
+			AppConfig.RUSH_DURATIONS.find(int(lobby.get("rush_seconds", AppConfig.RUSH_DEFAULT))),
+			func(i: int) -> void: NetManager.host_action("rush_seconds", AppConfig.RUSH_DURATIONS[i])))
+
 	var theme_names: Array[String] = []
 	for id: String in CaveTheme.IDS:
 		theme_names.append(CaveTheme.by_id(id).display_name)
@@ -397,6 +409,7 @@ func _build_guest_view(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) -> vo
 	var size_name := String(CaveGenerator.SIZE_PRESETS[int(lobby["cave_size"])]["name"])
 	var lines := [
 		"Mode:  %s" % ("humans and bots" if mixed else "humans only"),
+		"Rules:  %s" % UiKit.ruleset_text(String(lobby.get("ruleset", "normal")), int(lobby.get("rush_seconds", AppConfig.RUSH_DEFAULT))),
 		"Cave:  %s  ·  seed %d" % [size_name, int(lobby["seed"])],
 		"Environment:  %s" % CaveTheme.by_id(String(lobby.get("theme", "stone_age"))).display_name,
 		"Bot skill:  %s" % SKILLS[int(lobby["bot_skill"])] if mixed else "",

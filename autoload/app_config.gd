@@ -19,8 +19,15 @@ const TERMINAL_VELOCITY := 45.0
 
 # --- Match flow ---
 const MATCH_COUNTDOWN_SECONDS := 3
-## Hard cap so a lost racer cannot stall the whole lobby. Judges play once, briefly.
-const MATCH_TIME_LIMIT := 300.0
+
+# --- Rulesets (Prompt 3) ------------------------------------------------------
+## Normal: the full cave and no cave time limit at all. Rush: an easier cave and a clock.
+const RULESET_NORMAL := "normal"
+const RULESET_RUSH := "rush"
+const RULESETS: Array[String] = ["normal", "rush"]
+## The only Rush lengths a lobby may pick, in seconds.
+const RUSH_DURATIONS: Array[int] = [180, 300, 480]
+const RUSH_DEFAULT := 300
 
 # --- Health -------------------------------------------------------------------
 const HEARTS_MAX := 5.0
@@ -114,9 +121,6 @@ const LOCAL_RESOLVED_GRACE := 20.0
 # --- Freedom Duel (Prompt 2) --------------------------------------------------
 ## The first two racers to reach the exit qualify; the duel decides the Champion.
 const DUEL_ENABLED := true
-## After the first qualifier, how long the others get to reach the exit before Qualified 1st
-## becomes Champion by default. Guarantees the race can never wait forever.
-const DUEL_QUALIFY_TIMEOUT := 90.0
 ## Offline, Qualified 1st may give up waiting and take Champion by default after this long.
 const DUEL_SKIP_AFTER := 20.0
 const DUEL_COUNTDOWN := 3

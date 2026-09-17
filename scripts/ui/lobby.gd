@@ -8,8 +8,12 @@ var _bots := 2
 var _skill_buttons: Array[Button] = []
 var _size_buttons: Array[Button] = []
 var _theme_buttons: Array[Button] = []
+var _rules_buttons: Array[Button] = []
+var _rush_buttons: Array[Button] = []
+var _rush_row: HBoxContainer
 var _bot_label: Label
 var _seed_edit: LineEdit
+var _rules_note: Label
 
 
 func _ready() -> void:
@@ -26,6 +30,27 @@ func _ready() -> void:
 	var inner := VBoxContainer.new()
 	inner.add_theme_constant_override("separation", 12)
 	panel.add_child(inner)
+
+	var rules_row := HBoxContainer.new()
+	rules_row.add_theme_constant_override("separation", 14)
+	rules_row.add_child(_fixed(UiKit.label("Ruleset", 22), 140))
+	for i in AppConfig.RULESETS.size():
+		var b := UiKit.button(["Normal", "Rush"][i], func() -> void: _set_ruleset(AppConfig.RULESETS[i]), 118)
+		b.toggle_mode = true
+		rules_row.add_child(b)
+		_rules_buttons.append(b)
+	inner.add_child(rules_row)
+	_rush_row = HBoxContainer.new()
+	_rush_row.add_theme_constant_override("separation", 14)
+	_rush_row.add_child(_fixed(UiKit.label("Rush length", 22), 140))
+	for secs: int in AppConfig.RUSH_DURATIONS:
+		var b := UiKit.button("%d min" % (secs / 60), func() -> void: _set_rush(secs), 118)
+		b.toggle_mode = true
+		_rush_row.add_child(b)
+		_rush_buttons.append(b)
+	inner.add_child(_rush_row)
+	_rules_note = UiKit.label("", 15, UiKit.TEXT_DIM)
+	inner.add_child(_rules_note)
 
 	var bot_row := HBoxContainer.new()
 	bot_row.add_theme_constant_override("separation", 14)
@@ -106,7 +131,25 @@ func _ready() -> void:
 	_set_skill(GameState.bot_skill)
 	_set_cave_size(GameState.cave_size)
 	_set_theme(GameState.theme_id)
+	_set_ruleset(GameState.ruleset)
+	_set_rush(GameState.rush_seconds)
 	start.grab_focus.call_deferred()
+
+
+func _set_ruleset(r: String) -> void:
+	GameState.ruleset = r if r in AppConfig.RULESETS else AppConfig.RULESET_NORMAL
+	for k in _rules_buttons.size():
+		_rules_buttons[k].set_pressed_no_signal(AppConfig.RULESETS[k] == GameState.ruleset)
+	var rush := GameState.ruleset == AppConfig.RULESET_RUSH
+	_rush_row.visible = rush
+	_rules_note.text = ("Rush: an easier cave and a clock. When it runs out, one qualifier is Champion by default; none means no Champion. Every other option still applies."
+		if rush else "Normal: the full cave, no time limit. The first two out fight the Freedom Duel.")
+
+
+func _set_rush(secs: int) -> void:
+	GameState.rush_seconds = secs if secs in AppConfig.RUSH_DURATIONS else AppConfig.RUSH_DEFAULT
+	for k in _rush_buttons.size():
+		_rush_buttons[k].set_pressed_no_signal(AppConfig.RUSH_DURATIONS[k] == GameState.rush_seconds)
 
 
 func _fixed(c: Control, width: float) -> Control:

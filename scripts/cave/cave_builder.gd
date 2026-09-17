@@ -278,6 +278,8 @@ func _make_landmark(graph: CaveGraph, c: Vector3i, variant: int) -> Node3D:
 					shard.position = corners[k] + Vector3(0.3 * cos(j * 1.9), floor_y + prism.size.y * 0.5, 0.3 * sin(j * 1.9))
 					shard.rotation = Vector3(0.2 * sin(j), float(j), 0.25 * cos(j))
 					node.add_child(shard)
+				# One solid box per corner cluster, matching the shards' footprint.
+				node.add_child(_solid_box(Vector3(1.2, 2.4, 1.2), corners[k] + Vector3(0, floor_y + 1.2, 0)))
 			var core := MeshInstance3D.new()
 			var sphere := SphereMesh.new()
 			sphere.radius = 0.5
@@ -450,6 +452,11 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			var hanging := kind == "stalactite"
 			if (hanging and not has_ceiling) or (not hanging and not has_floor):
 				return null
+			# Prompt 3: spikes are solid and sharp, so they live only in landmark chambers. In
+			# a 4-unit tunnel one would close the wall or ceiling line a racer walks, and the
+			# spawn and exit chambers stay free of anything that hurts.
+			if not is_chamber(graph, c) or c == graph.spawn_cell or c == graph.finish_cell:
+				return null
 			var spike := 1.2 + float(v % 4) * 0.45
 			var mesh := CylinderMesh.new()
 			mesh.top_radius = 0.0 if not hanging else 0.35 + float(v % 3) * 0.1
@@ -457,9 +464,11 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			mesh.height = spike
 			mesh.radial_segments = 7
 			root.add_child(_mesh(mesh, kit["rock"], Vector3(0, spike * 0.5 if not hanging else -spike * 0.5, 0)))
+			root.add_child(SpikeHazard.create(absi(hash(c)) % 100000 * 2 + (1 if hanging else 0), spike,
+				0.35 + float(v % 3) * 0.1, hanging))
 			root.position = centre + off + Vector3(0, ceil_y if hanging else floor_y, 0)
 		"crystal":
-			if not has_floor:
+			if not has_floor or not is_chamber(graph, c):
 				return null
 			var crystals: Array = kit["crystals"]
 			var mat: StandardMaterial3D = crystals[v % crystals.size()]
@@ -469,6 +478,8 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 				var shard := _mesh(prism, mat, Vector3(0.3 * (k - 1), prism.size.y * 0.5, 0.2 * (k % 2)))
 				shard.rotation = Vector3(0.0, float(k) * 1.1, 0.25 * float(k - 1))
 				root.add_child(shard)
+			# Solid like it looks: one box around the cluster. Crystals are not hazards.
+			root.add_child(_solid_box(Vector3(0.95, 1.45, 0.6), Vector3(0, 0.72, 0.1)))
 			root.position = centre + off + Vector3(0, floor_y, 0)
 		"moss":
 			if not has_floor:
@@ -577,6 +588,19 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 		_:
 			return null
 	return root
+
+
+func _solid_box(size: Vector3, pos: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = LAYER_WORLD
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	shape.position = pos
+	body.add_child(shape)
+	return body
 
 
 func _mesh(mesh: Mesh, mat: Material, pos: Vector3) -> MeshInstance3D:

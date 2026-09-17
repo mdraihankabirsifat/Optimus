@@ -132,12 +132,24 @@ func _test_results_ordering() -> void:
 
 
 func _test_time_limit() -> void:
-	_section("time limit")
+	_section("Normal has no cave time limit")
+	var normal := _make_match(1)
+	var nmc: MatchController = normal["match"]
+	_advance(nmc, 3.1)
+	_advance(nmc, 301.0)
+	_advance(nmc, 600.0)
+	_check("Normal is still racing after 15 minutes", nmc.phase == MatchController.Phase.RACING)
+	_teardown(normal)
+
+	_section("Rush time limit")
 	var ctx := _make_match(1)
 	var mc: MatchController = ctx["match"]
+	mc.cave_time_limit = 180.0
 	_advance(mc, 3.1)
-	_advance(mc, AppConfig.MATCH_TIME_LIMIT + 1.0)
-	_check("match ends when the clock expires", mc.phase == MatchController.Phase.ENDED)
+	_advance(mc, 179.0)
+	_check("Rush still racing before its deadline", mc.phase == MatchController.Phase.RACING)
+	_advance(mc, 2.0)
+	_check("Rush ends when the clock expires with no qualifiers", mc.phase == MatchController.Phase.ENDED and mc.cave_expired)
 
 	var results := mc.build_results()
 	_check("unresolved racer is recorded as DNF",

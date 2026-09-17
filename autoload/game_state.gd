@@ -15,6 +15,10 @@ var bot_skill: int = 0
 var cave_size: int = 1
 ## AXIS-010: slow Move regeneration, off by default.
 var move_regen: bool = false
+## Prompt 3: "normal" (no cave time limit) or "rush" (a clock and an easier cave).
+var ruleset: String = AppConfig.RULESET_NORMAL
+## Rush length in seconds: 180, 300 or 480.
+var rush_seconds: int = AppConfig.RUSH_DEFAULT
 ## ART-012: environment for the next offline race, a CaveTheme id. Visual only.
 var theme_id: String = "stone_age"
 ## Set by the lobby so GameWorld knows to read this state instead of its export defaults.
@@ -27,6 +31,12 @@ var last_results: Array = []
 var stats: Dictionary = {}
 var last_match_seed: int = 0
 var last_match_duration: float = 0.0
+## The last race's rules, for results, records and rematch.
+var last_ruleset: String = AppConfig.RULESET_NORMAL
+var last_rush_seconds: int = AppConfig.RUSH_DEFAULT
+var last_move_regen: bool = false
+## Rush ran out before two racers qualified. Results say so.
+var last_time_up: bool = false
 ## Freedom Duel summary for results: {fought, duration, reason}. Empty when there was no duel.
 var last_duel: Dictionary = {}
 ## Set when the local racer's finish beat their best on this cave. Read by results.
@@ -46,6 +56,24 @@ var last_results_online: bool = false
 var net_local_name: String = ""
 ## Which online lobby the Play screen asked for: "online" (humans only) or "mixed".
 var online_mode: String = "mixed"
+
+
+## Prompt 3: the key suffix separating records by generator version, ruleset profile and
+## Move regeneration. `profile` is CaveGenerator.profile ("normal", "rush300", ...).
+static func make_record_tag(profile: String, regen: bool) -> String:
+	return "v%d-%s-%s" % [CaveGenerator.VERSION, profile, "regen" if regen else "noregen"]
+
+
+## The record tag for the race the menus are about to start.
+func pending_record_tag() -> String:
+	var profile := "normal" if ruleset != AppConfig.RULESET_RUSH else "rush%d" % rush_seconds
+	return make_record_tag(profile, move_regen)
+
+
+## The record tag of the race that just ended.
+func last_record_tag() -> String:
+	var profile := "normal" if last_ruleset != AppConfig.RULESET_RUSH else "rush%d" % last_rush_seconds
+	return make_record_tag(profile, last_move_regen)
 
 
 ## FUN-006: the same cave for everyone on the same calendar day.

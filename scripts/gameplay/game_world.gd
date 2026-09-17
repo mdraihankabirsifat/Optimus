@@ -23,6 +23,9 @@ extends Node3D
 ## Prompt 2: the first two out of the cave fight the Freedom Duel for Champion. Harnesses
 ## that measure pure cave traversal switch it off.
 @export var duel_enabled: bool = true
+## Prompt 3: "normal" or "rush", and the Rush length. Harnesses set these directly.
+@export var ruleset: String = AppConfig.RULESET_NORMAL
+@export var rush_seconds: int = AppConfig.RUSH_DEFAULT
 
 const BOT_COLOURS: Array[Color] = [
 	Color(0.95, 0.45, 0.30),
@@ -45,6 +48,8 @@ var theme: CaveTheme
 @export var theme_id: String = "stone_age"
 
 var graph: CaveGraph
+## CaveGenerator.profile for this race: "normal", "rush180", "rush300" or "rush480".
+var generation_profile: String = "normal"
 var seed_value: int
 var bots: Array[Node3D] = []
 ## Online only: racers this machine does not simulate.
@@ -99,6 +104,8 @@ func _ready() -> void:
 		bot_skill = int(net_config.get("bot_skill", 1))
 		_move_regen = bool(net_config.get("move_regen", false))
 		theme_id = String(net_config.get("theme", "stone_age"))
+		ruleset = String(net_config.get("ruleset", AppConfig.RULESET_NORMAL))
+		rush_seconds = int(net_config.get("rush_seconds", AppConfig.RUSH_DEFAULT))
 	elif _from_menu:
 		theme_id = GameState.theme_id
 		seed_value = GameState.seed_value
@@ -106,6 +113,8 @@ func _ready() -> void:
 		bot_skill = GameState.bot_skill
 		_move_regen = GameState.move_regen
 		cave_size = GameState.cave_size
+		ruleset = GameState.ruleset
+		rush_seconds = GameState.rush_seconds
 	elif randomise_seed:
 		seed_value = randi() % 1000000
 	if not _is_server():
@@ -113,9 +122,19 @@ func _ready() -> void:
 		GameState.last_cave_size = cave_size
 		GameState.new_record = false
 
+	if ruleset not in AppConfig.RULESETS:
+		ruleset = AppConfig.RULESET_NORMAL
+	if rush_seconds not in AppConfig.RUSH_DURATIONS:
+		rush_seconds = AppConfig.RUSH_DEFAULT
 	var generator := CaveGenerator.new()
-	generator.apply_size_preset(cave_size)
+	generator.configure(cave_size, ruleset, rush_seconds)
+	generation_profile = generator.profile
 	graph = generator.generate(seed_value)
+	if not _is_server():
+		GameState.last_ruleset = ruleset
+		GameState.last_rush_seconds = rush_seconds
+		GameState.last_move_regen = _move_regen
+		GameState.last_time_up = false
 	if graph == null:
 		push_error("Cave generation failed after %d attempts: %s"
 			% [generator.attempts_used, generator.last_failure])
@@ -173,6 +192,10 @@ func _ready() -> void:
 		duel.setup(self, match_controller)
 		match_controller.duel = duel
 
+	if ruleset == AppConfig.RULESET_RUSH:
+		match_controller.cave_time_limit = float(rush_seconds)
+	match_controller.cave_time_up.connect(_on_cave_time_up)
+
 	match_controller.racer_finished.connect(_on_racer_finished)
 	match_controller.racer_eliminated.connect(_on_racer_eliminated)
 	match_controller.match_ended.connect(_on_match_ended)
@@ -207,7 +230,7 @@ func _ready() -> void:
 	_player.pause_requested.connect(pause_menu.open)
 
 	if net_role == "":
-		_ghost = GhostRacer.load_for(seed_value, cave_size)
+		_ghost = GhostRacer.load_for(seed_value, cave_size, record_tag())
 		if _ghost != null:
 			add_child(_ghost)
 			_ghost.visible = false
@@ -641,15 +664,16 @@ func _on_duel_phase(p: FreedomDuel.Phase) -> void:
 			_player.camera.make_current()
 	if hud != null:
 		# The duel HUD takes the screen once the local racer is in the arena or the final is on.
-		hud.visible = p == FreedomDuel.Phase.OFF 			or (p == FreedomDuel.Phase.WAITING and not duel.is_finalist(_player))
+		hud.visible = p == FreedomDuel.Phase.OFF \
+			or (p == FreedomDuel.Phase.WAITING and not duel.is_finalist(_player))
 
 
 func _duel_spectate_banner() -> String:
 	match duel.phase:
 		FreedomDuel.Phase.WAITING:
-			var left := AppConfig.DUEL_QUALIFY_TIMEOUT - duel.wait_time
 			var skip := "    [Enter] end now" if net_role == "" else ""
-			return "Spectating %s    [Tab] next racer    %s is Qualified 1st, waiting for a second finalist (%ds)%s" 				% [_spectate_target_name(), duel.finalist_a.display_name, ceili(maxf(left, 0.0)), skip]
+			return "Spectating %s    [Tab] next racer    %s is Qualified 1st, waiting for a second finalist%s" \
+				% [_spectate_target_name(), duel.finalist_a.display_name, skip]
 		FreedomDuel.Phase.INTRO, FreedomDuel.Phase.FIGHT:
 			return ""
 		_:
@@ -738,9 +762,9 @@ func _on_racer_finished(racer_name: String, place: int, time: float) -> void:
 		AudioManager.play_sfx("finish")
 		_player.rig.cheer()
 		if net_role == "":
-			GameState.new_record = SettingsManager.submit_cave_time(time, seed_value, cave_size)
+			GameState.new_record = SettingsManager.submit_cave_time(time, seed_value, cave_size, record_tag())
 			if GameState.new_record and _ghost_frames.size() > 2:
-				GhostRacer.save(seed_value, cave_size, _ghost_frames)
+				GhostRacer.save(seed_value, cave_size, _ghost_frames, record_tag())
 		# The first two out are finalists: they go to the arena, not the spectator camera.
 		if duel == null or place > 2:
 			_begin_spectating()
@@ -801,11 +825,34 @@ func _on_match_ended(results: Array) -> void:
 	SceneRouter.go_to(SceneRouter.RESULTS)
 
 
+## Records and ghosts are kept apart for every setting that changes the cave or the race:
+## generator version, Normal or a Rush length, and Move regeneration. Older records under
+## the previous plain "seed:size" key are left in the file untouched, never mixed in.
+func record_tag() -> String:
+	return GameState.make_record_tag(generation_profile, _move_regen)
+
+
+## Prompt 3, Rush: the cave phase is over.
+func _on_cave_time_up(qualifiers: int) -> void:
+	if not _is_server():
+		GameState.last_time_up = qualifiers < 2
+	print("rush time up: %d qualifier(s)" % qualifiers)
+	if _is_server() or hud == null:
+		return
+	AudioManager.play_sfx("sudden_death", -4.0)
+	if qualifiers == 0:
+		hud.show_centre("TIME UP  -  NO QUALIFIERS", 4.0, UiKit.DANGER)
+	elif qualifiers == 1:
+		hud.show_centre("TIME UP", 3.0, UiKit.DANGER)
+
+
 func _restart() -> void:
 	if net_role != "":
 		return
 	GameState.cave_size = cave_size
 	GameState.theme_id = theme_id
+	GameState.ruleset = ruleset
+	GameState.rush_seconds = rush_seconds
 	GameState.prepare_match(seed_value, bot_count)
 	AudioManager.stop_ambience()
 	SceneRouter.start_match()

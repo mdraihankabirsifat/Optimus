@@ -164,6 +164,7 @@ func _send_to_waiting(body: PlayerController) -> void:
 
 
 func _place(body: PlayerController, spot: Vector3) -> void:
+	body.set_solid(true)
 	body.velocity = Vector3.ZERO
 	body.push_velocity = Vector3.ZERO
 	if body.gravity.gravity_dir != Vector3.DOWN or body.gravity.is_transitioning:
@@ -243,9 +244,9 @@ func _physics_process(delta: float) -> void:
 		return
 	match phase:
 		Phase.WAITING:
+			# Prompt 3: no waiting time limit. Normal waits while anyone can still qualify;
+			# Rush ends through MatchController's cave deadline.
 			wait_time += delta
-			if wait_time >= AppConfig.DUEL_QUALIFY_TIMEOUT:
-				resolve_by_default("qualification timed out")
 		Phase.INTRO:
 			_tick_intro(delta)
 		Phase.FIGHT:

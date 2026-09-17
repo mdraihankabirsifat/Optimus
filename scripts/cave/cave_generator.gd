@@ -52,6 +52,9 @@ var loop_min_detour := 6
 var loop_vertical_chance := 0.25
 var max_attempts := 40
 
+## Resolved generation profile, recorded with results and records: "normal" or "rush180" etc.
+var profile := "normal"
+
 var last_failure := ""
 var attempts_used := 0
 ## Fewest Moves the last validated cave needs from spawn, found by CaveValidator.
@@ -110,6 +113,37 @@ func apply_size_preset(index: int) -> void:
 	vertical_steps_max = (p["vertical"] as Vector2i).y
 	run_min = (p["run"] as Vector2i).x
 	run_max = (p["run"] as Vector2i).y
+
+
+## Prompt 3: size and ruleset together. Every generator that must agree with another machine
+## (server, clients, tests) is configured through this one call.
+func configure(size_index: int, ruleset: String, rush_seconds: int) -> void:
+	apply_size_preset(size_index)
+	if ruleset == AppConfig.RULESET_RUSH:
+		apply_rush_profile(rush_seconds)
+
+
+## Rush: the same generator, told to make a cave that is quicker to read. Fewer and shorter
+## side branches (fewer misleading dead ends), one or two loops, a shorter route with a single
+## climb and descent, straighter runs. The 3-minute profile is the gentlest; 8 minutes keeps
+## a little more to explore. Still no exit reveal: a Rush cave is easier, not solved.
+func apply_rush_profile(seconds: int) -> void:
+	var s: int = seconds if seconds in AppConfig.RUSH_DURATIONS else AppConfig.RUSH_DEFAULT
+	var t := float(s) / 480.0   # 0.375, 0.625, 1.0
+	branch_count = maxi(2, roundi(float(branch_count) * (0.2 + 0.2 * t)))
+	branch_len_max = mini(branch_len_max, 2 + roundi(t))
+	branch_len_min = mini(branch_len_min, branch_len_max)
+	loop_count = clampi(roundi(float(loop_count) * 0.5), 1, 2)
+	loop_min_detour = 4
+	vertical_steps_min = 2
+	vertical_steps_max = 2 if s < 480 else 3
+	min_spawn_finish_distance = maxi(6, roundi(float(min_spawn_finish_distance) * (0.45 + 0.25 * t)))
+	runs_per_leg_min = 1
+	runs_per_leg_max = 2
+	run_max = maxi(run_min, run_max - 1)
+	max_boxes = maxi(4, roundi(float(max_boxes) * 0.6))
+	max_fires = maxi(2, roundi(float(max_fires) * 0.5))
+	profile = "rush%d" % s
 
 
 ## Boost pads, wind, pistons, spiders, crumbling shaft covers, shortcut markers and

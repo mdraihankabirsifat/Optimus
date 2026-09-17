@@ -12,6 +12,12 @@ const PATCH_SIZE := 5.2
 ## clear edge to squeeze past.
 var patch_size: float = PATCH_SIZE
 const FLAME_HEIGHT := 2.4
+## How much headroom the damaging volume must leave under the cell's ceiling: a racer standing
+## on the ceiling hangs a capsule (1.8) down from it, plus a clear margin. Prompt 3: in a
+## 4-unit tunnel a 2.4 flame reached into that racer, so the ceiling bypass still burned.
+const CEILING_CLEARANCE := 2.3
+## Actual flame/damage height in this cell. The flames drawn are the damage volume.
+var flame_height: float = FLAME_HEIGHT
 const FLAME_COUNT := 7
 
 var hazard_id: int = 0
@@ -28,6 +34,9 @@ static func create(id: int, side: int, half: float = CaveBuilder.CHAMBER_HALF) -
 	fire.hazard_id = id
 	fire.name = "Fire%d" % id
 	fire.patch_size = minf(PATCH_SIZE, half * 2.0 - 1.1)
+	# Low enough to leave a ceiling walker a clear margin and a racer walking the middle of a
+	# side wall untouched: about a third of the cell's height.
+	fire.flame_height = clampf(minf((half - CaveBuilder.FLOOR_Y) - CEILING_CLEARANCE, (half - CaveBuilder.FLOOR_Y) * 0.35), 1.0, FLAME_HEIGHT)
 	var offset := half - fire.patch_size * 0.5
 	var shift: Vector3 = [Vector3(offset, 0, 0), Vector3(-offset, 0, 0),
 		Vector3(0, 0, offset), Vector3(0, 0, -offset)][side]
@@ -46,10 +55,10 @@ func _ready() -> void:
 	add_to_group("hazards")
 
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(patch_size, FLAME_HEIGHT, patch_size)
+	shape.size = Vector3(patch_size, flame_height, patch_size)
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
-	collision.position = Vector3(0.0, FLAME_HEIGHT * 0.5, 0.0)
+	collision.position = Vector3(0.0, flame_height * 0.5, 0.0)
 	add_child(collision)
 
 	_build_visuals()
@@ -87,7 +96,8 @@ func _build_visuals() -> void:
 		var cone := CylinderMesh.new()
 		cone.top_radius = 0.0
 		cone.bottom_radius = rng.randf_range(0.45, 0.8)
-		cone.height = rng.randf_range(1.4, FLAME_HEIGHT)
+		# Tallest flicker (x1.05, +0.2 lift) stays inside the damage volume.
+		cone.height = rng.randf_range(flame_height * 0.55, flame_height * 0.9)
 		cone.radial_segments = 6
 		flame.mesh = cone
 		flame.material_override = flame_mat
@@ -157,8 +167,13 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	for body: Node3D in _bodies:
+	for body: Node3D in _bodies.duplicate():
 		if not is_instance_valid(body):
+			_bodies.erase(body)
+			continue
+		# A racer whose collision was switched off (finished, eliminated) no longer counts.
+		if (body as CollisionObject3D).collision_layer & CaveBuilder.LAYER_RACERS == 0:
+			_bodies.erase(body)
 			continue
 		var health: PlayerHealth = body.get("health")
 		if health == null:

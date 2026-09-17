@@ -325,12 +325,14 @@ func _draw_waiting(font: Font, s: float, vs: Vector2) -> void:
 	var rect := Rect2(Vector2((vs.x - w) * 0.5, 40.0 * s), Vector2(w, 150.0 * s))
 	_panel(rect, s)
 	_text(font, "QUALIFIED 1ST FOR THE FREEDOM DUEL", rect.position + Vector2(w * 0.5, 50.0 * s), 38.0 * s, GOLD, true)
-	var left := maxf(0.0, AppConfig.DUEL_QUALIFY_TIMEOUT - _duel.wait_time)
 	var racing := 0
 	for r: Dictionary in _duel.mc.racers:
 		if r["body"] != _player and not r["finished"] and not r["eliminated"]:
 			racing += 1
-	_text(font, "Waiting for a second finalist  -  %d still in the cave  -  %ds" % [racing, ceili(left)],
+	var clock := ""
+	if _duel.mc.cave_time_limit > 0.0:
+		clock = "  -  Rush %s left" % MatchController.format_time(maxf(0.0, _duel.mc.cave_time_limit - _duel.mc.elapsed)).substr(0, 4)
+	_text(font, "Waiting for a second finalist  -  %d still in the cave%s" % [racing, clock],
 		rect.position + Vector2(w * 0.5, 94.0 * s), 24.0 * s, UiKit.TEXT, true)
 	var hint := "You are safe here. Warm up: you will start with 3DOF (move and jump)."
 	if _duel.wait_time >= AppConfig.DUEL_SKIP_AFTER and GameState.net_role == "":

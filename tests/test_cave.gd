@@ -122,6 +122,7 @@ func _ready() -> void:
 	_test_presets_and_features()
 	_test_cave_shape()
 	_test_loops_are_long()
+	_test_rush_profiles()
 
 	var ok: int = SEED_COUNT - failures
 	if ok > 0:
@@ -353,3 +354,58 @@ func _fail(label: String) -> void:
 	if _failed < 10:
 		print("   FAIL  %s" % label)
 	_failed += 1
+
+
+## Prompt 3: Rush uses the same generator with a profile. Every size and length generates
+## and validates, the same configuration is deterministic, Normal is untouched, and Rush is
+## measurably easier to navigate than Normal at the same size on the same seeds.
+func _test_rush_profiles() -> void:
+	print("
+-- Rush profiles")
+	for size_index in CaveGenerator.SIZE_PRESETS.size():
+		var normal := CaveMetrics.new()
+		var normal_gen := CaveGenerator.new()
+		normal_gen.configure(size_index, AppConfig.RULESET_NORMAL, AppConfig.RUSH_DEFAULT)
+		var plain := CaveGenerator.new()
+		plain.apply_size_preset(size_index)
+		var same_as_before := true
+		for s in 30:
+			var g := normal_gen.generate(3000 + s)
+			var p := plain.generate(3000 + s)
+			same_as_before = same_as_before and g != null and p != null and g.graph_hash() == p.graph_hash()
+			if g != null:
+				normal.add(g)
+		_check("size %d: Normal generation output is unchanged by the ruleset plumbing" % size_index, same_as_before)
+		for secs: int in AppConfig.RUSH_DURATIONS:
+			var rush := CaveMetrics.new()
+			var gen := CaveGenerator.new()
+			gen.configure(size_index, AppConfig.RULESET_RUSH, secs)
+			var failures := 0
+			var deterministic := true
+			var solvable := true
+			for s in 30:
+				var g := gen.generate(3000 + s)
+				if g == null:
+					failures += 1
+					continue
+				rush.add(g)
+				var again := CaveGenerator.new()
+				again.configure(size_index, AppConfig.RULESET_RUSH, secs)
+				deterministic = deterministic and again.generate(3000 + s).graph_hash() == g.graph_hash()
+				solvable = solvable and CaveValidator.min_moves_to_finish(g) <= AppConfig.MOVE_CHARGES_START
+			var label := "size %d, Rush %ds" % [size_index, secs]
+			_check("%s: every seed generates (%d failed)" % [label, failures], failures == 0)
+			_check("%s: same config, same cave" % label, deterministic)
+			_check("%s: solvable within the starting Moves" % label, solvable)
+			_check("%s: profile recorded" % label, gen.profile == "rush%d" % secs)
+			var n := float(normal.caves)
+			var r := float(maxi(1, rush.caves))
+			_check("%s: shorter route (%.1f vs Normal %.1f hops)" % [label, rush.route_hops / r, normal.route_hops / n],
+				rush.route_hops / r < 0.8 * normal.route_hops / n)
+			_check("%s: fewer dead ends (%.1f vs %.1f)" % [label, rush.dead_ends / r, normal.dead_ends / n],
+				rush.dead_ends / r < normal.dead_ends / n)
+			_check("%s: less of the cave off the route (%.0f%% vs %.0f%%)" % [label,
+				100.0 * rush.off_route_cells / rush.cells, 100.0 * normal.off_route_cells / normal.cells],
+				float(rush.off_route_cells) / rush.cells < float(normal.off_route_cells) / normal.cells)
+			_check("%s: still has loops and vertical routes" % label,
+				rush.cycles >= rush.caves and rush.caves_up_and_down == rush.caves)
