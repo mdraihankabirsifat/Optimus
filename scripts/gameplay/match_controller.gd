@@ -194,6 +194,9 @@ func mark_disconnected(body: Node3D) -> void:
 		return
 	racer["disconnected"] = true
 	if racer["finished"] or racer["eliminated"]:
+		# A finalist has already finished the cave; leaving still decides the duel.
+		if duel != null and duel.claims_end():
+			duel.on_resolution_changed()
 		return
 	racer["eliminated"] = true
 	racer["elimination_time"] = elapsed

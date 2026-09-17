@@ -18,8 +18,9 @@ Two to five racers spawn in the same seeded, block-built 3D cave and do not know
 exit is. They explore, take damage from hazards, open mystery boxes, and each carries
 **5 Move charges** that let them rotate *their own personal gravity* 90° or 180°. Gravity is
 private — one racer can be sprinting along a wall while another runs on the floor of the same
-corridor, and each sees the other correctly oriented. First to the hidden finish wins; racers
-at zero hearts are eliminated into spectator mode.
+corridor, and each sees the other correctly oriented. The first **two** to reach the hidden
+finish qualify for the **Freedom Duel**, a short arena fight that decides the Champion (Master
+Prompt 2); racers at zero hearts are eliminated into spectator mode.
 
 ## Non-negotiable rules
 
@@ -53,7 +54,24 @@ These came from the team's design document. Do not alter them without an explici
 | Solvability | Built solvable by construction **and** checked by `CaveValidator` over (cell, gravity, Moves). |
 | Art | `CaveTheme` data: Stone Age, Jungle, Dark Cave, City Drain. Visual only; generation never reads it. |
 
-## Current state (17 Sept, commit after 48b93d5)
+## Master Prompt 2 (17 Sept, in progress on top of tag `prompt1-complete`)
+
+`OPTIMUS_Master_Prompt_2.txt` is a delta on Prompt 1. Built so far:
+
+- **Movement in the current frame.** WASD always uses the camera projected onto the plane of
+  the racer's *current* gravity (`PlayerController.movement_axes()`), on all six surfaces.
+- **Cave feels like a cave.** Corridor-first generator (VERSION 4): straight runs, long real
+  loops, dead ends, routes that climb and descend; narrow 4-unit tunnels, chambers with sloped
+  doorway funnels, rock dressing. See `docs/CAVE_GENERATION.md`.
+- **Freedom Duel.** `scripts/duel/`: first finisher is Qualified 1st and waits safely in an arena
+  under the cave; the second starts the duel. 3DOF vs 2DOF + one shield, Pulse Blaster, Axis Lock,
+  Freedom Core, arena DOF shifts, sudden death, hard limit, fallbacks. Bot duel brain. Server owns
+  it online. Results: Champion, runner-up, then cave order. See `docs/CORE_MECHANICS.md`.
+
+Rule changes from Prompt 2: the first finisher is never called "Winner"; the cave's Move charges
+play no part in the duel; the duel loser is not a cave elimination.
+
+## Prompt 1 state (17 Sept, commit after 48b93d5)
 
 **Everything in Tiers 1-3 is built and tested.** Splash → Play (Bot Race / Online Race / Mixed
 Race) → lobby → race → results → rematch or back to the room, with no editor.

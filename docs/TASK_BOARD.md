@@ -41,6 +41,39 @@ everything above is complete and committed, and it is bound by the abort gate in
 
 ---
 
+## MASTER PROMPT 2 (17 September, on top of `prompt1-complete`)
+
+`OPTIMUS_Master_Prompt_2.txt`. Status as of this commit.
+
+| ID | Task | Status | Evidence |
+|---|---|---|---|
+| P2-MOVE-001 | WASD uses the camera projected onto the current gravity plane, all six surfaces, chained shifts | DONE | `PlayerController.movement_axes()`; `tests/test_gravity.gd` (338 checks incl. real walking on six faces) |
+| P2-MOVE-002 | Remote racers drawn in their own orientation | DONE | `tests/test_net_sim.gd` wall-pose check |
+| P2-CAVE-001 | Corridor-first spine: straight runs, turns at run ends, planned climbs **and** descents | DONE | `CaveGenerator` VERSION 4; `tests/cave_metrics.tscn` |
+| P2-CAVE-002 | Long real loops (detour >= 4 hops), dead ends, upper and lower routes | DONE | `tests/test_cave.gd` `_test_cave_shape`, `_test_loops_are_long` |
+| P2-CAVE-003 | Narrow tunnels (4 units), chambers at spawn/finish/landmarks, flush floors | DONE | `CaveBuilder` `TUNNEL_HALF`, `FLOOR_Y`; hazards resized to fit |
+| P2-CAVE-004 | Doorway funnels so every chamber face walks into its tunnels | DONE | bots 17/40 -> 30/40 finishing (`bot_physical`, 10 caves) |
+| P2-CAVE-005 | Believable dressing: rock lumps, wall bulges, rubble, per-cell stone shade | DONE (first pass) | `_add_rock_dressing`; visual only |
+| DUEL-001 | Qualification: Qualified 1st waits safely in the arena, Qualified 2nd starts the duel, others stop | DONE | `tests/test_duel.gd` |
+| DUEL-002 | Fallbacks: no challenger left, 90 s qualify limit, race limit, force end, finalist leaves, 90 s duel limit | DONE | `tests/test_duel.gd`, `tests/test_net_sim.gd` |
+| DUEL-003 | Arena with X/Y/Z markings, platforms, ramps, cover, core pedestals | DONE | `scripts/duel/duel_arena.gd`; `tests/duel_shot.tscn` |
+| DUEL-004 | 3DOF / 2DOF / temporary 1DOF movement, no Gravity Moves in the duel | DONE | `PlayerController.duel_dof`; `tests/test_duel.gd` |
+| DUEL-005 | Fresh duel hearts, one-hit shield for Qualified 2nd, duel loss is not a cave elimination | DONE | `PlayerHealth.duel_mode` |
+| DUEL-006 | Pulse Blaster | DONE | hitscan, 0.5 hearts, 0.45 s |
+| DUEL-007 | Axis Lock with immunity (no chain-locking) | DONE | 3 s lock, 3 s immunity |
+| DUEL-008 | Freedom Core (+1 DOF, shield at 3DOF) | DONE | |
+| DUEL-009 | Arena DOF shifts and sudden death | DONE | FULL FREEDOM, Y AXIS LOCKED, FREEDOM SURGE; SD at 60 s |
+| DUEL-010 | Spectator view and duel HUD | DONE | `scripts/ui/duel_hud.gd` |
+| DUEL-011 | Results: Champion, runner-up, cave order, duel stats; "Qualified", never "Winner" | DONE | `scripts/ui/results.gd`, `MatchController.build_results` |
+| DUEL-012 | Bot finalists fight | DONE | bot-vs-bot duel resolves in `tests/test_duel.gd` |
+| DUEL-013 | Server-authoritative duel online (`c_duel_fire`, `s_duel_state`, `s_duel_event`) | DONE, sim-tested | `tests/test_net_sim.gd`; not yet played over real sockets |
+| DUEL-014 | Duel audio (qualified, intro, blaster, lock, core, shift, sudden death, hits, champion) and duel music | DONE | `AudioManager`, all synthesised |
+| DUEL-015 | Docs, How to Play, About, itch copy, shot list | DONE | this commit |
+| SHIP-P2-1 | Real-socket online duel playtest, Windows and Web re-export, clean-machine and browser checks | TODO | |
+| SHIP-P2-2 | Final screenshots and the 60-90 s video ending on the Champion | TODO | shot list in `docs/SUBMISSION_CHECKLIST.md` |
+
+---
+
 ## TODO
 
 ### Core — Developer A

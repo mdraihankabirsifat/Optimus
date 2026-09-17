@@ -65,7 +65,7 @@ floor detection, snapping and slide correctly in the rotated frame.
 
 | Input | Effect |
 |---|---|
-| `W A S D` | Gravity-relative walk |
+| `W A S D` | Walk in the **current** gravity frame (see 3a) |
 | Mouse | 360° look — yaw on body, pitch on head |
 | `Shift` | Sprint |
 | `E` | Interact / open mystery box |
@@ -80,6 +80,24 @@ floor detection, snapping and slide correctly in the rotated frame.
 While `G` is held the player must stop walking, and an on-screen arrow previews the direction
 that would be chosen. This preview is not optional polish — without it players cannot form
 intent and the mechanic reads as random.
+
+### 3a. Movement uses the current frame (Master Prompt 2)
+
+WASD is always relative to where the racer is standing **now**, never the spawn frame:
+
+```gdscript
+var up := gravity.local_up()                                  # current gravity
+var forward := camera_forward - up * camera_forward.dot(up)   # onto the walk plane
+var right := forward.cross(up)
+wish = right * move_input.x - forward * move_input.y
+```
+
+`PlayerController.movement_axes()` does this with fallbacks for looking straight up or down
+(head up vector, then body forward). The gravity chord and bots use the same axes, so on a wall
+`W` walks where you look along that wall, on the ceiling it walks where you look along the
+ceiling, and chained shifts stay intuitive. `tests/test_gravity.gd` checks all six gravities at
+four yaws, straight up/down looks, a nine-shift chain, and a real body walking W, D and jumping on
+all six faces of a sealed room.
 
 ---
 
@@ -252,3 +270,71 @@ Remote players interpolate. Never snap a remote transform every frame — it des
 - Applying gravity before `up_direction` is set in the same frame.
 - Letting the client deduct its own charge. Double-deduction and cheating both follow.
 - Running the ground check against world −Y instead of `gravity_dir`.
+
+---
+
+## 11. The Freedom Duel (Master Prompt 2)
+
+The cave no longer names a winner. The first **two** racers through the exit fight for Champion.
+Code: `scripts/duel/freedom_duel.gd` (rules), `duel_arena.gd` (the arena), `freedom_core_visual.gd`,
+`scripts/ui/duel_hud.gd`, and the duel brain at the end of `scripts/bots/bot_controller.gd`.
+Every number is in `autoload/app_config.gd` under "Freedom Duel".
+
+**Qualification.** `MatchController` records the finish as always, then tells `FreedomDuel`.
+The first finisher is **Qualified 1st**: moved to the arena under the cave, free to move, cannot
+be damaged, cannot reach anyone still racing. The second is **Qualified 2nd** and starts the duel.
+Everyone still in the cave stops where they are; hops left to the exit order them in the results.
+Once anyone qualifies, only the duel ends the race.
+
+Fallbacks, so nothing waits forever: nobody else can still qualify (all eliminated or gone) ->
+Qualified 1st is Champion by default; 90 s with no second qualifier -> the same; the 300 s race
+limit while waiting -> the same; a finalist disconnects mid-duel -> the other is Champion;
+the duel reaches 90 s -> most hearts wins, then most damage dealt, then Qualified 1st.
+
+**Freedom in control terms.** `PlayerController.duel_dof`:
+
+| DOF | Can do | When |
+|---|---|---|
+| 3 | walk the floor plane and jump (higher than the cave jump) | Qualified 1st's start |
+| 2 | walk the floor plane, no jump | Qualified 2nd's start; ramps still reach the high ground |
+| 1 | walk one arena axis only | only from an Axis Lock, 3 s |
+
+No Gravity Moves exist in the duel: the G chord is ignored while `duel_dof > 0`, and cave charges
+are irrelevant (a finalist with zero Moves duels exactly like one with five).
+
+**Health.** Both finalists get 5 fresh hearts. `PlayerHealth.duel_mode`: 0.2 s invulnerability
+after a hit, no Second Chance, and zero hearts emits `duel_down`, never `eliminated` -- the loser
+is not a cave elimination. Qualified 2nd's one compensation is a single one-hit shield.
+
+**Weapons** (hitscan from the eye, blocked by walls and cover):
+- **Pulse Blaster** (LMB, hold to repeat): 0.5 hearts, 0.45 s cooldown.
+- **Axis Lock** (RMB or Q): 0.25 hearts and removes one degree of freedom for 3 s
+  (3DOF loses Y, the jump; 2DOF is pinned to the X or Z axis it was facing). 6 s cooldown. After a
+  lock ends the target is immune to another for 3 s, so nobody can be chain-locked.
+
+**Freedom Core.** Appears 6 s in, then 12 s after each capture, cycling five pedestals (centre,
+both platforms, two floor ends). Walk into it: +1 DOF for 8 s; already at 3DOF, a shield (or a
+speed burst if already shielded). It never permanently erases Qualified 1st's advantage.
+
+**Arena DOF shifts.** First at 15 s, then every 18 s, for 5 s, in a fixed order:
+FULL FREEDOM (everyone at least 3DOF), Y AXIS LOCKED (nobody jumps), FREEDOM SURGE (everyone faster).
+
+**Sudden death** at 60 s: both finalists 3DOF, shields removed, hits deal 1.5x. No more shifts.
+
+**Arena.** 40 x 40 units at `DuelArena.ORIGIN`, far below the cave and inside world bounds. Red X
+and blue Z lines cross the floor, green Y beams stand in the corners. Two high platforms (2.2 up)
+with ramps, four pillars and two waist-high walls for cover.
+
+**Spectating.** Non-finalists' camera follows the two finalists (Tab switches). The duel HUD shows
+both names, hearts, shield, [X][Y][Z] boxes and DOF, lock timer and immunity, core state, timer,
+active shift and sudden death; finalists also get a crosshair and weapon cooldown bars.
+
+**Results.** Champion, duel runner-up, then everyone else in cave order (finishers, eliminated,
+stopped racers by distance to the exit). The first finisher is labelled "Q1", never "Winner".
+Duel stats per finalist: duration, damage dealt, Axis Locks landed, cores captured.
+
+**Online.** The server's `FreedomDuel` decides everything and `NetMatch` sends `s_duel_state`
+(on every change and at 10 Hz) and `s_duel_event` (shots, locks, cores, the end), each from the one
+place it happened. Clients send `c_duel_fire(kind, origin, dir)`; the server checks the phase,
+the cooldown and that the muzzle is at the shooter, then resolves the hit. A client's
+`FreedomDuel` is a mirror that never resolves anything. See `docs/NETWORKING.md`.

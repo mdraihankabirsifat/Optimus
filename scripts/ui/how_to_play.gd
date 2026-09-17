@@ -12,6 +12,8 @@ func _ready() -> void:
 		"[font_size=24]%sThe race[/color][/font_size]" % E,
 		"You and the bots spawn in the same cave. Nobody knows where the exit is -- not even the bots. "
 			+ "Find the [b]glowing amber pillar[/b] inside its ring of standing stones. It is never shown on the HUD or the map.",
+		"The exit does not crown a winner. The [b]first two[/b] racers to reach it [b]qualify for the Freedom Duel[/b], "
+			+ "and the duel decides the [b]Champion[/b].",
 		"",
 		"[font_size=24]%sMove[/color][/font_size]" % E,
 		"[b]Mouse[/b] look    [b]W A S D[/b] walk    [b]Shift[/b] sprint    [b]Space[/b] jump (tap for a hop)    "
@@ -61,6 +63,24 @@ func _ready() -> void:
 		"Pick an [b]environment[/b] in the lobby: Stone Age, Jungle, Dark Cave (you carry a lamp) or City Drain. "
 			+ "It changes the look, never the cave: the same seed is the same race in all four.",
 		"",
+		"[font_size=24]%sThe Freedom Duel[/color][/font_size]" % E,
+		"[b]Qualified 1st[/b] waits safely in the duel arena under the cave. When [b]Qualified 2nd[/b] arrives, "
+			+ "both get [b]5 fresh hearts[/b] and fight. Everyone else watches. Gravity Moves play no part here.",
+		"    [b]Qualified 1st starts with 3DOF[/b]: walk and [b]jump[/b] onto the high platforms.",
+		"    [b]Qualified 2nd starts with 2DOF[/b]: walk, no jump (the ramps still reach the high ground) -- "
+			+ "plus a [b]one-hit shield[/b].",
+		"    [b]Left mouse[/b] Pulse Blaster: steady damage on a short cooldown.",
+		"    [b]Right mouse / Q[/b] Axis Lock: takes one degree of freedom from your opponent for 3 seconds "
+			+ "(3DOF loses the jump; 2DOF is pinned to one axis). They are immune to another lock for a moment after.",
+		"    The gold [b]Freedom Core[/b] appears every few seconds: grab it for [b]+1 DOF[/b] for a while "
+			+ "(already at 3DOF, you get a shield).",
+		"    Every so often the arena shifts: [b]FULL FREEDOM[/b], [b]Y AXIS LOCKED[/b] or [b]FREEDOM SURGE[/b].",
+		"    After a minute, [b]SUDDEN DEATH[/b]: both 3DOF, no shields, hits hurt more. "
+			+ "If nobody falls, most hearts wins at the time limit.",
+		"Results: the duel winner is [b]Champion[/b], the loser 2nd, then everyone else in cave order. "
+			+ "If nobody else can reach the exit, Qualified 1st is Champion by default.",
+		"",
 		"[font_size=24]%sSpectating[/color][/font_size]" % S,
-		"Finished or out of hearts? The camera follows another racer in their own gravity. [b]Tab[/b] switches racer.",
+		"Finished or out of hearts? The camera follows another racer in their own gravity. [b]Tab[/b] switches racer. "
+			+ "During the Freedom Duel it follows the two finalists.",
 	]))

@@ -57,33 +57,44 @@ produce some automatically; the rest are quickest by hand.
 4. **Fire you walk over** — standing on a wall above a fire patch.
 5. **Mystery box opening** with the reward toast, ideally a rare clue arrow.
 6. **The finish** — the amber pillar in its stone ring, a racer arriving.
-7. **Results** — placements, times, a DNF or ELIMINATED, the seed.
-8. **Online lobby** — room code, 2 humans + 2 bots, colours, ready states.
-9. **Main menu** with the logo (cover image source).
-10. **Discovered-only map (M)** — only visited cells, no exit.
-11. **The four environments** — the same corridor in each (`godot res://tests/theme_shot.tscn`).
+7. **Qualified 1st** — waiting in the duel arena, the "QUALIFIED 1ST FOR THE FREEDOM DUEL" panel.
+8. **Freedom Duel mid-fight** — duel HUD with both finalists' hearts and [X][Y][Z] boxes, a blaster
+   tracer, the Freedom Core glowing on a platform.
+9. **Axis Lock landing** — violet ring on the target, "Z AXIS LOCKED" callout.
+10. **Spectating the duel** — third-person on a finalist, "SPECTATING ... [Tab] switch finalist".
+11. **Results** — CHAMPION on top, the runner-up, cave order below, duel stats, the seed.
+12. **Online lobby** — room code, 2 humans + 2 bots, colours, ready states.
+13. **Main menu** with the logo (cover image source).
+14. **Discovered-only map (M)** — only visited cells, no exit.
+15. **The four environments** — the same tunnel in each (`godot res://tests/theme_shot.tscn`).
+
+`godot --path . res://tests/duel_shot.tscn` saves waiting, intro, fight and spectator duel frames
+to `tests/shots/`.
 
 ## 60-90 second video shot list
 
-Target 75 s. Capture 60 fps; no voice-over needed, short on-screen captions instead.
+Target 80 s. Capture 60 fps; no voice-over needed, short on-screen captions instead. The video
+must end on the Freedom Duel and the Champion: that is now how every race ends.
 
 | Time | Shot | Caption |
 |---|---|---|
 | 0-4 s | Logo and title card | SIX WAYS DOWN — Team Optimus |
-| 4-10 s | Spawn chamber, countdown 3-2-1-GO, racers burst out | Race to a hidden exit |
-| 10-20 s | First-person corridor run, G held, preview labels, G+D: turn onto the wall | 5 Gravity Moves. Your gravity only. |
-| 20-28 s | Walk along the wall past a fire patch below | Walls become floors |
-| 28-36 s | G+Space at a shaft, fall upward, land on the ceiling | Ceilings become roads |
-| 36-44 s | Spectator/third-person: one racer on the floor, one on the wall, one on the ceiling | Freedom is personal |
-| 44-50 s | HUD close-up: DOF 1 in a tunnel, DOF 3 at a shaft junction | Degree of Freedom, measured live |
-| 50-56 s | Mystery box: Move Refill; then a rare clue arrow | Boxes, hazards, rare clues |
-| 56-62 s | Spider lunges, piston slams, a heart lost | 5 hearts |
-| 62-68 s | Online lobby with room code, then two humans racing | Bot Race offline · Online and Mixed Race |
-| 68-73 s | Arriving at the amber pillar, FINISHED 1st, results table | First to the exit wins |
-| 73-75 s | Title and team names | BUET Robotics Society GameJam 2026 |
+| 4-9 s | Spawn chamber, countdown 3-2-1-GO, racers burst into a narrow tunnel | Race to a hidden exit |
+| 9-17 s | First-person tunnel run, G held, preview labels, G+D: turn onto the wall | 5 Gravity Moves. Your gravity only. |
+| 17-23 s | W on the wall walks where you look; past a fire patch below | Walls become floors |
+| 23-30 s | G+Space at a shaft, fall upward, land on the ceiling, run a loop back to a known chamber | Ceilings become roads |
+| 30-36 s | Spectator: one racer on the floor, one on the wall, one on the ceiling | Freedom is personal |
+| 36-41 s | HUD close-up: DOF 1 in a tunnel, DOF 3 at a shaft junction; a mystery box | Degree of Freedom, measured live |
+| 41-46 s | Arriving at the amber pillar: QUALIFIED 1ST, the arena, waiting | The first two out qualify |
+| 46-50 s | Second racer arrives: QUALIFIED 2ND, FREEDOM DUEL, 3-2-1 | Qualified 1st earned 3DOF |
+| 50-60 s | Duel: jump to the platform, blaster tracers, the 2DOF finalist's shield breaking | Pulse Blaster |
+| 60-66 s | Axis Lock lands: violet ring, "Y AXIS LOCKED"; the victim grabs the Freedom Core | Take a freedom away. Win one back. |
+| 66-71 s | DOF shift banner, then SUDDEN DEATH | Total freedom |
+| 71-76 s | Final hit, CHAMPION callout, results table with CHAMPION on top | The duel decides the Champion |
+| 76-80 s | Online lobby flash, then title and team names | Bot Race offline · Online and Mixed · BUET Robotics Society GameJam 2026 |
 
-Must show: title, real gameplay from the submitted build, the core loop (explore, shift, find the
-exit), the major mechanics, and the theme connection.
+Must show: title, real gameplay from the submitted build, the core loop (explore, shift, qualify,
+duel), the major mechanics, and the theme connection.
 
 ## itch.io copy
 
@@ -105,8 +116,14 @@ exit), the major mechanics, and the theme connection.
 > A junction with a shaft: DOF 3, shown live on your HUD. More freedom means more routes, but vertical
 > routes cost Moves, and you only have five.
 >
-> Dodge fire, pistons and spiders, crack open mystery boxes for refills, shields, a Second Chance or a
-> rare clue, and be first to the hidden amber pillar.
+> Dodge fire, pistons and spiders in long narrow tunnels, crack open mystery boxes for refills,
+> shields, a Second Chance or a rare clue, and find the hidden amber pillar.
+>
+> **The first two out qualify for the Freedom Duel.** Getting out first earns the third degree of
+> freedom: Qualified 1st fights in 3DOF and can jump to the high ground, Qualified 2nd starts in 2DOF
+> with a one-hit shield. Blast with the **Pulse Blaster**, strip an axis from your opponent with an
+> **Axis Lock**, grab the **Freedom Core** for an extra degree of freedom, survive the arena's DOF
+> shifts and sudden death. The winner is Champion. Everyone else watches the final.
 >
 > - **Bot Race** — offline, you against up to four bots that only know what they have seen
 > - **Online Race** — 2-5 humans with a room code
@@ -116,7 +133,7 @@ exit), the major mechanics, and the theme connection.
 > - Ghost of your best run, daily cave, three cave sizes, three bot skills
 >
 > **Controls:** Mouse look · WASD walk · Shift sprint · Space jump · G+WASD turn 90° · G+Space flip 180° ·
-> E open box · M map · Esc menu
+> E open box · M map · Esc menu · Duel: left mouse Pulse Blaster, right mouse or Q Axis Lock
 >
 > **Team Optimus:** Md. Raihan Kabir Sifat, Estiak Zaman Atul, Sadman Sakib, Ashraf Hossain Chowdhury
 >
@@ -140,3 +157,9 @@ local-multiplayer, godot, game-jam · **Engine:** Godot · **Platforms:** Window
 - Online: a free Render server can take up to a minute to wake; a dropped player cannot rejoin a race
   already running.
 - Jungle, Dark Cave and City Drain reuse Stone Age decor with their own materials, light and one signature prop.
+- In the narrow tunnels bots finish about three races in four (four Hard bots, 10 test caves); a bot
+  that is stuck or eliminated simply does not qualify, and the 90 s qualification limit keeps the
+  race moving.
+- Racers still in the cave when the Freedom Duel starts stop where they are; they are ranked by how
+  close they were to the exit, not by finishing.
+- The duel arena is one fixed layout, the same in every environment.

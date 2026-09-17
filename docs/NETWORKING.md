@@ -36,6 +36,13 @@ The server owns everything that decides the race:
 - **Countdown, clock, finish trigger, placements, elimination, results.**
 - **Bots.** Simulated on the server with the same discovered-graph planner as offline.
 - **Crumbling floors and spiders.** Server state, relayed. Pistons follow the server clock.
+- **The Freedom Duel** (Prompt 2). Finalist selection and order, moving finalists to the arena,
+  fresh duel hearts, every finalist's DOF, weapon hits and damage, Axis Locks and immunity,
+  Freedom Core spawns and captures, DOF shifts, sudden death, the Champion and final placements.
+  A client's `FreedomDuel` only mirrors `s_duel_state`/`s_duel_event`. Human finalists are puppets
+  on the server: it sets their arena spawn as the accepted pose and corrects any cave pose still
+  in flight, which is what moves the client. Hits resolve against the server's copy of the target.
+  While anyone has qualified the "all humans resolved" grace is off; the duel's own limits end it.
 
 Clients own: their own movement, look, and everything rendered. A client's pose is accepted
 only if it is plausible: under 75 units/s of travel, inside world bounds, finite. Otherwise the
@@ -61,12 +68,16 @@ Client to server (all reliable except pose):
 | `c_loaded(graph_hash)` | Cave built. Server starts the countdown when all have loaded (or after 15 s). A wrong hash removes the client. |
 | `c_state(pos, rot, vel, grav, flags)` | 20 Hz pose. |
 | `c_shift(dir)`, `c_interact(box)`, `c_fell(unrecoverable)`, `c_emote(k)` | Intent. |
+| `c_duel_fire(kind, origin, dir)` | Freedom Duel trigger, `pulse` or `lock`. Refused outside the fight, on cooldown, for non-finalists or garbage; a muzzle more than 3 units from the shooter is pulled back to it. |
 | `c_test_teleport(pos)` | Honoured only by a server started with `--test-mode`. |
 
 Server to client: `s_welcome`, `s_notice`, `s_pong`, `s_lobby(snapshot)`, `s_left_room`,
 `s_match_start(config)`, `s_countdown`, `s_go`, `s_snapshot` (20 Hz poses, spiders, clock),
 `s_racer_state(rid, hearts, charges, flags)`, `s_shift`, `s_shift_denied`, `s_box`, `s_clue`,
-`s_crumble`, `s_finished`, `s_eliminated`, `s_replaced`, `s_correct`, `s_emote`, `s_results`.
+`s_crumble`, `s_finished`, `s_eliminated`, `s_replaced`, `s_correct`, `s_emote`, `s_results`,
+`s_duel_state(state)` (phase, finalist rids, clock, shift, core, and per finalist DOF, axis, lock,
+immunity, core boost, cooldowns, hearts, shield, stats) and `s_duel_event(kind, args)` (`shot`,
+`locked`, `resisted`, `core`, `end`). `PROTOCOL_VERSION` is 2.
 
 WebSocket runs over TCP, so every message arrives in order whatever transfer mode is declared.
 

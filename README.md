@@ -8,7 +8,8 @@ Made by Team Optimus for the BUET Robotics Society GameJam, Intra BUET Robo Chal
 Two to five racers spawn in the same seeded, block-built cave. Nobody knows where the exit is.
 Each racer carries **5 Gravity Moves**: rotate your *personal* gravity 90° to walk on a wall, or
 180° to make the ceiling your floor. Nobody else's gravity changes, and the world never turns.
-First to the hidden amber pillar wins.
+The first two to reach the hidden amber pillar qualify for the **Freedom Duel**: a short arena
+fight where getting out first earned you the third degree of freedom, and the winner is Champion.
 
 **Team Optimus:** Md. Raihan Kabir Sifat · Estiak Zaman Atul · Sadman Sakib · Ashraf Hossain Chowdhury
 
@@ -19,11 +20,16 @@ First to the hidden amber pillar wins.
 - **Rotational freedom is the mechanic.** Rotate your own gravity to any of six directions.
 - **Freedom costs something.** Five Moves. Vertical routes demand them.
 - **Freedom is personal.** Two racers in one corridor can stand on different surfaces.
+- **Freedom is the prize.** In the Freedom Duel, Qualified 1st starts with 3DOF (move and jump),
+  Qualified 2nd with 2DOF. An Axis Lock takes an axis away; a Freedom Core gives one back.
 
 ## Features
 
 - Gravity-relative first-person movement, 90° and 180° Gravity Moves on any surface or mid-air
-- Seeded procedural cave: loops, branches, dead ends, shafts, landmarks, 3 sizes, daily seed
+- Seeded procedural cave that feels like a cave: long narrow tunnels, real loops, dead ends,
+  routes that climb and descend, chambers, landmarks, 3 sizes, daily seed
+- **Freedom Duel** finale: 3DOF vs 2DOF, Pulse Blaster, Axis Lock, Freedom Core, arena DOF shifts,
+  sudden death, spectator view of both finalists, bots that fight
 - Four environments: Stone Age, Jungle, Dark Cave (carry a lamp), City Drain. Same seed, same cave in each
 - Gravity-aware solvability: every cave is proven reachable within 5 Moves, no loot needed
 - Hazards: fire, pistons, spiders, crumbling floors, wind; boost pads
@@ -61,6 +67,8 @@ Every race has 2-5 racers. The host sets the count, adds or removes bots, picks 
 | Esc | Menu (offline it pauses; online the race keeps running) |
 | Tab | Next racer while spectating |
 | Enter | End the race early once you are done (offline) |
+| **Left mouse** | Freedom Duel: Pulse Blaster (hold to repeat) |
+| **Right mouse / Q** | Freedom Duel: Axis Lock |
 
 Keys can be remapped in Settings. Running from source, F3 shows the developer overlay (cave graph and bot knowledge); exported builds do not have it.
 
@@ -74,6 +82,13 @@ Keys can be remapped in Settings. Running from source, F3 shows the developer ov
 - Fire burns half a heart per tick. Walk the clear edge, or shift onto a wall and walk over it.
 - Heart Refill never brings back an eliminated racer.
 - The exit is never shown on the HUD or the map. Clues are rare and coarse.
+- The first finisher is **Qualified 1st**, not the winner: they wait safely in the duel arena. The
+  second finisher starts the **Freedom Duel**; everyone else stops and watches.
+- Duel: 5 fresh hearts each, no Gravity Moves. Qualified 1st 3DOF, Qualified 2nd 2DOF plus a one-hit
+  shield. Axis Lock removes a DOF for 3 s, with immunity after. Freedom Core: +1 DOF for 8 s.
+  Sudden death at 60 s, decided on hearts at 90 s.
+- Results: Champion, duel runner-up, then cave order. If nobody else can reach the exit,
+  Qualified 1st is Champion by default.
 
 ## Run it
 

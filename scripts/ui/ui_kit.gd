@@ -260,6 +260,8 @@ static func controls_table() -> Control:
 		["Discovered map", key_for("toggle_map")],
 		["Emotes", "%s %s %s" % [key_for("emote_1"), key_for("emote_2"), key_for("emote_3")]],
 		["Menu", key_for("pause")],
+		["Freedom Duel: Pulse Blaster", "Left mouse"],
+		["Freedom Duel: Axis Lock", "Right mouse / Q"],
 		["Spectate next racer", key_for("spectate_next")],
 		["End race early (offline, once resolved)", key_for("skip_wait")],
 	]

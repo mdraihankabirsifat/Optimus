@@ -17,6 +17,10 @@ func _ready() -> void:
 		"[b]Freedom has a price.[/b] You get five Moves. Vertical routes demand them. "
 			+ "Every junction asks the same question: is more freedom worth spending some of it?",
 		"",
+		"[b]Freedom is the prize.[/b] The first two out of the cave meet in the [b]Freedom Duel[/b]. "
+			+ "Getting out first earns the third degree of freedom -- the jump -- and the fight itself trades "
+			+ "freedom: an Axis Lock takes an axis away, a Freedom Core gives one back.",
+		"",
 		"[b]Freedom is personal.[/b] Gravity belongs to each racer. Two racers in the same corridor "
 			+ "can each be standing on a different surface, each correctly upright in their own frame. "
 			+ "Nothing about the world changes when you turn it -- only your relationship to it.",

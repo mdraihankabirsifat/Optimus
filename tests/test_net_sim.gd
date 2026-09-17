@@ -326,7 +326,9 @@ func _client_mirror() -> void:
 		"finalists and phase come from the server")
 	_check(DuelArena.contains(me.global_position), "my own racer is moved to the arena by my client")
 	_check(not DuelArena.contains(them.global_position), "a puppet waits for its pose instead of being moved locally")
-	_check(them.duel_dof == 1 and duel_c.shown_dof(them) == 1 and me.duel_dof == 3, "duel DOF synced for both finalists")
+	# Ben on the server: 2DOF base, locked (-1), then a Freedom Core (+1).
+	_check(them.duel_dof == 2 and duel_c.shown_dof(them) == 2 and float(duel_c.fighters[them]["lock_left"]) > 0.0
+		and me.duel_dof == 3, "duel DOF and Axis Lock synced for both finalists")
 	_check(is_equal_approx(them.health.hearts, 5.0 - AppConfig.PULSE_DAMAGE - AppConfig.AXIS_LOCK_DAMAGE)
 		and is_equal_approx(me.health.hearts, 5.0), "duel hearts synced")
 	_check(not me.health.is_eliminated and me.health.duel_mode, "duel health mode, never a cave elimination")
@@ -334,7 +336,8 @@ func _client_mirror() -> void:
 	_check(locks.size() == 1 and locks[0][0] == them, "a lock event is shown once")
 	_check(duel_c.fire(me, "pulse") == false, "a client never resolves a shot itself")
 	m.client_on_duel_state(_duel_state)
-	_check(them.duel_dof == 1 and int(duel_c.fighters[them]["cores"]) == 1, "a repeated state packet changes nothing")
+	_check(them.duel_dof == 2 and int(duel_c.fighters[them]["cores"]) == 1 and locks.size() == 1,
+		"a repeated state packet changes nothing")
 	m.client_on_duel_event("end", [0, 1, "knockout"])
 	_check(duel_c.champion == me and duel_c.runner_up == them, "the Champion comes from the server")
 
