@@ -195,6 +195,39 @@ func spine_climb_cost() -> int:
 	return climbs
 
 
+## Moves the guaranteed route costs: gravity starts down; a climb needs it flipped up, a
+## descent needs it back down. Staying inverted through several climbs is free.
+func spine_move_cost() -> int:
+	var steps: Array[int] = []
+	for i in range(1, spine.size()):
+		var dy := spine[i].y - spine[i - 1].y
+		if dy != 0:
+			steps.append(signi(dy))
+	return move_cost_of_steps(steps)
+
+
+static func move_cost_of_steps(steps: Array[int]) -> int:
+	var cost := 0
+	var inverted := false
+	for step: int in steps:
+		if step > 0 and not inverted:
+			cost += 1
+			inverted = true
+		elif step < 0 and inverted:
+			cost += 1
+			inverted = false
+	return cost
+
+
+## Cells with a single connection, other than spawn and finish.
+func dead_end_count() -> int:
+	var n := 0
+	for c: Vector3i in cells:
+		if degree(c) == 1 and c != spawn_cell and c != finish_cell:
+			n += 1
+	return n
+
+
 func vertical_link_count() -> int:
 	var count := 0
 	for c: Vector3i in cells:

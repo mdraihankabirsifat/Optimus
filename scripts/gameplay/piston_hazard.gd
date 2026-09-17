@@ -11,6 +11,10 @@ const HOLD := 0.35
 const RETRACT := 0.9
 
 var hazard_id: int = 0
+## Footprint and clear half-height for this cell. In a narrow tunnel the ram is smaller, so a
+## racer on either wall still clears it.
+var footprint: float = FOOTPRINT
+var _half: float = CaveBuilder.CHAMBER_HALF
 var _phase_offset: float = 0.0
 var _time: float = 0.0
 var _head: MeshInstance3D
@@ -21,8 +25,10 @@ var _bodies: Array[PlayerController] = []
 var _slammed := false
 
 
-static func create(id: int, cell: Vector3i, phase: int) -> PistonHazard:
+static func create(id: int, cell: Vector3i, phase: int, half: float = CaveBuilder.CHAMBER_HALF) -> PistonHazard:
 	var piston := PistonHazard.new()
+	piston._half = half
+	piston.footprint = minf(FOOTPRINT, half * 2.0 - 1.6)
 	piston.hazard_id = id
 	piston._phase_offset = float(phase) * AppConfig.PISTON_CYCLE * 0.25
 	piston.position = CaveBuilder.cell_to_world(cell)
@@ -42,13 +48,13 @@ func _ready() -> void:
 
 	_head = MeshInstance3D.new()
 	var block := BoxMesh.new()
-	block.size = Vector3(FOOTPRINT, 1.2, FOOTPRINT)
+	block.size = Vector3(footprint, 1.2, footprint)
 	_head.mesh = block
 	_head.material_override = stone
 	add_child(_head)
 	var band := MeshInstance3D.new()
 	var band_mesh := BoxMesh.new()
-	band_mesh.size = Vector3(FOOTPRINT + 0.1, 0.25, FOOTPRINT + 0.1)
+	band_mesh.size = Vector3(footprint + 0.1, 0.25, footprint + 0.1)
 	band.mesh = band_mesh
 	band.material_override = _glow
 	band.position.y = -0.45
@@ -66,21 +72,22 @@ func _ready() -> void:
 	# A scorched square on the floor marks the danger zone even while the ram is up.
 	var mark := MeshInstance3D.new()
 	var mark_mesh := BoxMesh.new()
-	mark_mesh.size = Vector3(FOOTPRINT, 0.03, FOOTPRINT)
+	mark_mesh.size = Vector3(footprint, 0.03, footprint)
 	mark.mesh = mark_mesh
 	var mark_mat := StandardMaterial3D.new()
 	mark_mat.albedo_color = Color(0.12, 0.08, 0.07)
 	mark.material_override = mark_mat
-	mark.position.y = -CaveBuilder.CELL_SIZE * 0.5 + CaveBuilder.WALL_THICKNESS * 0.5 + 0.02
+	mark.position.y = CaveBuilder.FLOOR_Y + 0.02
 	add_child(mark)
 
 	_area = Area3D.new()
 	_area.collision_layer = 0
 	_area.collision_mask = CaveBuilder.LAYER_RACERS
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(FOOTPRINT, CaveBuilder.CELL_SIZE - 1.0, FOOTPRINT)
+	shape.size = Vector3(footprint, _half - CaveBuilder.FLOOR_Y, footprint)
 	var col := CollisionShape3D.new()
 	col.shape = shape
+	col.position.y = (_half + CaveBuilder.FLOOR_Y) * 0.5
 	_area.add_child(col)
 	add_child(_area)
 	_area.body_entered.connect(func(b: Node3D) -> void:
@@ -139,14 +146,14 @@ func _near_miss_check() -> void:
 		return
 	var rel := local.global_position - global_position
 	var flat := Vector2(rel.x, rel.z).length()
-	if flat < FOOTPRINT * 0.5 + 1.8 and absf(rel.y) < CaveBuilder.CELL_SIZE * 0.5:
+	if flat < footprint * 0.5 + 1.8 and absf(rel.y) < _half + 0.5:
 		NearMiss.trigger(local)
 
 
 ## 0 is tucked against the ceiling, 1 is resting on the floor.
 func _pose(extension: float) -> void:
-	var top := CaveBuilder.CELL_SIZE * 0.5 - CaveBuilder.WALL_THICKNESS * 0.5
-	var bottom := -CaveBuilder.CELL_SIZE * 0.5 + CaveBuilder.WALL_THICKNESS * 0.5
+	var top := _half
+	var bottom := CaveBuilder.FLOOR_Y
 	var head_top := lerpf(top, bottom + 1.2, extension)
 	_head.position.y = head_top - 0.6
 	var rod_len := maxf(0.05, top - head_top)

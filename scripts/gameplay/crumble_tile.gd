@@ -30,7 +30,9 @@ func _ready() -> void:
 	collision_layer = CaveBuilder.LAYER_WORLD
 	collision_mask = 0
 	add_to_group("crumble_tiles")
-	var size := Vector3(CaveBuilder.CELL_SIZE, CaveBuilder.WALL_THICKNESS, CaveBuilder.CELL_SIZE)
+	# Exactly plugs the tunnel-sized opening between the two cells.
+	var hole := CaveBuilder.TUNNEL_HALF * 2.0
+	var size := Vector3(hole + 0.1, CaveBuilder.WALL_THICKNESS, hole + 0.1)
 	var shape := BoxShape3D.new()
 	shape.size = size
 	var col := CollisionShape3D.new()
@@ -55,11 +57,11 @@ func _ready() -> void:
 	for i in 5:
 		var crack := MeshInstance3D.new()
 		var line := BoxMesh.new()
-		line.size = Vector3(3.2 - 0.3 * i, 0.03, 0.05)
+		line.size = Vector3(2.2 - 0.25 * i, 0.03, 0.05)
 		crack.mesh = line
 		crack.material_override = crack_mat
 		crack.rotation.y = float(i) * 1.13
-		crack.position = Vector3(cos(i * 2.1) * 1.1, 0.0, sin(i * 2.1) * 1.1)
+		crack.position = Vector3(cos(i * 2.1) * 0.8, 0.0, sin(i * 2.1) * 0.8)
 		for face in [1.0, -1.0]:
 			var side := crack.duplicate() as MeshInstance3D
 			side.position.y = face * (CaveBuilder.WALL_THICKNESS * 0.5 + 0.01)
@@ -70,7 +72,7 @@ func _ready() -> void:
 	_trigger.collision_layer = 0
 	_trigger.collision_mask = CaveBuilder.LAYER_RACERS
 	var tshape := BoxShape3D.new()
-	tshape.size = Vector3(CaveBuilder.CELL_SIZE - 0.6, CaveBuilder.WALL_THICKNESS + 1.4, CaveBuilder.CELL_SIZE - 0.6)
+	tshape.size = Vector3(hole - 0.4, CaveBuilder.WALL_THICKNESS + 1.4, hole - 0.4)
 	var tcol := CollisionShape3D.new()
 	tcol.shape = tshape
 	_trigger.add_child(tcol)

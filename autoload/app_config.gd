@@ -29,6 +29,12 @@ const DAMAGE_FIRE := 0.5
 const DAMAGE_SPIDER := 1.0
 const DAMAGE_VACUUM_FALL := 1.0
 
+# --- Cave shape (Prompt 2) -----------------------------------------------------
+## Clear width of an ordinary tunnel, in world units. The lattice pitch stays 8, so tunnels
+## are narrow passages through solid rock rather than rooms. 4 is five player-capsule
+## diameters: tight, but a racer standing on a wall still clears the far wall.
+const CAVE_TUNNEL_WIDTH := 4.0
+
 # --- Movement -----------------------------------------------------------------
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 9.5
@@ -104,6 +110,40 @@ const CLUE_TIME := 9.0
 ## Once the local player has finished or been eliminated, the race ends after this many
 ## seconds even if bots are still searching. Judges should never wait on a lost bot.
 const LOCAL_RESOLVED_GRACE := 20.0
+
+# --- Freedom Duel (Prompt 2) --------------------------------------------------
+## The first two racers to reach the exit qualify; the duel decides the Champion.
+const DUEL_ENABLED := true
+## After the first qualifier, how long the others get to reach the exit before Qualified 1st
+## becomes Champion by default. Guarantees the race can never wait forever.
+const DUEL_QUALIFY_TIMEOUT := 90.0
+## Offline, Qualified 1st may give up waiting and take Champion by default after this long.
+const DUEL_SKIP_AFTER := 20.0
+const DUEL_COUNTDOWN := 3
+const DUEL_HEARTS := 5.0
+## Short: blaster hits are the rhythm of the duel, the cave's 1.5 s would halve it.
+const DUEL_INVULNERABILITY := 0.2
+## 3DOF jump. Higher than the cave jump so platforms are a real vertical option.
+const DUEL_JUMP_VELOCITY := 11.0
+const PULSE_DAMAGE := 0.5
+const PULSE_COOLDOWN := 0.45
+const PULSE_RANGE := 60.0
+const AXIS_LOCK_DAMAGE := 0.25
+const AXIS_LOCK_COOLDOWN := 6.0
+const AXIS_LOCK_DURATION := 3.0
+## After a lock ends the target cannot be locked again for this long. No stun-locking.
+const AXIS_LOCK_IMMUNITY := 3.0
+const CORE_FIRST_SPAWN := 6.0
+const CORE_RESPAWN := 12.0
+const CORE_BOOST_TIME := 8.0
+const CORE_PICKUP_RADIUS := 1.6
+const DOF_SHIFT_FIRST := 15.0
+const DOF_SHIFT_INTERVAL := 18.0
+const DOF_SHIFT_DURATION := 5.0
+const SUDDEN_DEATH_AT := 60.0
+const SUDDEN_DEATH_DAMAGE_SCALE := 1.5
+## Nobody left standing by now: most hearts wins, then damage dealt, then Finalist A.
+const DUEL_HARD_LIMIT := 90.0
 
 # --- Online -------------------------------------------------------------------
 ## Local development server. `godot --headless --path . res://scenes/net/server.tscn`

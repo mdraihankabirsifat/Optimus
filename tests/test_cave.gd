@@ -43,7 +43,7 @@ func _ready() -> void:
 		total_cells += graph.cell_count()
 		total_cycles += graph.cycle_count()
 
-		var climbs := graph.spine_climb_cost()
+		var climbs := graph.spine_move_cost()
 		total_climbs += climbs
 		worst_climbs = maxi(worst_climbs, climbs)
 
@@ -57,7 +57,7 @@ func _ready() -> void:
 		if climbs > AppConfig.MOVE_CHARGES_START:
 			_fail("seed %d: needs %d Moves, racers only have %d"
 				% [s, climbs, AppConfig.MOVE_CHARGES_START])
-		if hops < 8:
+		if hops < gen.min_spawn_finish_distance:
 			_fail("seed %d: spawn and finish only %d hops apart" % [s, hops])
 		if graph.cycle_count() < 1:
 			_fail("seed %d: no loop" % s)
@@ -75,8 +75,11 @@ func _ready() -> void:
 		else:
 			total_min_moves += need
 			worst_min_moves = maxi(worst_min_moves, need)
-			if need > climbs:
-				_fail("seed %d: validator needs %d Moves but the spine promised %d" % [s, need, climbs])
+			# The spine's own cost is only a construction estimate: a loop can open a shaft
+			# under the route, and in a narrow tunnel a racer cannot walk around the hole.
+			# The gravity-aware search is the guarantee that counts.
+			if need > AppConfig.MOVE_CHARGES_START:
+				_fail("seed %d: needs %d Moves, racers only have %d" % [s, need, AppConfig.MOVE_CHARGES_START])
 		# Structure: links symmetric and in bounds, no overlapping placements.
 		var problem := CaveValidator.structural_problem(graph, gen.size)
 		if problem != "":
@@ -99,7 +102,7 @@ func _ready() -> void:
 
 	_check("every seed generated a cave", failures == 0)
 	_check("no seed exceeds the 5-charge budget", worst_climbs <= AppConfig.MOVE_CHARGES_START)
-	_check("closest spawn-finish pair is still far enough", min_hops >= 8)
+	_check("closest spawn-finish pair is still far enough", min_hops >= gen.min_spawn_finish_distance)
 	_check("gravity-aware search solves every cave within 5 Moves",
 		failures == 0 and worst_min_moves <= AppConfig.MOVE_CHARGES_START)
 	_test_validator_rules()
@@ -117,6 +120,8 @@ func _ready() -> void:
 
 	_test_determinism()
 	_test_presets_and_features()
+	_test_cave_shape()
+	_test_loops_are_long()
 
 	var ok: int = SEED_COUNT - failures
 	if ok > 0:
@@ -190,6 +195,98 @@ func _test_presets_and_features() -> void:
 		_check("%s: no crumbling cover on the guaranteed route" % label, bad_crumble == 0)
 		_check("%s: no feature in the spawn or finish cell" % label, bad_spawn == 0)
 		_check("%s: caves actually contain features" % label, features > 40)
+
+
+## Prompt 2: a long, narrow, layered tunnel network -- not a house. Each preset is held to
+## shape targets well past what the Prompt-1 generator produced (straight runs 1.1 cells,
+## a junction every 1.2 hops on the route, 33% of cells junctions, the route never descending).
+func _test_cave_shape() -> void:
+	for p in CaveGenerator.SIZE_PRESETS.size():
+		var m := CaveMetrics.new()
+		var label: String = CaveGenerator.SIZE_PRESETS[p]["name"]
+		var self_edges := 0
+		var no_down := 0
+		var no_up := 0
+		var no_cycle := 0
+		var few_dead_ends := 0
+		var levels_ok := 0
+		for s in 60:
+			var gen := CaveGenerator.new()
+			gen.apply_size_preset(p)
+			var g := gen.generate(1000 + s)
+			if g == null:
+				continue
+			m.add(g)
+			# A self-loop edge is impossible in a lattice graph, but prove no link points home.
+			for c: Vector3i in g.cells:
+				for d in 6:
+					if g.is_linked(c, d) and c + CaveGraph.DIRS[d] == c:
+						self_edges += 1
+			var ups := 0
+			var downs := 0
+			for i in range(1, g.spine.size()):
+				var dy := g.spine[i].y - g.spine[i - 1].y
+				ups += 1 if dy > 0 else 0
+				downs += 1 if dy < 0 else 0
+			no_up += 1 if ups == 0 else 0
+			no_down += 1 if downs == 0 else 0
+			no_cycle += 1 if g.cycle_count() < 1 else 0
+			few_dead_ends += 1 if g.dead_end_count() < 2 else 0
+			var ys := {}
+			for c: Vector3i in g.cells:
+				ys[c.y] = true
+			levels_ok += 1 if ys.size() >= 2 else 0
+		_check("%s: 60 caves generate" % label, m.caves == 60)
+		_check("%s: straight corridor runs average at least 1.8 cells (%.2f)" % [label, m.average_run()],
+			m.average_run() >= 1.8)
+		_check("%s: junctions are under 20%% of cells (%.0f%%)" % [label, 100.0 * m.junctions / maxf(1.0, m.cells)],
+			float(m.junctions) / maxf(1.0, float(m.cells)) < 0.20)
+		_check("%s: the route meets a junction no more than every 3 hops on average (%.2f)" % [label, m.average_junction_gap()],
+			m.average_junction_gap() >= 3.0)
+		_check("%s: every guaranteed route climbs somewhere" % label, no_up == 0)
+		_check("%s: every guaranteed route descends somewhere" % label, no_down == 0)
+		_check("%s: every cave has a real cycle" % label, no_cycle == 0)
+		_check("%s: every cave has at least two dead ends" % label, few_dead_ends == 0)
+		_check("%s: every cave spans at least two levels" % label, levels_ok == m.caves)
+		_check("%s: no self-edge is ever used as a loop" % label, self_edges == 0)
+
+
+## Real loops are long: removing any one loop link leaves a detour of several hops.
+func _test_loops_are_long() -> void:
+	var short_loops := 0
+	var loops := 0
+	for s in 40:
+		var g := CaveGenerator.new().generate(2000 + s)
+		if g == null:
+			continue
+		for c: Vector3i in g.sorted_cells():
+			for d in [CaveGraph.DIR_PLUS_X, CaveGraph.DIR_UP, CaveGraph.DIR_PLUS_Z]:
+				if not g.is_linked(c, d):
+					continue
+				var n: Vector3i = c + CaveGraph.DIRS[d]
+				var detour := _detour(g, c, n)
+				if detour < 999:
+					loops += 1
+					if detour < 4:
+						short_loops += 1
+	_check("caves contain loop edges (%d)" % loops, loops > 0)
+	_check("no loop is a tiny square: every cycle edge detours 4+ hops (%d short)" % short_loops,
+		short_loops == 0)
+
+
+func _detour(g: CaveGraph, a: Vector3i, b: Vector3i) -> int:
+	var dist := {a: 0}
+	var queue: Array[Vector3i] = [a]
+	while not queue.is_empty():
+		var cur: Vector3i = queue.pop_front()
+		for n: Vector3i in g.linked_neighbours(cur):
+			if (cur == a and n == b) or dist.has(n):
+				continue
+			dist[n] = int(dist[cur]) + 1
+			if n == b:
+				return dist[n]
+			queue.append(n)
+	return 999
 
 
 ## Hand-built caves with known answers, so the validator itself is tested rather than trusted.

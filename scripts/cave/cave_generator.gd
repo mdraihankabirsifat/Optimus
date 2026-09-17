@@ -13,7 +13,8 @@ extends RefCounted
 ## the number of charges a racer needs to finish, and it is capped below the starting five.
 
 ## Bump when generation logic changes. Peers with different versions cannot race together.
-const VERSION := 3
+## 4: corridor-first tunnels, a route that climbs AND descends, long carved loops.
+const VERSION := 4
 
 ## Set dressing and pickups. Dead ends are rewarded with boxes far more often than
 ## corridors are, so exploring a wrong turn is a gamble rather than a pure loss.
@@ -23,23 +24,33 @@ var max_fires := 9
 var max_torches := 10
 var crystal_colours := 4
 
-var size := Vector3i(6, 4, 6)
-## Racers start with 5 charges; the guaranteed route may use at most this many, leaving
-## the rest as genuine strategic choice rather than a tax.
+var size := Vector3i(9, 4, 9)
+## The guaranteed route's Move cost -- every flip of gravity it needs, up or back down --
+## stays at or under this, leaving the rest of the five charges as real choice.
 var max_spine_climbs := 3
-var min_spawn_finish_distance := 8
-var branch_attempts := 45
-var loop_attempts := 30
-## Fraction of LOOPS allowed to stay on one Y level. Branches are always horizontal --
-## see _pick_branch_dir.
-##
-## Vertical links are not free to traverse -- crossing one costs a Move charge, and racers
-## only ever get five. Scattering vertical connections everywhere fragments each floor into
-## pieces that cannot be explored without paying, which strands anyone searching blind.
-## Keeping braiding mostly horizontal makes each level explorable for free and turns the
-## remaining vertical links into deliberate, readable moments.
-var horizontal_bias := 0.85
-var max_attempts := 24
+var min_spawn_finish_distance := 14
+
+## --- Tunnel shape (Prompt 2: a cave, not a house) ---
+## Straight corridor runs between turns, in cells (each cell is 8 world units).
+var run_min := 3
+var run_max := 6
+## Horizontal runs per leg of the guaranteed route, between its vertical steps.
+var runs_per_leg_min := 2
+var runs_per_leg_max := 3
+## Vertical steps on the guaranteed route. At least one climbs and one descends.
+var vertical_steps_min := 3
+var vertical_steps_max := 4
+## Dead-end side tunnels.
+var branch_count := 8
+var branch_len_min := 2
+var branch_len_max := 5
+## Real cycles: a new tunnel carved from one part of the cave to another part at least
+## loop_min_detour hops away, so coming back around means something.
+var loop_count := 3
+var loop_len_max := 10
+var loop_min_detour := 6
+var loop_vertical_chance := 0.25
+var max_attempts := 40
 
 var last_failure := ""
 var attempts_used := 0
@@ -76,15 +87,14 @@ func _build() -> bool:
 	return true
 
 
-## Named cave sizes for the lobby. Standard is the size every test and balance number in
-## docs/TASK_BOARD.md was measured on.
+## Named cave sizes for the lobby.
 const SIZE_PRESETS := [
-	{"name": "Short", "size": Vector3i(5, 3, 5), "min_distance": 6, "branches": 30, "loops": 20,
-		"boxes": 8, "fires": 6},
-	{"name": "Standard", "size": Vector3i(6, 4, 6), "min_distance": 8, "branches": 45, "loops": 30,
-		"boxes": 12, "fires": 9},
-	{"name": "Long", "size": Vector3i(8, 4, 8), "min_distance": 11, "branches": 80, "loops": 50,
-		"boxes": 18, "fires": 13},
+	{"name": "Short", "size": Vector3i(7, 3, 7), "min_distance": 10, "branches": 5, "loops": 2,
+		"boxes": 8, "fires": 5, "vertical": Vector2i(2, 3), "run": Vector2i(3, 5)},
+	{"name": "Standard", "size": Vector3i(9, 4, 9), "min_distance": 14, "branches": 8, "loops": 3,
+		"boxes": 12, "fires": 8, "vertical": Vector2i(3, 4), "run": Vector2i(3, 6)},
+	{"name": "Long", "size": Vector3i(11, 5, 11), "min_distance": 20, "branches": 12, "loops": 5,
+		"boxes": 16, "fires": 11, "vertical": Vector2i(4, 5), "run": Vector2i(4, 7)},
 ]
 
 
@@ -92,10 +102,14 @@ func apply_size_preset(index: int) -> void:
 	var p: Dictionary = SIZE_PRESETS[clampi(index, 0, SIZE_PRESETS.size() - 1)]
 	size = p["size"]
 	min_spawn_finish_distance = p["min_distance"]
-	branch_attempts = p["branches"]
-	loop_attempts = p["loops"]
+	branch_count = p["branches"]
+	loop_count = p["loops"]
 	max_boxes = p["boxes"]
 	max_fires = p["fires"]
+	vertical_steps_min = (p["vertical"] as Vector2i).x
+	vertical_steps_max = (p["vertical"] as Vector2i).y
+	run_min = (p["run"] as Vector2i).x
+	run_max = (p["run"] as Vector2i).y
 
 
 ## Boost pads, wind, pistons, spiders, crumbling shaft covers, shortcut markers and
@@ -270,118 +284,210 @@ func _place_decor() -> void:
 			_graph.decor.append({"cell": c, "kind": "moss", "variant": _rng.randi_range(0, 3)})
 
 
-## Walk from spawn to finish in legs: wander horizontally, climb, wander, climb, wander.
-## The number of climbs is chosen up front, which is what bounds the Move cost.
+## The guaranteed route, corridor-first. Legs of long straight runs joined by narrow turns,
+## separated by vertical steps that go BOTH ways: the cave is a layered network, never a
+## staircase to the exit. The vertical plan is chosen up front so its Move cost -- every
+## time gravity has to flip, up or back down -- is known before a cell is carved.
 func _carve_spine() -> bool:
-	var current := Vector3i(
-		_rng.randi_range(0, size.x - 1), 0, _rng.randi_range(0, size.z - 1))
+	var start_y := clampi(size.y / 2, 0, size.y - 1)
+	var current := Vector3i(_rng.randi_range(1, size.x - 2), start_y, _rng.randi_range(1, size.z - 2))
 	_graph.spawn_cell = current
 	_graph.add_cell(current)
 	_graph.spine.append(current)
 
-	var climbs: int = _rng.randi_range(2, mini(max_spine_climbs, size.y - 1))
-	var last_dir := -1
+	var plan := _vertical_plan(start_y)
+	if plan.is_empty():
+		last_failure = "no vertical plan fits the lattice"
+		return false
 
-	for leg in climbs + 1:
-		for step in _rng.randi_range(3, 6):
-			var dir_index := _pick_wander_dir(current, last_dir)
-			if dir_index == -1:
-				break
+	var heading: int = CaveGraph.FLAT_DIRS[_rng.randi_range(0, 3)]
+	for leg in plan.size() + 1:
+		for r in _rng.randi_range(runs_per_leg_min, runs_per_leg_max):
+			heading = _choose_heading(current, heading, r > 0)
+			if heading == -1:
+				last_failure = "spine boxed in"
+				return false
+			var length := _rng.randi_range(run_min, run_max)
+			var carved := 0
+			for step in length:
+				var next: Vector3i = current + CaveGraph.DIRS[heading]
+				if not _in_bounds(next) or _graph.has_cell(next):
+					break
+				_graph.link(current, next)
+				current = next
+				_graph.spine.append(current)
+				carved += 1
+			if carved == 0 and r == 0:
+				last_failure = "spine could not start a run"
+				return false
+		if leg < plan.size():
+			var dir_index := CaveGraph.DIR_UP if plan[leg] > 0 else CaveGraph.DIR_DOWN
 			var next: Vector3i = current + CaveGraph.DIRS[dir_index]
+			if not _in_bounds(next) or _graph.has_cell(next):
+				last_failure = "spine vertical step blocked"
+				return false
 			_graph.link(current, next)
 			current = next
 			_graph.spine.append(current)
-			last_dir = dir_index
-
-		if leg < climbs:
-			var up: Vector3i = current + CaveGraph.DIRS[CaveGraph.DIR_UP]
-			if not _in_bounds(up):
-				last_failure = "spine climbed out of bounds"
-				return false
-			_graph.link(current, up)
-			current = up
-			_graph.spine.append(current)
-			last_dir = CaveGraph.DIR_UP
 
 	_graph.finish_cell = current
 	return true
 
 
-## Pick a horizontal direction that stays in bounds and avoids immediately doubling back,
-## which is what keeps corridors from collapsing into a two-cell shuffle.
-func _pick_wander_dir(from: Vector3i, last_dir: int) -> int:
-	var options: Array[int] = []
-	var fallback: Array[int] = []
-	for dir_index: int in CaveGraph.FLAT_DIRS:
-		if not _in_bounds(from + CaveGraph.DIRS[dir_index]):
-			continue
-		fallback.append(dir_index)
-		if last_dir != -1 and dir_index == CaveGraph.opposite(last_dir):
-			continue
-		options.append(dir_index)
-	if not options.is_empty():
-		return options[_rng.randi_range(0, options.size() - 1)]
-	if not fallback.is_empty():
-		return fallback[_rng.randi_range(0, fallback.size() - 1)]
-	return -1
-
-
-## Side passages and dead ends. These are what make the cave worth exploring and what
-## punish a racer who guesses wrong -- without them the spine is a corridor, not a maze.
-func _add_branches() -> void:
-	var existing: Array = _graph.cells.keys()
-	for i in branch_attempts:
-		var origin: Vector3i = existing[_rng.randi_range(0, existing.size() - 1)]
-		var current := origin
-		for depth in _rng.randi_range(1, 3):
-			var dir_index := _pick_branch_dir(current)
-			if dir_index == -1:
+## +1 climb / -1 descend for each vertical step of the route. Keeps inside the lattice,
+## always contains both directions, and costs at most max_spine_climbs Moves.
+func _vertical_plan(start_y: int) -> Array[int]:
+	for tries in 30:
+		var n := _rng.randi_range(vertical_steps_min, vertical_steps_max)
+		var plan: Array[int] = []
+		var y := start_y
+		for i in n:
+			var options: Array[int] = []
+			if y + 1 < size.y:
+				options.append(1)
+			if y - 1 >= 0:
+				options.append(-1)
+			if options.is_empty():
 				break
-			var next: Vector3i = current + CaveGraph.DIRS[dir_index]
-			if _graph.has_cell(next):
+			var step: int = options[_rng.randi_range(0, options.size() - 1)]
+			plan.append(step)
+			y += step
+		if plan.size() != n or not plan.has(1) or not plan.has(-1):
+			continue
+		if CaveGraph.move_cost_of_steps(plan) <= max_spine_climbs:
+			return plan
+	var empty: Array[int] = []
+	return empty
+
+
+## Keep going straight when allowed and there is room; otherwise turn toward the side with
+## the longest free run. Never doubles straight back.
+func _choose_heading(from: Vector3i, current: int, must_turn: bool) -> int:
+	var candidates: Array[int] = []
+	for dir_index: int in CaveGraph.FLAT_DIRS:
+		if current >= 0 and dir_index == CaveGraph.opposite(current):
+			continue
+		if must_turn and dir_index == current:
+			continue
+		candidates.append(dir_index)
+	# Shuffle deterministically so ties do not always favour +X.
+	for i in range(candidates.size() - 1, 0, -1):
+		var k := _rng.randi_range(0, i)
+		var tmp := candidates[i]
+		candidates[i] = candidates[k]
+		candidates[k] = tmp
+	var best := -1
+	var best_room := 0
+	for dir_index: int in candidates:
+		var room := _free_run(from, dir_index)
+		if room > best_room:
+			best_room = room
+			best = dir_index
+	return best
+
+
+func _free_run(from: Vector3i, dir_index: int) -> int:
+	var n := 0
+	var cur := from
+	while n < run_max:
+		cur += CaveGraph.DIRS[dir_index]
+		if not _in_bounds(cur) or _graph.has_cell(cur):
+			break
+		n += 1
+	return n
+
+
+## Dead-end side tunnels. Branches stay horizontal: a branch that dropped a level would be a
+## pit whose only way out is a Move, which strands a racer who has none. They leave from
+## corridor cells, not junctions, so side passages stay narrow instead of piling into rooms.
+func _add_branches() -> void:
+	var made := 0
+	for attempt in branch_count * 6:
+		if made >= branch_count:
+			break
+		var cells := _graph.sorted_cells()
+		var origin: Vector3i = cells[_rng.randi_range(0, cells.size() - 1)]
+		if _graph.degree(origin) > 2 or origin == _graph.finish_cell:
+			continue
+		var heading := _choose_heading(origin, -9, false)
+		if heading == -1 or _free_run(origin, heading) < branch_len_min:
+			continue
+		var length := _rng.randi_range(branch_len_min, branch_len_max)
+		var current := origin
+		var carved := 0
+		for step in length:
+			if step == length / 2 + 1 and _rng.randf() < 0.3:
+				var turn := _choose_heading(current, heading, true)
+				if turn != -1:
+					heading = turn
+			var next: Vector3i = current + CaveGraph.DIRS[heading]
+			if not _in_bounds(next) or _graph.has_cell(next):
 				break
 			_graph.link(current, next)
 			current = next
+			carved += 1
+		if carved >= branch_len_min:
+			made += 1
 
 
-## Branches are always horizontal, without exception.
-##
-## A branch creates NEW cells, so a branch that climbed would produce a dead end whose only
-## exit is vertical -- and a racer who arrives there with no charges left is softlocked,
-## unable to move at all. Loops are free to go vertical because they only ever connect
-## cells that already exist, so they cannot trap anyone.
-func _pick_branch_dir(from: Vector3i) -> int:
-	var options: Array[int] = []
-	for dir_index: int in CaveGraph.FLAT_DIRS:
-		var target: Vector3i = from + CaveGraph.DIRS[dir_index]
-		if _in_bounds(target) and not _graph.has_cell(target):
-			options.append(dir_index)
-	if options.is_empty():
-		return -1
-	return options[_rng.randi_range(0, options.size() - 1)]
-
-
-## Braid the maze: link cells that are already adjacent but unconnected. Every link added
-## here creates a cycle, letting racers return to earlier regions by a different route.
-## This can only ever make the cave easier to traverse, never harder, so the spine
-## guarantee survives untouched.
+## Real cycles. A new tunnel is carved through empty rock from one cell until it meets a
+## DIFFERENT part of the cave that was at least loop_min_detour hops away. Never a self-edge,
+## never a shortcut between neighbours: taking the loop is a genuine trip that comes back
+## somewhere recognisable. Some loops change level, joining upper and lower routes.
 func _add_loops() -> void:
-	var existing: Array = _graph.cells.keys()
-	for i in loop_attempts:
-		var c: Vector3i = existing[_rng.randi_range(0, existing.size() - 1)]
-		var dir_index := _rng.randi_range(0, 5)
-		if _rng.randf() < horizontal_bias:
-			dir_index = CaveGraph.FLAT_DIRS[_rng.randi_range(0, 3)]
-		var n: Vector3i = c + CaveGraph.DIRS[dir_index]
-		if not _graph.has_cell(n) or _graph.is_linked(c, dir_index):
+	var made := 0
+	for attempt in loop_count * 15:
+		if made >= loop_count:
+			break
+		var cells := _graph.sorted_cells()
+		var origin: Vector3i = cells[_rng.randi_range(0, cells.size() - 1)]
+		if _graph.degree(origin) > 2:
 			continue
-		_graph.link(c, n)
+		var heading := _choose_heading(origin, -9, false)
+		if heading == -1:
+			continue
+		var hops := _graph.distances_from(origin)
+		var path: Array[Vector3i] = [origin]
+		var visited := {origin: true}
+		var closed := false
+		for step in loop_len_max:
+			var current: Vector3i = path[-1]
+			var dir_index := heading
+			if step > 0 and _rng.randf() < loop_vertical_chance:
+				dir_index = CaveGraph.DIR_UP if _rng.randf() < 0.5 else CaveGraph.DIR_DOWN
+			elif step > 2 and _rng.randf() < 0.18:
+				var turn := _choose_heading(current, heading, true)
+				if turn != -1:
+					heading = turn
+					dir_index = turn
+			var next: Vector3i = current + CaveGraph.DIRS[dir_index]
+			if not _in_bounds(next) or visited.has(next):
+				continue
+			if _graph.has_cell(next):
+				if path.size() >= 3 and int(hops.get(next, 0)) >= loop_min_detour:
+					path.append(next)
+					closed = true
+				break
+			path.append(next)
+			visited[next] = true
+		if not closed:
+			continue
+		for k in range(1, path.size()):
+			_graph.link(path[k - 1], path[k])
+		made += 1
 
 
 func _validate() -> bool:
-	var climbs := _graph.spine_climb_cost()
-	if climbs > max_spine_climbs:
-		last_failure = "spine needs %d climbs, budget is %d" % [climbs, max_spine_climbs]
+	var spine_cost := _graph.spine_move_cost()
+	if spine_cost > max_spine_climbs:
+		last_failure = "the guaranteed route needs %d Moves, budget is %d" % [spine_cost, max_spine_climbs]
+		return false
+
+	if _graph.dead_end_count() < 2:
+		last_failure = "fewer than two dead ends"
+		return false
+	if _graph.cycle_count() < mini(loop_count, 2):
+		last_failure = "only %d real loops" % _graph.cycle_count()
 		return false
 
 	if not _graph.is_fully_connected():

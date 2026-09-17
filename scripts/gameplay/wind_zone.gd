@@ -4,11 +4,13 @@ extends Area3D
 ## whatever surface they are standing on -- wind has no gravity frame.
 
 var push := Vector3.ZERO
+var _half: float = CaveBuilder.CHAMBER_HALF
 var _bodies: Array[PlayerController] = []
 
 
-static func create(cell: Vector3i, axis: int, sign: int) -> WindZone:
+static func create(cell: Vector3i, axis: int, sign: int, half: float = CaveBuilder.CHAMBER_HALF) -> WindZone:
 	var zone := WindZone.new()
+	zone._half = half
 	zone.position = CaveBuilder.cell_to_world(cell)
 	zone.push = Vector3(CaveGraph.DIRS[axis]) * float(sign) * AppConfig.WIND_SPEED
 	return zone
@@ -23,17 +25,19 @@ func _ready() -> void:
 			_bodies.append(b))
 	body_exited.connect(func(b: Node3D) -> void: _bodies.erase(b))
 	var shape := BoxShape3D.new()
-	shape.size = Vector3.ONE * (CaveBuilder.CELL_SIZE - CaveBuilder.WALL_THICKNESS)
+	shape.size = Vector3(_half * 2.0, _half - CaveBuilder.FLOOR_Y, _half * 2.0)
 	var col := CollisionShape3D.new()
 	col.shape = shape
+	col.position.y = (_half + CaveBuilder.FLOOR_Y) * 0.5
 	add_child(col)
 
 	var streaks := CPUParticles3D.new()
 	streaks.amount = 40
 	streaks.lifetime = 0.9
 	streaks.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	var extent := (CaveBuilder.CELL_SIZE - 1.5) * 0.5
-	streaks.emission_box_extents = Vector3(extent, extent, extent)
+	var extent := _half - 0.25
+	streaks.emission_box_extents = Vector3(extent, (_half - CaveBuilder.FLOOR_Y) * 0.5 - 0.25, extent)
+	streaks.position.y = (_half + CaveBuilder.FLOOR_Y) * 0.5
 	streaks.direction = push.normalized()
 	streaks.spread = 3.0
 	streaks.gravity = Vector3.ZERO

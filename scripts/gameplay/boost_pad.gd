@@ -11,10 +11,9 @@ var _time: float = 0.0
 var _cooldowns: Dictionary = {}
 
 
-static func create(cell: Vector3i, axis: int) -> BoostPad:
+static func create(cell: Vector3i, axis: int, half: float = CaveBuilder.CHAMBER_HALF) -> BoostPad:
 	var pad := BoostPad.new()
-	pad.position = CaveBuilder.cell_to_world(cell) \
-		+ Vector3(0.0, -CaveBuilder.CELL_SIZE * 0.5 + CaveBuilder.WALL_THICKNESS * 0.5, 0.0)
+	pad.position = CaveBuilder.cell_to_world(cell) + Vector3(0.0, CaveBuilder.FLOOR_Y, 0.0)
 	if axis == CaveGraph.DIR_PLUS_Z:
 		pad.rotation.y = PI * 0.5
 	return pad

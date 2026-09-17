@@ -55,6 +55,8 @@ func _ready() -> void:
 func _find_wall_shaft(graph: CaveGraph) -> Vector3i:
 	for c: Vector3i in graph.sorted_cells():
 		var above: Vector3i = c + CaveGraph.DIRS[CaveGraph.DIR_UP]
+		if CaveBuilder.is_chamber(graph, c) or CaveBuilder.is_chamber(graph, c + CaveGraph.DIRS[CaveGraph.DIR_UP]):
+			continue
 		if graph.is_linked(c, CaveGraph.DIR_UP) and not graph.is_linked(c, CaveGraph.DIR_PLUS_X) \
 				and not graph.is_linked(above, CaveGraph.DIR_PLUS_X) and not graph.is_linked(above, CaveGraph.DIR_UP) \
 				and graph.features_at(above).is_empty() and graph.features_at(c).is_empty():

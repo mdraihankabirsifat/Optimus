@@ -21,21 +21,25 @@ var _hiss_cooldown := 0.0
 
 const REACH := 1.4
 const HALF_WIDTH := 2.6
+## How far it may stray sideways in this corridor.
+var _half_width := HALF_WIDTH
 
 var _half_length := CaveBuilder.CELL_SIZE * 1.4
 
 
 ## `span` straight cells long, centred on `cell` shifted half a cell by `shift` for span 2.
-static func create(id: int, cell: Vector3i, axis: int, span: int = 3, shift: int = 0) -> SpiderEnemy:
+static func create(id: int, cell: Vector3i, axis: int, span: int = 3, shift: int = 0,
+		half: float = CaveBuilder.CHAMBER_HALF) -> SpiderEnemy:
 	var spider := SpiderEnemy.new()
 	spider.spider_id = id
 	spider._axis = Vector3(CaveGraph.DIRS[axis])
 	spider._half_length = CaveBuilder.CELL_SIZE * float(span) * 0.5 - 1.2
+	spider._half_width = minf(HALF_WIDTH, half - 0.7)
 	# The spider lives on the world floor and has no gravity frame of its own, so world up
 	# is genuinely its up. Racers are the ones with personal gravity.
 	spider._lateral = Vector3.UP.cross(spider._axis).normalized()
 	spider._centre = CaveBuilder.cell_to_world(cell) \
-		+ Vector3(0.0, -CaveBuilder.CELL_SIZE * 0.5 + CaveBuilder.WALL_THICKNESS * 0.5 + 0.45, 0.0) \
+		+ Vector3(0.0, CaveBuilder.FLOOR_Y + 0.45, 0.0) \
 		+ spider._axis * float(shift) * CaveBuilder.CELL_SIZE * 0.5
 	spider.position = spider._centre
 	return spider
@@ -143,7 +147,7 @@ func _physics_process(delta: float) -> void:
 	# Clamp to the corridor so the spider can never walk into rock.
 	var rel := next - _centre
 	var a := clampf(rel.dot(_axis), -_half_length, _half_length)
-	var l := clampf(rel.dot(_lateral), -HALF_WIDTH, HALF_WIDTH)
+	var l := clampf(rel.dot(_lateral), -_half_width, _half_width)
 	global_position = _centre + _axis * a + _lateral * l
 	if move.length_squared() > 0.01:
 		var face := Basis.looking_at(move.normalized(), Vector3.UP)

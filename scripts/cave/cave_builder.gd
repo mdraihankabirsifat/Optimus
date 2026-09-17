@@ -22,6 +22,12 @@ const COLOUR_FLOOR := Color(0.58, 0.47, 0.36)
 const COLOUR_CEILING := Color(0.34, 0.39, 0.52)
 const COLOUR_WALL := Color(0.46, 0.45, 0.43)
 const COLOUR_FINISH := Color(1.0, 0.68, 0.22)
+## Clear half-width of an ordinary tunnel cell and of a chamber (spawn, finish, landmarks).
+const TUNNEL_HALF := AppConfig.CAVE_TUNNEL_WIDTH * 0.5
+const CHAMBER_HALF := CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5
+## Every cell's floor, tunnel or chamber, sits at the same height relative to its centre.
+## Chambers grow up and out from it, so every doorway between cells is flush: no ledges.
+const FLOOR_Y := -TUNNEL_HALF
 
 ## ART-012: the environment. Colours, stone, decor materials, lights and signature props all
 ## come from here; the geometry, hazards and boxes never depend on it.
@@ -31,6 +37,11 @@ var _floor_slabs: Array[Transform3D] = []
 var _ceiling_slabs: Array[Transform3D] = []
 var _wall_slabs: Array[Transform3D] = []
 var _collision: Array = []
+## Sloped doorway funnels in chambers: [PackedVector3Array quad, PackedVector3Array hull].
+var _funnels: Array = []
+## How far into a chamber a doorway funnel reaches. 2.5 against the 1.5 step is about 31
+## degrees: walkable in any gravity.
+const FUNNEL_RUN := 2.5
 var _seen_boundaries: Dictionary = {}
 
 
@@ -44,9 +55,25 @@ static func world_to_cell(pos: Vector3) -> Vector3i:
 		roundi(pos.x / CELL_SIZE), roundi(pos.y / CELL_SIZE), roundi(pos.z / CELL_SIZE))
 
 
-## Where a racer's feet should land when spawning into a cell.
+## Where a racer should be placed to land in a cell: just above a tunnel floor, which is also
+## safely inside a chamber (it falls the extra distance).
 static func floor_position(c: Vector3i) -> Vector3:
-	return cell_to_world(c) + Vector3(0.0, -CELL_SIZE * 0.5 + 1.0, 0.0)
+	return cell_to_world(c) + Vector3(0.0, -TUNNEL_HALF + 1.0, 0.0)
+
+
+## Spawn, finish and landmark cells are chambers; every other cell is a narrow tunnel.
+static func is_chamber(graph: CaveGraph, c: Vector3i) -> bool:
+	if c == graph.spawn_cell or c == graph.finish_cell:
+		return true
+	for f: Dictionary in graph.features:
+		if f["kind"] == "landmark" and f["cell"] == c:
+			return true
+	return false
+
+
+## Clear half-width of a cell's open space, which is also its ceiling height.
+static func half_extent(graph: CaveGraph, c: Vector3i) -> float:
+	return CHAMBER_HALF if is_chamber(graph, c) else TUNNEL_HALF
 
 
 ## `match_seed` fixes mystery box outcomes. Pass -1 to build bare geometry with no
@@ -62,6 +89,8 @@ func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 	root.add_child(_make_batch("CeilingBatch", _ceiling_slabs, theme.ceiling_colour, 0.18))
 	root.add_child(_make_batch("WallBatch", _wall_slabs, theme.wall_colour, 0.14))
 	root.add_child(_make_collision())
+	if not _funnels.is_empty():
+		root.add_child(_make_funnel_mesh())
 	root.add_child(_make_finish(graph))
 	_add_lights(graph, root)
 	if match_seed >= 0:
@@ -71,6 +100,7 @@ func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 		_stage_finish(graph, root)
 		_stage_shafts(graph, root)
 		_add_signature_props(graph, root)
+	_add_rock_dressing(graph, root)
 
 
 ## Pads, wind, pistons, spiders, crumbling covers, shortcut markers and landmarks.
@@ -81,14 +111,15 @@ func _add_gameplay_features(graph: CaveGraph, root: Node3D) -> void:
 	var ids := 0
 	for f: Dictionary in graph.features:
 		var c: Vector3i = f["cell"]
+		var h := half_extent(graph, c)
 		var node: Node3D = null
 		match f["kind"]:
-			"pad": node = BoostPad.create(c, int(f["axis"]))
-			"wind": node = WindZone.create(c, int(f["axis"]), int(f["sign"]))
-			"piston": node = PistonHazard.create(ids, c, int(f["phase"]))
-			"spider": node = SpiderEnemy.create(ids, c, int(f["axis"]), int(f.get("span", 3)), int(f.get("shift", 0)))
+			"pad": node = BoostPad.create(c, int(f["axis"]), h)
+			"wind": node = WindZone.create(c, int(f["axis"]), int(f["sign"]), h)
+			"piston": node = PistonHazard.create(ids, c, int(f["phase"]), h)
+			"spider": node = SpiderEnemy.create(ids, c, int(f["axis"]), int(f.get("span", 3)), int(f.get("shift", 0)), h)
 			"crumble": node = CrumbleTile.create(c)
-			"shortcut": node = _make_shortcut_marker(c)
+			"shortcut": node = _make_shortcut_marker(c, h)
 			"landmark": node = _make_landmark(graph, c, int(f["variant"]))
 		ids += 1
 		if node != null:
@@ -109,7 +140,7 @@ func _stage_finish(graph: CaveGraph, root: Node3D) -> void:
 	stage.name = "FinishStage"
 	stage.position = cell_to_world(graph.finish_cell)
 	root.add_child(stage)
-	var floor_y := -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5
+	var floor_y := FLOOR_Y
 	var stone := StandardMaterial3D.new()
 	stone.albedo_color = Color(0.42, 0.36, 0.3)
 	var rune := _glow(COLOUR_FINISH, 1.2)
@@ -134,7 +165,7 @@ func _stage_finish(graph: CaveGraph, root: Node3D) -> void:
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 1.4
 	cyl.bottom_radius = 0.9
-	cyl.height = CELL_SIZE - 5.0
+	cyl.height = maxf(1.0, CHAMBER_HALF - FLOOR_Y - 4.0)
 	beam.mesh = cyl
 	beam.material_override = _beam_material(COLOUR_FINISH, 0.08)
 	beam.position.y = floor_y + 4.0 + cyl.height * 0.5
@@ -167,10 +198,11 @@ func _stage_shafts(graph: CaveGraph, root: Node3D) -> void:
 	for c: Vector3i in graph.sorted_cells():
 		if not graph.is_linked(c, CaveGraph.DIR_UP):
 			continue
+		var h := half_extent(graph, c)
 		var beam := MeshInstance3D.new()
 		var cyl := CylinderMesh.new()
-		cyl.top_radius = 2.8
-		cyl.bottom_radius = 2.2
+		cyl.top_radius = TUNNEL_HALF - 0.3
+		cyl.bottom_radius = TUNNEL_HALF - 0.6
 		cyl.height = CELL_SIZE
 		cyl.radial_segments = 12
 		beam.mesh = cyl
@@ -180,25 +212,25 @@ func _stage_shafts(graph: CaveGraph, root: Node3D) -> void:
 		for k in 4:
 			var lip := MeshInstance3D.new()
 			var m := BoxMesh.new()
-			m.size = Vector3(CELL_SIZE - 1.0, 0.12, 0.12) if k < 2 else Vector3(0.12, 0.12, CELL_SIZE - 1.0)
+			m.size = Vector3(TUNNEL_HALF * 2.0, 0.12, 0.12) if k < 2 else Vector3(0.12, 0.12, TUNNEL_HALF * 2.0)
 			lip.mesh = m
 			lip.material_override = lip_mat
-			var edge := CELL_SIZE * 0.5 - 0.6
+			var edge := TUNNEL_HALF - 0.06
 			var offs := [Vector3(0, 0, edge), Vector3(0, 0, -edge), Vector3(edge, 0, 0), Vector3(-edge, 0, 0)]
-			lip.position = cell_to_world(c) + Vector3(0.0, CELL_SIZE * 0.5, 0.0) + offs[k]
+			lip.position = cell_to_world(c) + Vector3(0.0, h - 0.06, 0.0) + offs[k]
 			holder.add_child(lip)
 
 
 ## FUN-004: a ring of upward chevrons under a shaft that saves a long walk. It says "this
 ## costs a Move and is worth it", nothing about where the exit is.
-func _make_shortcut_marker(c: Vector3i) -> Node3D:
+func _make_shortcut_marker(c: Vector3i, h: float = CHAMBER_HALF) -> Node3D:
 	var marker := Node3D.new()
-	marker.position = cell_to_world(c) + Vector3(0.0, -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5 + 0.05, 0.0)
+	marker.position = cell_to_world(c) + Vector3(0.0, FLOOR_Y + 0.05, 0.0)
 	var mat := _glow(Color(0.3, 0.85, 0.55), 0.9)
 	var ring := MeshInstance3D.new()
 	var torus := TorusMesh.new()
-	torus.inner_radius = 1.9
-	torus.outer_radius = 2.15
+	torus.inner_radius = minf(1.9, h - 0.35)
+	torus.outer_radius = minf(2.15, h - 0.1)
 	ring.mesh = torus
 	ring.material_override = mat
 	marker.add_child(ring)
@@ -229,7 +261,7 @@ func _make_landmark(graph: CaveGraph, c: Vector3i, variant: int) -> Node3D:
 	var node := Node3D.new()
 	node.name = "Landmark%d" % variant
 	node.position = cell_to_world(c)
-	var floor_y := -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5
+	var floor_y := FLOOR_Y
 	var corner := CELL_SIZE * 0.5 - 1.2
 	var corners := [Vector3(corner, 0, corner), Vector3(-corner, 0, corner),
 		Vector3(corner, 0, -corner), Vector3(-corner, 0, -corner)]
@@ -266,17 +298,17 @@ func _make_landmark(graph: CaveGraph, c: Vector3i, variant: int) -> Node3D:
 				var cyl := CylinderMesh.new()
 				cyl.top_radius = 0.55
 				cyl.bottom_radius = 0.7
-				cyl.height = CELL_SIZE - WALL_THICKNESS
+				cyl.height = CHAMBER_HALF - FLOOR_Y
 				col.mesh = cyl
 				col.material_override = stone
-				col.position = corners[k]
+				col.position = corners[k] + Vector3(0.0, (CHAMBER_HALF + FLOOR_Y) * 0.5, 0.0)
 				node.add_child(col)
 				var shape := CollisionShape3D.new()
 				var cs := CylinderShape3D.new()
 				cs.radius = 0.65
 				cs.height = cyl.height
 				shape.shape = cs
-				shape.position = corners[k]
+				shape.position = corners[k] + Vector3(0.0, (CHAMBER_HALF + FLOOR_Y) * 0.5, 0.0)
 				body.add_child(shape)
 			var fallen := MeshInstance3D.new()
 			var drum := CylinderMesh.new()
@@ -342,13 +374,14 @@ func _add_features(graph: CaveGraph, root: Node3D, match_seed: int) -> void:
 
 	for i in graph.hazards.size():
 		var h: Dictionary = graph.hazards[i]
-		var fire := FireHazard.create(i, int(h["side"]))
+		var fire := FireHazard.create(i, int(h["side"]), half_extent(graph, h["cell"]))
 		fire.position += cell_to_world(h["cell"])
 		holder.add_child(fire)
 
 	var finish_pos := cell_to_world(graph.finish_cell)
 	for b: Dictionary in graph.boxes:
-		var box := MysteryBox.create(int(b["index"]), match_seed, int(b["corner"]), finish_pos)
+		var box := MysteryBox.create(int(b["index"]), match_seed, int(b["corner"]), finish_pos,
+			half_extent(graph, b["cell"]))
 		box.position += cell_to_world(b["cell"])
 		holder.add_child(box)
 
@@ -398,12 +431,13 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 	var v: int = int(d["variant"])
 	var kind: String = d["kind"]
 	var centre := cell_to_world(c)
-	var floor_y := -CELL_SIZE * 0.5 + WALL_THICKNESS * 0.5
-	var ceil_y := CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5
+	var h := half_extent(graph, c)
+	var floor_y := FLOOR_Y
+	var ceil_y := h
 	# Hug a wall so decor never blocks the corridor centre or a box corner.
 	var side := v % 4
-	var along := (float((v * 37 + c.x * 11 + c.z * 7) % 5) - 2.0) * 0.8
-	var edge := CELL_SIZE * 0.5 - 1.1
+	var along := (float((v * 37 + c.x * 11 + c.z * 7) % 5) - 2.0) * 0.8 * (h / CHAMBER_HALF)
+	var edge := h - 0.8
 	var offsets := [Vector3(edge, 0, along), Vector3(-edge, 0, along),
 		Vector3(along, 0, edge), Vector3(along, 0, -edge)]
 	var off: Vector3 = offsets[side]
@@ -416,13 +450,13 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			var hanging := kind == "stalactite"
 			if (hanging and not has_ceiling) or (not hanging and not has_floor):
 				return null
-			var h := 1.2 + float(v % 4) * 0.45
+			var spike := 1.2 + float(v % 4) * 0.45
 			var mesh := CylinderMesh.new()
 			mesh.top_radius = 0.0 if not hanging else 0.35 + float(v % 3) * 0.1
 			mesh.bottom_radius = 0.35 + float(v % 3) * 0.1 if not hanging else 0.0
-			mesh.height = h
+			mesh.height = spike
 			mesh.radial_segments = 7
-			root.add_child(_mesh(mesh, kit["rock"], Vector3(0, h * 0.5 if not hanging else -h * 0.5, 0)))
+			root.add_child(_mesh(mesh, kit["rock"], Vector3(0, spike * 0.5 if not hanging else -spike * 0.5, 0)))
 			root.position = centre + off + Vector3(0, ceil_y if hanging else floor_y, 0)
 		"crystal":
 			if not has_floor:
@@ -507,8 +541,8 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 			cone.material_override = kit["torch_cone"]
 			cone.position = Vector3(0, -0.6, 0) - n * 0.7
 			root.add_child(cone)
-			root.position = centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.25) \
-				+ Vector3(0, floor_y + 2.4, 0)
+			root.position = centre + n * (h - 0.25) \
+				+ Vector3(0, floor_y + minf(2.4, h - FLOOR_Y - 1.2), 0)
 		"walldetail":
 			# ART-003: a crack or a mineral streak on a wall that actually exists.
 			var walls := [CaveGraph.DIR_PLUS_X, CaveGraph.DIR_MINUS_X, CaveGraph.DIR_PLUS_Z, CaveGraph.DIR_MINUS_Z]
@@ -537,9 +571,9 @@ func _make_decor(graph: CaveGraph, d: Dictionary, kit: Dictionary) -> Node3D:
 				seg.position = p
 				root.add_child(seg)
 				p += Vector3.DOWN * 0.95 + right * (0.45 if k % 2 == 0 else -0.4)
-			var height := 1.0 + float(v % 4) * 0.6
-			root.position = centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.02) \
-				+ right * (float(v % 5) - 2.0) + Vector3(0, floor_y + height + 1.5, 0)
+			var height := minf(1.0 + float(v % 4) * 0.6 + 1.5, h - FLOOR_Y - 0.4)
+			root.position = centre + n * (h - 0.02) \
+				+ right * (float(v % 5) - 2.0) * (h / CHAMBER_HALF) + Vector3(0, floor_y + height, 0)
 		_:
 			return null
 	return root
@@ -554,52 +588,128 @@ func _mesh(mesh: Mesh, mat: Material, pos: Vector3) -> MeshInstance3D:
 
 
 func _collect_slabs(graph: CaveGraph) -> void:
-	for c: Vector3i in graph.cells:
-		for dir_index in 6:
-			if graph.is_linked(c, dir_index):
+	for c: Vector3i in graph.sorted_cells():
+		var h := half_extent(graph, c)
+		var centre := cell_to_world(c)
+		# The open core of the cell. Floor always at FLOOR_Y; chambers are wider and taller.
+		var lo := Vector3(-h, FLOOR_Y, -h)
+		var hi := Vector3(h, h, h)
+		for d in 6:
+			var axis := d / 2  # 0 x, 1 y, 2 z
+			var sgn := 1.0 if d % 2 == 0 else -1.0
+			if not graph.is_linked(c, d):
+				_face(centre, axis, sgn, lo, hi, 0.0)
 				continue
-			var key := _boundary_key(c, dir_index)
-			if _seen_boundaries.has(key):
-				continue
-			_seen_boundaries[key] = true
-
-			var size := _slab_size(dir_index)
-			var centre: Vector3 = cell_to_world(c) \
-				+ Vector3(CaveGraph.DIRS[dir_index]) * (CELL_SIZE * 0.5)
-			var xform := Transform3D(Basis().scaled(size), centre)
-
-			match dir_index:
-				CaveGraph.DIR_DOWN:
-					_floor_slabs.append(xform)
-				CaveGraph.DIR_UP:
-					# Shared horizontal boundary: if a cell sits above it, the slab is that
-					# cell's floor and should read as one.
-					if graph.has_cell(c + CaveGraph.DIRS[CaveGraph.DIR_UP]):
-						_floor_slabs.append(xform)
-					else:
-						_ceiling_slabs.append(xform)
-				_:
-					_wall_slabs.append(xform)
-
-			_collision.append([size, centre])
+			# A linked face: a doorway the size of a tunnel. A bigger core gets a frame around it.
+			if _core_larger_than_tunnel(lo, hi, axis):
+				_face(centre, axis, sgn, lo, hi, TUNNEL_HALF)
+				_funnel(graph, c, centre, axis, sgn, lo, hi)
+			_connector(centre, axis, sgn, lo, hi)
 
 
-## Normalises a face so the boundary between two cells maps to one key from either side.
-func _boundary_key(c: Vector3i, dir_index: int) -> String:
-	if dir_index % 2 == 0:
-		return "%d,%d,%d,%d" % [c.x, c.y, c.z, dir_index]
-	var n: Vector3i = c + CaveGraph.DIRS[dir_index]
-	return "%d,%d,%d,%d" % [n.x, n.y, n.z, dir_index - 1]
+func _core_larger_than_tunnel(lo: Vector3, hi: Vector3, axis: int) -> bool:
+	for k in 3:
+		if k == axis:
+			continue
+		if lo[k] < -TUNNEL_HALF - 0.01 or hi[k] > TUNNEL_HALF + 0.01:
+			return true
+	return false
 
 
-func _slab_size(dir_index: int) -> Vector3:
-	match dir_index:
-		CaveGraph.DIR_PLUS_X, CaveGraph.DIR_MINUS_X:
-			return Vector3(WALL_THICKNESS, CELL_SIZE, CELL_SIZE)
-		CaveGraph.DIR_UP, CaveGraph.DIR_DOWN:
-			return Vector3(CELL_SIZE, WALL_THICKNESS, CELL_SIZE)
-		_:
-			return Vector3(CELL_SIZE, CELL_SIZE, WALL_THICKNESS)
+## The rock face of a cell's open core on one side. `hole` > 0 leaves a doorway of that
+## half-size centred on the cell axis. Faces overlap at edges so no crack of void shows:
+## Y faces reach over the X edges, Z faces over both.
+func _face(centre: Vector3, axis: int, sgn: float, lo: Vector3, hi: Vector3, hole: float) -> void:
+	var t := WALL_THICKNESS
+	var elo := lo
+	var ehi := hi
+	if axis == 1:
+		elo.x -= t
+		ehi.x += t
+	elif axis == 2:
+		elo.x -= t
+		ehi.x += t
+		elo.y -= t
+		ehi.y += t
+	var others := [0, 1, 2]
+	others.erase(axis)
+	var u: int = others[0]
+	var v: int = others[1]
+	var depth := (hi[axis] if sgn > 0.0 else -lo[axis]) + t * 0.5
+	if hole <= 0.0:
+		_emit(centre, axis, sgn, depth, t, u, elo[u], ehi[u], v, elo[v], ehi[v])
+		return
+	_emit(centre, axis, sgn, depth, t, u, hole, ehi[u], v, elo[v], ehi[v])
+	_emit(centre, axis, sgn, depth, t, u, elo[u], -hole, v, elo[v], ehi[v])
+	_emit(centre, axis, sgn, depth, t, u, -hole, hole, v, hole, ehi[v])
+	_emit(centre, axis, sgn, depth, t, u, -hole, hole, v, elo[v], -hole)
+
+
+## The short tunnel from a cell's core out to the cell boundary, where the neighbour's own
+## connector meets it. Four walls around a tunnel-sized opening. It starts at the core's
+## open edge: starting past the core's wall thickness would leave a band open, and a racer
+## walking the wall falls into it.
+func _connector(centre: Vector3, axis: int, sgn: float, lo: Vector3, hi: Vector3) -> void:
+	var t := WALL_THICKNESS
+	var start: float = hi[axis] if sgn > 0.0 else -lo[axis]
+	var end := CELL_SIZE * 0.5
+	if end - start < 0.01:
+		return
+	var others := [0, 1, 2]
+	others.erase(axis)
+	var u: int = others[0]
+	var v: int = others[1]
+	var hc := TUNNEL_HALF
+	for side in [1.0, -1.0]:
+		# Walls normal to u span v fully (with corners); walls normal to v fill between them.
+		_box(centre, axis, sgn, start, end, u, side * (hc + t * 0.5), t, v, 0.0, (hc + t) * 2.0)
+		_box(centre, axis, sgn, start, end, v, side * (hc + t * 0.5), t, u, 0.0, hc * 2.0)
+
+
+## A slab lying across a face: along the face normal at `depth`, spanning [a0,a1] on axis u
+## and [b0,b1] on axis v.
+func _emit(centre: Vector3, axis: int, sgn: float, depth: float, t: float,
+		u: int, a0: float, a1: float, v: int, b0: float, b1: float) -> void:
+	if a1 - a0 < 0.01 or b1 - b0 < 0.01:
+		return
+	var size := Vector3.ZERO
+	var pos := Vector3.ZERO
+	size[axis] = t
+	pos[axis] = sgn * depth
+	size[u] = a1 - a0
+	pos[u] = (a0 + a1) * 0.5
+	size[v] = b1 - b0
+	pos[v] = (b0 + b1) * 0.5
+	_add_slab(centre + pos, size, axis, sgn)
+
+
+## A connector wall: runs along `axis` from start to end, sits at offset `at` on axis n with
+## thickness t, and is `width` wide (centred on `mid`) on axis w.
+func _box(centre: Vector3, axis: int, sgn: float, start: float, end: float,
+		n: int, at: float, t: float, w: int, mid: float, width: float) -> void:
+	var size := Vector3.ZERO
+	var pos := Vector3.ZERO
+	size[axis] = end - start
+	pos[axis] = sgn * (start + end) * 0.5
+	size[n] = t
+	pos[n] = at
+	size[w] = width
+	pos[w] = mid
+	_add_slab(centre + pos, size, n, signf(at))
+
+
+## Sort a slab by which way its open side faces, so floors read warm and ceilings cool.
+func _add_slab(pos: Vector3, size: Vector3, normal_axis: int, sgn: float) -> void:
+	var xform := Transform3D(Basis().scaled(size), pos)
+	if normal_axis == 1:
+		# A slab below open space is a floor; above it, a ceiling.
+		if sgn < 0.0:
+			_floor_slabs.append(xform)
+		else:
+			_ceiling_slabs.append(xform)
+	else:
+		_wall_slabs.append(xform)
+	_collision.append([size, pos])
 
 
 func _make_batch(name: String, slabs: Array[Transform3D], colour: Color,
@@ -616,10 +726,11 @@ func _make_batch(name: String, slabs: Array[Transform3D], colour: Color,
 		mm.set_instance_transform(i, slabs[i])
 		# ART-001: every slab a slightly different stone. Derived from position, not rolled,
 		# so the builder still makes no choices of its own.
-		var o := slabs[i].origin
-		var h: int = absi(hash(Vector3i(roundi(o.x * 2.0), roundi(o.y * 2.0), roundi(o.z * 2.0))))
-		var shade := 0.86 + float(h % 1000) / 1000.0 * 0.22
-		var warmth := (float((h / 1000) % 100) / 100.0 - 0.5) * 0.08
+		# One shade per cell, not per slab: per-slab shading striped tunnel floors like planks.
+		var cell := world_to_cell(slabs[i].origin)
+		var h: int = absi(hash(cell))
+		var shade := 0.92 + float(h % 1000) / 1000.0 * 0.12
+		var warmth := (float((h / 1000) % 100) / 100.0 - 0.5) * 0.05
 		mm.set_instance_color(i, Color(shade + warmth, shade, shade - warmth))
 
 	var node := MultiMeshInstance3D.new()
@@ -675,6 +786,63 @@ func _stone_material(colour: Color, uv_scale: float) -> StandardMaterial3D:
 	return mat
 
 
+## A chamber is wider and taller than the tunnels leaving it, and a racer can walk any of its
+## six faces. Where a face meets a doorway that difference is a 1.5 m ledge -- a wall to
+## someone walking the ceiling toward it. Each doorway gets a funnel of four sloped sides
+## from the chamber's full cross-section down to the tunnel mouth, so every face runs into
+## the tunnel on a ramp. A side that is already flush (the shared floor) is left out, and so
+## is a side facing another doorway -- sloping across it would block that tunnel's mouth.
+func _funnel(graph: CaveGraph, c: Vector3i, centre: Vector3, axis: int, sgn: float, lo: Vector3, hi: Vector3) -> void:
+	var depth: float = hi[axis] if sgn > 0.0 else -lo[axis]
+	var start := depth - FUNNEL_RUN
+	var others := [0, 1, 2]
+	others.erase(axis)
+	var t := TUNNEL_HALF
+	for k: int in others:
+		var m: int = others[0] if others[1] == k else others[1]
+		for q in [1.0, -1.0]:
+			var bound: float = hi[k] if q > 0.0 else lo[k]
+			if absf(bound - q * t) < 0.01 or graph.is_linked(c, k * 2 + (0 if q > 0.0 else 1)):
+				continue
+			var pts := PackedVector3Array()
+			for spec in [[start, bound, lo[m]], [start, bound, hi[m]], [depth, q * t, t], [depth, q * t, -t]]:
+				var p := Vector3.ZERO
+				p[axis] = sgn * float(spec[0])
+				p[k] = float(spec[1])
+				p[m] = float(spec[2])
+				pts.append(centre + p)
+			var hull := PackedVector3Array(pts)
+			var back := Vector3.ZERO
+			back[k] = q * WALL_THICKNESS * 0.6
+			for p: Vector3 in pts:
+				hull.append(p + back)
+			_funnels.append([pts, hull, centre])
+
+
+func _make_funnel_mesh() -> MeshInstance3D:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for f: Array in _funnels:
+		var q: PackedVector3Array = f[0]
+		var centre: Vector3 = f[2]
+		var n := (q[1] - q[0]).cross(q[3] - q[0]).normalized()
+		var mid := (q[0] + q[1] + q[2] + q[3]) * 0.25
+		# Face the chamber's inside.
+		var flip := n.dot(centre - mid) < 0.0
+		if flip:
+			n = -n
+		var order := [0, 1, 2, 0, 2, 3] if not flip else [0, 2, 1, 0, 3, 2]
+		for i: int in order:
+			st.set_color(Color.WHITE)
+			st.set_normal(n)
+			st.add_vertex(q[i])
+	var node := MeshInstance3D.new()
+	node.name = "DoorwayFunnels"
+	node.mesh = st.commit()
+	node.material_override = _stone_material(theme.wall_colour, 0.14)
+	return node
+
+
 func _make_collision() -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "CaveCollision"
@@ -686,6 +854,12 @@ func _make_collision() -> StaticBody3D:
 		var node := CollisionShape3D.new()
 		node.shape = shape
 		node.position = entry[1]
+		body.add_child(node)
+	for f: Array in _funnels:
+		var hull := ConvexPolygonShape3D.new()
+		hull.points = f[1]
+		var node := CollisionShape3D.new()
+		node.shape = hull
 		body.add_child(node)
 	return body
 
@@ -720,14 +894,14 @@ func _make_finish(graph: CaveGraph) -> Area3D:
 	box.size = Vector3(2.0, 4.0, 2.0)
 	mesh.mesh = box
 	mesh.material_override = mat
-	mesh.position = Vector3(0.0, -CELL_SIZE * 0.5 + 2.0, 0.0)
+	mesh.position = Vector3(0.0, FLOOR_Y + 2.0, 0.0)
 	area.add_child(mesh)
 
 	var light := OmniLight3D.new()
 	light.light_color = COLOUR_FINISH
 	light.light_energy = 4.0
 	light.omni_range = CELL_SIZE * 2.5
-	light.position = Vector3(0.0, -CELL_SIZE * 0.5 + 4.5, 0.0)
+	light.position = Vector3(0.0, FLOOR_Y + 4.0, 0.0)
 	area.add_child(light)
 	return area
 
@@ -770,6 +944,7 @@ func _add_signature_props(graph: CaveGraph, root: Node3D) -> void:
 			continue
 		var h: int = absi(hash(Vector4i(c.x, c.y, c.z, 91)))
 		var centre := cell_to_world(c)
+		var half := half_extent(graph, c)
 		match theme.signature_props:
 			"roots":
 				if h % 3 != 0 or graph.is_linked(c, CaveGraph.DIR_UP):
@@ -781,9 +956,9 @@ func _add_signature_props(graph: CaveGraph, root: Node3D) -> void:
 					strand.bottom_radius = 0.02
 					strand.height = strand_len
 					strand.radial_segments = 5
-					var x := float((h >> (k * 2)) % 7 - 3) * 0.8
-					var z := float((h >> (k * 2 + 5)) % 7 - 3) * 0.8
-					var node := _mesh(strand, mat, centre + Vector3(x, CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - strand_len * 0.5, z))
+					var x := float((h >> (k * 2)) % 7 - 3) * 0.8 * (half / CHAMBER_HALF)
+					var z := float((h >> (k * 2 + 5)) % 7 - 3) * 0.8 * (half / CHAMBER_HALF)
+					var node := _mesh(strand, mat, centre + Vector3(x, half - strand_len * 0.5, z))
 					node.rotation = Vector3(0.12 * float(k % 3 - 1), 0.0, 0.1 * float((k + 1) % 3 - 1))
 					holder.add_child(node)
 			"glowworms":
@@ -791,8 +966,8 @@ func _add_signature_props(graph: CaveGraph, root: Node3D) -> void:
 					continue
 				for k in 14:
 					var hk: int = absi(hash(Vector2i(h, k)))
-					glow_points.append(centre + Vector3(float(hk % 70) / 10.0 - 3.5,
-						CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.08, float((hk / 70) % 70) / 10.0 - 3.5))
+					glow_points.append(centre + Vector3((float(hk % 70) / 70.0 - 0.5) * (half * 2.0 - 0.3),
+						half - 0.08, (float((hk / 70) % 70) / 70.0 - 0.5) * (half * 2.0 - 0.3)))
 			"pipes":
 				if h % 2 != 0:
 					continue
@@ -805,8 +980,8 @@ func _add_signature_props(graph: CaveGraph, root: Node3D) -> void:
 					pipe.bottom_radius = 0.28
 					pipe.height = CELL_SIZE
 					pipe.radial_segments = 10
-					var node := _mesh(pipe, mat, centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.35)
-						+ Vector3(0, -CELL_SIZE * 0.5 + 3.0, 0))
+					var node := _mesh(pipe, mat, centre + n * (half - 0.35)
+						+ Vector3(0, half - 0.9, 0))
 					# Lie along the wall: X walls run pipes along Z, Z walls along X.
 					node.rotation = Vector3(PI * 0.5, 0, 0) if absf(n.x) > 0.5 else Vector3(0, 0, PI * 0.5)
 					holder.add_child(node)
@@ -828,3 +1003,82 @@ func _add_signature_props(graph: CaveGraph, root: Node3D) -> void:
 		inst.name = "GlowWorms"
 		inst.multimesh = mm
 		holder.add_child(inst)
+
+
+## Prompt 2, believable cave: breaks up the box. Lumpy rock where walls meet floor and
+## ceiling, bulges on flat walls, rubble along the floor edges. Visual only -- collision
+## stays the simple slabs, so none of this can snag a racer or change a route. Placement is a
+## pure function of the cell, so every machine dresses the cave identically.
+func _add_rock_dressing(graph: CaveGraph, root: Node3D) -> void:
+	var edge_rocks: Array[Transform3D] = []
+	var rubble: Array[Transform3D] = []
+	for c: Vector3i in graph.sorted_cells():
+		var h := half_extent(graph, c)
+		var centre := cell_to_world(c)
+		var hash_base: int = absi(hash(Vector4i(c.x, c.y, c.z, 7)))
+		var walls: Array[int] = []
+		for d: int in CaveGraph.FLAT_DIRS:
+			if not graph.is_linked(c, d):
+				walls.append(d)
+		var has_floor := not graph.is_linked(c, CaveGraph.DIR_DOWN)
+		var has_ceiling := not graph.is_linked(c, CaveGraph.DIR_UP)
+		for wi in walls.size():
+			var n := Vector3(CaveGraph.DIRS[walls[wi]])
+			var along := Vector3(absf(n.z), 0.0, absf(n.x))
+			var k0: int = hash_base >> (wi * 3)
+			# Rock along the ceiling edge of this wall.
+			if has_ceiling:
+				for j in 2:
+					var r := 0.7 + float((k0 >> j) % 5) * 0.12
+					var pos := centre + n * h + Vector3(0.0, h, 0.0) + along * (float((k0 >> (j + 2)) % 7) - 3.0) * (h / 3.2)
+					edge_rocks.append(_rock_xform(pos, Vector3(r * 1.6, r * 0.8, r), float(k0 % 17) * 0.37 + float(j)))
+			# Rock along the floor edge, lower and flatter so it never reads as a step.
+			if has_floor:
+				var r2 := 0.45 + float((k0 >> 5) % 4) * 0.1
+				var pos2 := centre + n * h + Vector3(0.0, FLOOR_Y, 0.0) + along * (float((k0 >> 7) % 5) - 2.0) * (h / 2.2)
+				edge_rocks.append(_rock_xform(pos2, Vector3(r2 * 1.8, r2 * 0.6, r2), float(k0 % 13) * 0.51))
+				# Rubble: a few small stones near this wall.
+				for j in 3:
+					var q: int = absi(hash(Vector3i(k0, j, 3)))
+					var rr := 0.1 + float(q % 5) * 0.04
+					var off := n * (h - 0.35 - float(q % 3) * 0.12) + along * (float(q % 9) - 4.0) * (h / 5.0)
+					rubble.append(_rock_xform(centre + off + Vector3(0.0, FLOOR_Y + rr * 0.4, 0.0),
+						Vector3(rr * 1.3, rr * 0.8, rr), float(q % 11) * 0.6))
+			# A bulge in the middle of a flat wall now and then.
+			if (k0 >> 9) % 3 == 0:
+				var rb := 0.9 + float((k0 >> 11) % 4) * 0.2
+				var mid_y := (h + FLOOR_Y) * 0.5 + (float((k0 >> 13) % 5) - 2.0) * 0.3
+				var posb := centre + n * (h + rb * 0.55) + Vector3(0.0, mid_y, 0.0) + along * (float((k0 >> 15) % 5) - 2.0) * 0.5
+				edge_rocks.append(_rock_xform(posb, Vector3(rb, rb * 1.3, rb * 1.1), float(k0 % 23) * 0.3))
+	root.add_child(_rock_batch("RockEdges", edge_rocks, theme.rock_colour.lerp(theme.wall_colour, 0.5)))
+	root.add_child(_rock_batch("Rubble", rubble, theme.rock_colour))
+
+
+func _rock_xform(pos: Vector3, scale: Vector3, spin: float) -> Transform3D:
+	var basis := Basis(Vector3.UP, spin) * Basis(Vector3.RIGHT, spin * 0.37)
+	return Transform3D(basis.scaled(scale), pos)
+
+
+func _rock_batch(node_name: String, xforms: Array[Transform3D], colour: Color) -> MultiMeshInstance3D:
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.5
+	mesh.height = 1.0
+	mesh.radial_segments = 7
+	mesh.rings = 4
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+		var q: int = absi(hash(xforms[i].origin))
+		var shade := 0.8 + float(q % 100) / 100.0 * 0.3
+		mm.set_instance_color(i, Color(shade, shade, shade))
+	var node := MultiMeshInstance3D.new()
+	node.name = node_name
+	node.multimesh = mm
+	var mat := _stone_material(colour, 0.35)
+	mat.normal_scale = 1.0
+	node.material_override = mat
+	return node

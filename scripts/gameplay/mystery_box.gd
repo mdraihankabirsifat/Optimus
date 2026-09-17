@@ -30,16 +30,18 @@ var _mat: StandardMaterial3D
 var _time: float = 0.0
 
 
-static func create(index: int, p_seed: int, corner: int, finish_pos: Vector3) -> MysteryBox:
+static func create(index: int, p_seed: int, corner: int, finish_pos: Vector3,
+		half: float = CaveBuilder.CHAMBER_HALF) -> MysteryBox:
 	var box := MysteryBox.new()
 	box.box_index = index
 	box.match_seed = p_seed
 	box.finish_position = finish_pos
 	box.name = "MysteryBox%d" % index
-	var off := CaveBuilder.CELL_SIZE * 0.5 - 2.0
+	# Tucked into a corner of the cell, clear of the walls whatever the cell's width.
+	var off := minf(half - 0.9, 2.0)
 	var corners := [Vector3(off, 0, off), Vector3(-off, 0, off), Vector3(off, 0, -off), Vector3(-off, 0, -off)]
 	# Rests on the cell's world floor.
-	box.position = Vector3(0.0, -CaveBuilder.CELL_SIZE * 0.5 + CaveBuilder.WALL_THICKNESS * 0.5 + SIZE * 0.5, 0.0) \
+	box.position = Vector3(0.0, CaveBuilder.FLOOR_Y + SIZE * 0.5, 0.0) \
 		+ corners[corner]
 	return box
 

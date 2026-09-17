@@ -8,6 +8,9 @@ extends Area3D
 ## is the play the whole game is about.
 
 const PATCH_SIZE := 5.2
+## Actual patch size for this cell: a narrow tunnel gets a smaller patch that still leaves a
+## clear edge to squeeze past.
+var patch_size: float = PATCH_SIZE
 const FLAME_HEIGHT := 2.4
 const FLAME_COUNT := 7
 
@@ -20,16 +23,17 @@ var _bodies: Array[Node3D] = []
 
 
 ## `side` (0-3) is the cell edge left clear.
-static func create(id: int, side: int) -> FireHazard:
+static func create(id: int, side: int, half: float = CaveBuilder.CHAMBER_HALF) -> FireHazard:
 	var fire := FireHazard.new()
 	fire.hazard_id = id
 	fire.name = "Fire%d" % id
-	var offset := CaveBuilder.CELL_SIZE * 0.5 - PATCH_SIZE * 0.5
+	fire.patch_size = minf(PATCH_SIZE, half * 2.0 - 1.1)
+	var offset := half - fire.patch_size * 0.5
 	var shift: Vector3 = [Vector3(offset, 0, 0), Vector3(-offset, 0, 0),
 		Vector3(0, 0, offset), Vector3(0, 0, -offset)][side]
 	# Sits on the world floor of the cell. Fire is part of the world; it has no gravity
 	# frame of its own, which is exactly why walking the ceiling over it is safe.
-	fire.position = Vector3(0.0, -CaveBuilder.CELL_SIZE * 0.5 + CaveBuilder.WALL_THICKNESS * 0.5, 0.0) + shift
+	fire.position = Vector3(0.0, CaveBuilder.FLOOR_Y, 0.0) + shift
 	return fire
 
 
@@ -42,7 +46,7 @@ func _ready() -> void:
 	add_to_group("hazards")
 
 	var shape := BoxShape3D.new()
-	shape.size = Vector3(PATCH_SIZE, FLAME_HEIGHT, PATCH_SIZE)
+	shape.size = Vector3(patch_size, FLAME_HEIGHT, patch_size)
 	var collision := CollisionShape3D.new()
 	collision.shape = shape
 	collision.position = Vector3(0.0, FLAME_HEIGHT * 0.5, 0.0)
@@ -56,7 +60,7 @@ func _build_visuals() -> void:
 	# frames of their flicker.
 	var bed := MeshInstance3D.new()
 	var bed_mesh := BoxMesh.new()
-	bed_mesh.size = Vector3(PATCH_SIZE, 0.25, PATCH_SIZE)
+	bed_mesh.size = Vector3(patch_size, 0.25, patch_size)
 	bed.mesh = bed_mesh
 	bed.position = Vector3(0.0, 0.12, 0.0)
 	var bed_mat := StandardMaterial3D.new()
@@ -88,9 +92,9 @@ func _build_visuals() -> void:
 		flame.mesh = cone
 		flame.material_override = flame_mat
 		flame.position = Vector3(
-			rng.randf_range(-PATCH_SIZE * 0.38, PATCH_SIZE * 0.38),
+			rng.randf_range(-patch_size * 0.38, patch_size * 0.38),
 			cone.height * 0.5 + 0.2,
-			rng.randf_range(-PATCH_SIZE * 0.38, PATCH_SIZE * 0.38))
+			rng.randf_range(-patch_size * 0.38, patch_size * 0.38))
 		flame.set_meta("phase", rng.randf() * TAU)
 		flame.set_meta("base_h", cone.height)
 		add_child(flame)
@@ -100,7 +104,7 @@ func _build_visuals() -> void:
 	particles.amount = 24
 	particles.lifetime = 1.4
 	particles.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	particles.emission_box_extents = Vector3(PATCH_SIZE * 0.4, 0.2, PATCH_SIZE * 0.4)
+	particles.emission_box_extents = Vector3(patch_size * 0.4, 0.2, patch_size * 0.4)
 	particles.direction = Vector3(0, 1, 0)
 	particles.spread = 12.0
 	particles.initial_velocity_min = 1.2
