@@ -20,6 +20,9 @@ extends Node3D
 @export_range(1, 4) var bot_count: int = 2
 @export_range(0, 2) var bot_skill: int = 2
 @export_range(0, 2) var cave_size: int = 1
+## Prompt 2: the first two out of the cave fight the Freedom Duel for Champion. Harnesses
+## that measure pure cave traversal switch it off.
+@export var duel_enabled: bool = true
 
 const BOT_COLOURS: Array[Color] = [
 	Color(0.95, 0.45, 0.30),
@@ -47,6 +50,8 @@ var bots: Array[Node3D] = []
 ## Online only: racers this machine does not simulate.
 var remotes: Array[Node3D] = []
 var hud: RaceHUD
+var duel: FreedomDuel
+var duel_hud: DuelHUD
 var pause_menu: PauseMenu
 ## Racer name -> {boxes, moves_used, damage_taken, colour, is_bot}. Offline and on a client
 ## GameState.stats is this same dictionary; each server room keeps its own.
@@ -160,6 +165,14 @@ func _ready() -> void:
 	for tile: CrumbleTile in WorldScope.nodes(self, "crumble_tiles"):
 		tile.net_client = net_role == "client"
 
+	if duel_enabled and AppConfig.DUEL_ENABLED and match_controller.racers.size() >= 2:
+		duel = FreedomDuel.new()
+		duel.name = "FreedomDuel"
+		duel.net_client = net_role == "client"
+		add_child(duel)
+		duel.setup(self, match_controller)
+		match_controller.duel = duel
+
 	match_controller.racer_finished.connect(_on_racer_finished)
 	match_controller.racer_eliminated.connect(_on_racer_eliminated)
 	match_controller.match_ended.connect(_on_match_ended)
@@ -179,6 +192,11 @@ func _ready() -> void:
 	hud.setup(self, _player, match_controller)
 	for box: MysteryBox in WorldScope.nodes(self, "mystery_boxes"):
 		box.clue_granted.connect(hud.on_clue)
+	if duel != null:
+		duel_hud = DuelHUD.new()
+		add_child(duel_hud)
+		duel_hud.setup(self, duel, _player, hud)
+		duel.phase_changed.connect(_on_duel_phase)
 	pause_menu = PauseMenu.new()
 	pause_menu.online = net_role == "client"
 	add_child(pause_menu)
@@ -332,7 +350,9 @@ func _register(racer: PlayerController, racer_name: String, colour: Color, is_bo
 	var g := racer.gravity
 	g.shift_started.connect(func(_d: Vector3) -> void: bump_stat(racer.display_name, "moves_used"))
 	racer.health.damaged.connect(func(amount: float, _s: String) -> void:
-		bump_stat(racer.display_name, "damage_taken", amount))
+		# Cave damage only; the duel keeps its own numbers.
+		if not racer.health.duel_mode:
+			bump_stat(racer.display_name, "damage_taken", amount))
 	if _is_server():
 		return
 
@@ -420,8 +440,11 @@ func _process(delta: float) -> void:
 			and match_controller.phase == MatchController.Phase.RACING \
 			and match_controller.elapsed - _local_resolved_at > 2.0:
 		match_controller.force_end()
+	_tick_duel_input()
 	if match_controller.phase == MatchController.Phase.RACING and _local_resolved_at >= 0.0:
-		if net_role == "client":
+		if duel != null and duel.claims_end():
+			hud.set_banner(_duel_spectate_banner())
+		elif net_role == "client":
 			hud.set_banner("Spectating %s    [Tab] next racer    the race ends when the others resolve"
 				% _spectate_target_name())
 		else:
@@ -567,6 +590,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			AudioManager.play_sfx("emote", -4.0)
 			if net_match != null:
 				net_match.send_emote(k)
+	if duel != null and duel.phase == FreedomDuel.Phase.WAITING and duel.finalist_a == _player 			and event.is_action_pressed("skip_wait") and net_role == "" 			and duel.wait_time >= AppConfig.DUEL_SKIP_AFTER:
+		duel.resolve_by_default("Qualified 1st ended the wait")
+		return
 	if _local_resolved_at < 0.0:
 		return
 	if event.is_action_pressed("spectate_next"):
@@ -578,10 +604,68 @@ func _unhandled_input(event: InputEvent) -> void:
 const EMOTES: Array[String] = ["hey!", "GG", "catch me!"]
 
 
+# --- Freedom Duel ----------------------------------------------------------------------
+
+## Held fire repeats at the blaster's own rate; Axis Lock fires on press.
+func _tick_duel_input() -> void:
+	if duel == null or not duel.is_fighting() or not duel.fighters.has(_player):
+		return
+	if (pause_menu != null and pause_menu.is_open()) or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return
+	var st: Dictionary = duel.fighters[_player]
+	if Input.is_action_pressed("duel_fire") and float(st["pulse_cd"]) <= 0.0:
+		_local_fire("pulse")
+	if Input.is_action_just_pressed("duel_lock") and float(st["lock_cd"]) <= 0.0:
+		_local_fire("lock")
+
+
+func _local_fire(kind: String) -> void:
+	var from := _player.head.global_position
+	var dir := -_player.camera.global_basis.z
+	if net_role == "client":
+		# The server decides whether it hit; start the cooldown here so the key feels right.
+		var st: Dictionary = duel.fighters[_player]
+		st["pulse_cd" if kind == "pulse" else "lock_cd"] = AppConfig.PULSE_COOLDOWN if kind == "pulse" else AppConfig.AXIS_LOCK_COOLDOWN
+		net_match.send_duel_fire(kind, from, dir)
+	else:
+		duel.fire(_player, kind, from, dir)
+
+
+func _on_duel_phase(p: FreedomDuel.Phase) -> void:
+	if p == FreedomDuel.Phase.INTRO:
+		if not duel.is_finalist(_player) and _local_resolved_at < 0.0:
+			# Still in the cave when the duel began: the race is over for you, watch the final.
+			_begin_spectating()
+		elif duel.is_finalist(_player):
+			_spectate_camera.current = false
+			_player.camera.make_current()
+	if hud != null:
+		# The duel HUD takes the screen once the local racer is in the arena or the final is on.
+		hud.visible = p == FreedomDuel.Phase.OFF 			or (p == FreedomDuel.Phase.WAITING and not duel.is_finalist(_player))
+
+
+func _duel_spectate_banner() -> String:
+	match duel.phase:
+		FreedomDuel.Phase.WAITING:
+			var left := AppConfig.DUEL_QUALIFY_TIMEOUT - duel.wait_time
+			var skip := "    [Enter] end now" if net_role == "" else ""
+			return "Spectating %s    [Tab] next racer    %s is Qualified 1st, waiting for a second finalist (%ds)%s" 				% [_spectate_target_name(), duel.finalist_a.display_name, ceili(maxf(left, 0.0)), skip]
+		FreedomDuel.Phase.INTRO, FreedomDuel.Phase.FIGHT:
+			return ""
+		_:
+			return ""
+
+
 # --- Spectating -------------------------------------------------------------------
 
 func _spectate_targets() -> Array[Node3D]:
 	var out: Array[Node3D] = []
+	if duel != null and duel.phase >= FreedomDuel.Phase.INTRO:
+		for body: PlayerController in [duel.finalist_a, duel.finalist_b]:
+			if body != null and body != _player and is_instance_valid(body):
+				out.append(body)
+		if not out.is_empty():
+			return out
 	for r: Dictionary in match_controller.racers:
 		if r["body"] != _player and not r["finished"] and not r["eliminated"] and is_instance_valid(r["body"]):
 			out.append(r["body"])
@@ -657,7 +741,9 @@ func _on_racer_finished(racer_name: String, place: int, time: float) -> void:
 			GameState.new_record = SettingsManager.submit_cave_time(time, seed_value, cave_size)
 			if GameState.new_record and _ghost_frames.size() > 2:
 				GhostRacer.save(seed_value, cave_size, _ghost_frames)
-		_begin_spectating()
+		# The first two out are finalists: they go to the arena, not the spectator camera.
+		if duel == null or place > 2:
+			_begin_spectating()
 	else:
 		AudioManager.play_sfx("notify", -4.0)
 		for other: Node3D in _others():
@@ -692,12 +778,25 @@ func _on_match_ended(results: Array) -> void:
 
 	AudioManager.stop_music()
 	GameState.record_results(results, seed_value, match_controller.elapsed)
+	if duel != null and duel.phase == FreedomDuel.Phase.ENDED:
+		GameState.last_duel = {
+			"fought": duel.runner_up != null,
+			"duration": duel.duel_time,
+			"reason": duel.end_reason,
+		}
+	else:
+		GameState.last_duel = {}
 	GameState.last_results_online = net_role == "client"
 	if not _from_menu:
 		return
 	hud.set_banner("")
-	hud.show_centre("RACE OVER", RESULTS_DELAY + 1.0, UiKit.EMBER)
-	await get_tree().create_timer(RESULTS_DELAY).timeout
+	var delay := RESULTS_DELAY
+	if duel != null and duel.champion != null:
+		# The duel HUD is showing the Champion; give that moment room before results.
+		delay += 2.0
+	else:
+		hud.show_centre("RACE OVER", RESULTS_DELAY + 1.0, UiKit.EMBER)
+	await get_tree().create_timer(delay).timeout
 	AudioManager.stop_ambience()
 	SceneRouter.go_to(SceneRouter.RESULTS)
 

@@ -9,6 +9,8 @@ const SEED_B := 777
 
 var _passed := 0
 var _failed := 0
+## The server duel's state mid-fight, replayed into a client world by _client_mirror().
+var _duel_state: Dictionary = {}
 
 
 func _ready() -> void:
@@ -148,6 +150,52 @@ func _ready() -> void:
 	await _physics(4)
 	_check(int(mca.racers[1]["place"]) == 2, "Ben arrives second: 2nd")
 
+	print("-- Freedom Duel: the server owns it")
+	var duel: FreedomDuel = a.get("duel")
+	_check(duel != null and duel.finalist_a == ana and duel.finalist_b == ben,
+		"finalists are chosen on the server, in arrival order")
+	_check(duel.phase == FreedomDuel.Phase.INTRO and int(mca.racers[0]["qualified"]) == 1 and int(mca.racers[1]["qualified"]) == 2,
+		"two qualifiers, once each, start the duel")
+	_check(DuelArena.contains(ana.net_target_position) and DuelArena.contains(ben.net_target_position),
+		"the server holds both human finalists at their arena spawns")
+	_check(not ma.racers[2].input_enabled and not ma.racers[3].input_enabled, "the bots still in the cave stop")
+	var shots: Array = []
+	duel.shot.connect(func(sh: PlayerController, k: String, _f: Vector3, _t: Vector3, hit: PlayerController) -> void:
+		shots.append([sh, k, hit]))
+	ma.server_on_duel_fire(101, "pulse", ana.net_target_position, Vector3.BACK)
+	_check(shots.is_empty(), "no shot before the duel countdown ends")
+	for i in 30:
+		duel._tick_intro(0.25)
+	_check(duel.phase == FreedomDuel.Phase.FIGHT, "FIGHT")
+	var o := DuelArena.ORIGIN
+	ma.server_on_test_teleport(101, o + Vector3(0, 1, -7))
+	ma.server_on_test_teleport(102, o + Vector3(0, 1, 7))
+	await _physics(4)
+	var eye := ana.global_position + Vector3(0, 0.6, 0)
+	var aim := (ben.global_position - eye).normalized()
+	ma.server_on_duel_fire(101, "pulse", eye, aim)
+	_check(shots.size() == 1 and shots[0][2] == ben and not ben.health.has_shield and is_equal_approx(ben.health.hearts, 5.0),
+		"a client's shot is resolved on the server: Ben's shield takes it")
+	ma.server_on_duel_fire(101, "pulse", eye, aim)
+	_check(shots.size() == 1, "the same trigger pull twice: the cooldown refuses the second")
+	ma.server_on_duel_fire(999, "pulse", eye, aim)
+	ma.server_on_duel_fire(102, "nuke", eye, aim)
+	ma.server_on_duel_fire(102, "pulse", Vector3(NAN, 0, 0), aim)
+	_check(shots.size() == 1, "unknown peers, weapons and garbage aim are ignored")
+	duel.fighters[ana]["pulse_cd"] = 0.0
+	ben.health.is_invulnerable = false
+	ma.server_on_duel_fire(101, "pulse", eye, aim)
+	_check(is_equal_approx(ben.health.hearts, 5.0 - AppConfig.PULSE_DAMAGE), "a hit takes duel hearts once")
+	ben.health.is_invulnerable = false
+	ma.server_on_duel_fire(101, "lock", eye + Vector3(0, 0, 40), aim)
+	_check(duel.effective_dof(ben) == 1, "Axis Lock lands on the server (a muzzle claimed far away is pulled back to the shooter)")
+	duel.core_active = true
+	duel.core_position = ben.global_position
+	duel.capture_core(ben)
+	duel.capture_core(ana)
+	_check(int(duel.fighters[ben]["cores"]) == 1 and int(duel.fighters[ana]["cores"]) == 0, "a Freedom Core has one owner")
+	_duel_state = duel.net_state()
+
 	print("-- disconnects never stall a race")
 	mb.server_on_disconnect(201)
 	var solo := mb.racers[0]
@@ -156,18 +204,21 @@ func _ready() -> void:
 		"and races under a (bot) name")
 	await _physics(30)
 	_check(is_instance_valid(solo) and solo.global_position.is_finite(), "the replacement bot simulates normally")
-	room_a.remove_member(102)
-	ma.server_on_disconnect(102)
-	_check(ma._peer_of_rid.size() == 1, "a finished racer's disconnect is recorded without a crash")
-
-	print("-- results")
 	var results_seen: Array = []
 	mca.match_ended.connect(func(r: Array) -> void: results_seen.append(r))
+	room_a.remove_member(102)
+	ma.server_on_disconnect(102)
+	_check(ma._peer_of_rid.size() == 1, "a finalist's disconnect is recorded without a crash")
+	_check(duel.phase == FreedomDuel.Phase.ENDED and duel.champion == ana and duel.end_reason == "opponent left",
+		"a finalist leaving mid-duel makes the other Champion")
+
+	print("-- results")
 	mca.force_end()
 	_check(results_seen.size() == 1, "the race ends once")
 	var order: Array = results_seen[0] if not results_seen.is_empty() else []
-	_check(order.size() == 4 and order[0]["name"] == "Ana" and order[1]["name"] == "Ben",
-		"results list finishers first, by place")
+	_check(order.size() == 4 and order[0]["name"] == "Ana" and order[1]["name"] == "Ben"
+		and int(order[0]["duel_place"]) == 1 and int(order[1]["duel_place"]) == 2,
+		"results: Champion, then the duel runner-up, then the rest")
 	var again := mca.build_results()
 	var same := true
 	for i in again.size():
@@ -265,6 +316,27 @@ func _client_mirror() -> void:
 	_check(bool(mc.racers[1]["finished"]) and int(mc.racers[1]["place"]) == 1, "placements come from the server")
 	m.client_on_eliminated(2, 31.0, true)
 	_check(bool(mc.racers[2]["disconnected"]), "a disconnect is shown as a disconnect")
+
+	print("-- a client mirrors the duel")
+	var duel_c: FreedomDuel = world.get("duel")
+	var locks: Array = []
+	duel_c.axis_locked.connect(func(t: PlayerController, removed: String) -> void: locks.append([t, removed]))
+	m.client_on_duel_state(_duel_state)
+	_check(duel_c.finalist_a == me and duel_c.finalist_b == them and duel_c.phase == FreedomDuel.Phase.FIGHT,
+		"finalists and phase come from the server")
+	_check(DuelArena.contains(me.global_position), "my own racer is moved to the arena by my client")
+	_check(not DuelArena.contains(them.global_position), "a puppet waits for its pose instead of being moved locally")
+	_check(them.duel_dof == 1 and duel_c.shown_dof(them) == 1 and me.duel_dof == 3, "duel DOF synced for both finalists")
+	_check(is_equal_approx(them.health.hearts, 5.0 - AppConfig.PULSE_DAMAGE - AppConfig.AXIS_LOCK_DAMAGE)
+		and is_equal_approx(me.health.hearts, 5.0), "duel hearts synced")
+	_check(not me.health.is_eliminated and me.health.duel_mode, "duel health mode, never a cave elimination")
+	m.client_on_duel_event("locked", [1, "Z"])
+	_check(locks.size() == 1 and locks[0][0] == them, "a lock event is shown once")
+	_check(duel_c.fire(me, "pulse") == false, "a client never resolves a shot itself")
+	m.client_on_duel_state(_duel_state)
+	_check(them.duel_dof == 1 and int(duel_c.fighters[them]["cores"]) == 1, "a repeated state packet changes nothing")
+	m.client_on_duel_event("end", [0, 1, "knockout"])
+	_check(duel_c.champion == me and duel_c.runner_up == them, "the Champion comes from the server")
 
 	var results := [{"rid": 1, "name": "Them", "is_bot": false, "finished": true, "place": 1, "finish_time": 30.0,
 		"eliminated": false, "elimination_time": 0.0, "disconnected": false}]

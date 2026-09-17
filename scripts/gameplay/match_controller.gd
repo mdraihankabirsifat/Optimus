@@ -27,6 +27,9 @@ var net_client: bool = false
 ## Online server rule from the master prompt: once placements have started, the race also
 ## ends when only one racer is still unresolved.
 var end_when_one_left: bool = false
+## Prompt 2: once anyone reaches the exit, the race ends through the Freedom Duel instead.
+## Null for harnesses that want the old first-to-exit race.
+var duel: FreedomDuel
 
 var _countdown_remaining: float = 0.0
 var _last_tick: int = -1
@@ -48,6 +51,14 @@ func register_racer(body: Node3D, display_name: String, is_bot: bool = false) ->
 		"eliminated": false,
 		"elimination_time": 0.0,
 		"disconnected": false,
+		## 1 or 2 for the two racers who qualified for the Freedom Duel, else 0.
+		"qualified": 0,
+		## 1 Champion, 2 duel runner-up, 0 for everyone else.
+		"duel_place": 0,
+		"duel_stats": {},
+		## Racers still in the cave when the duel began: hops they had left to the exit.
+		"stopped_by_duel": false,
+		"progress": 999,
 	}
 	racers.append(entry)
 	var health: PlayerHealth = body.get("health")
@@ -85,7 +96,11 @@ func _process(delta: float) -> void:
 		Phase.RACING:
 			elapsed += delta
 			if elapsed >= AppConfig.MATCH_TIME_LIMIT:
-				_end_match()
+				if duel == null or duel.phase == FreedomDuel.Phase.OFF:
+					_end_match()
+				elif duel.phase == FreedomDuel.Phase.WAITING:
+					duel.resolve_by_default("race time limit")
+				# A duel already under way has its own hard limit.
 		_:
 			pass
 
@@ -133,6 +148,8 @@ func _on_finish_body_entered(body: Node3D) -> void:
 		body.input_enabled = false
 
 	racer_finished.emit(racer["name"], racer["place"], racer["finish_time"])
+	if duel != null:
+		duel.on_racer_finished(body as PlayerController)
 	_check_for_end()
 
 
@@ -153,6 +170,9 @@ func _on_racer_eliminated(body: Node3D) -> void:
 
 
 func _check_for_end() -> void:
+	if duel != null and duel.claims_end():
+		duel.on_resolution_changed()
+		return
 	var unresolved := 0
 	var finished := 0
 	for racer: Dictionary in racers:
@@ -255,9 +275,21 @@ func net_end(results: Array, server_elapsed: float) -> void:
 
 
 ## Ends the race now. Used when the local racer is done and nobody should wait on bots.
+## Once someone has qualified, "now" means Qualified 1st takes it by default -- unless the
+## duel is already being fought, which is never cut short.
 func force_end() -> void:
-	if phase == Phase.RACING:
-		_end_match()
+	if phase != Phase.RACING:
+		return
+	if duel != null and duel.claims_end():
+		if duel.phase == FreedomDuel.Phase.WAITING:
+			duel.resolve_by_default("race ended early")
+		return
+	_end_match()
+
+
+## FreedomDuel: the Champion is decided.
+func end_after_duel() -> void:
+	_end_match()
 
 
 func _end_match() -> void:
@@ -268,15 +300,19 @@ func _end_match() -> void:
 	match_ended.emit(build_results())
 
 
-## Finishers by place, then eliminated racers latest-first (surviving longer ranks higher),
-## then anyone still unresolved when the clock ran out.
+## Prompt 2: the Champion, then the duel runner-up, then finishers by place, then eliminated
+## racers latest-first (surviving longer ranks higher), then anyone still unresolved --
+## closest to the exit first when the duel stopped them.
 func build_results() -> Array:
+	var duelists: Array = []
 	var finishers: Array = []
 	var eliminated: Array = []
 	var unresolved: Array = []
 
 	for racer: Dictionary in racers:
-		if racer["finished"]:
+		if int(racer.get("duel_place", 0)) > 0:
+			duelists.append(racer)
+		elif racer["finished"]:
 			finishers.append(racer)
 		elif racer["eliminated"]:
 			eliminated.append(racer)
@@ -293,9 +329,14 @@ func build_results() -> Array:
 			return float(a["elimination_time"]) > float(b["elimination_time"])
 		return int(a["rid"]) < int(b["rid"]))
 	unresolved.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a.get("progress", 999)) != int(b.get("progress", 999)):
+			return int(a.get("progress", 999)) < int(b.get("progress", 999))
 		return int(a["rid"]) < int(b["rid"]))
+	duelists.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a["duel_place"]) < int(b["duel_place"]))
 
 	var out: Array = []
+	out.append_array(duelists)
 	out.append_array(finishers)
 	out.append_array(eliminated)
 	out.append_array(unresolved)

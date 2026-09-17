@@ -174,6 +174,28 @@ func _generate_library() -> void:
 	_library["fire_loop"] = _wav(_fire_loop(), true)
 	_library["music_race"] = _wav(_race_music(), true)
 
+	# Freedom Duel (Prompt 2). Same synth voices as the race, pitched brighter and harder.
+	_library["qualified"] = _wav(_mix([_notes([659.0, 880.0, 1175.0], 0.12, 0.4),
+		_shift(_tone(0.5, 1319.0, 1319.0, 0.22, 0.01, 1.2), 0.34)]))
+	_library["duel_intro"] = _wav(_mix([_tone(1.1, 55.0, 110.0, 0.6, 0.05, 0.9), _noise(0.9, 0.2, 0.3, 1.0, 6),
+		_shift(_notes([440.0, 554.0, 659.0], 0.18, 0.3), 0.5)]))
+	_library["blaster"] = _wav(_mix([_tone(0.12, 1400.0, 380.0, 0.35, 0.001, 2.2), _noise(0.05, 0.18, 0.001, 3.0, 2)]))
+	_library["lock_fire"] = _wav(_mix([_vibrato(0.35, 300.0, 900.0, 0.35, 18.0), _noise(0.2, 0.12, 0.01, 2.0, 5)]))
+	_library["lock_hit"] = _wav(_mix([_square(0.08, 220.0, 0.25), _shift(_tone(0.5, 660.0, 110.0, 0.45, 0.002, 1.4), 0.05)]))
+	_library["axis_restored"] = _wav(_tone(0.3, 330.0, 990.0, 0.35, 0.01, 1.3))
+	_library["core_spawn"] = _wav(_mix([_tremolo(0.7, 880.0, 0.22, 14.0), _tone(0.7, 440.0, 440.0, 0.12, 0.2, 1.0)]))
+	_library["core_capture"] = _wav(_notes([523.0, 784.0, 1046.0, 1568.0], 0.08, 0.4))
+	_library["dof_shift"] = _wav(_mix([_tone(0.6, 120.0, 480.0, 0.45, 0.02, 1.0), _shift(_tone(0.3, 480.0, 240.0, 0.25, 0.01, 1.5), 0.45)]))
+	_library["sudden_death"] = _wav(_mix([_square(0.25, 110.0, 0.3), _shift(_square(0.25, 104.0, 0.3), 0.3),
+		_shift(_square(0.45, 98.0, 0.3), 0.6), _noise(1.0, 0.15, 0.05, 1.0, 8)]))
+	_library["duel_hit_confirm"] = _wav(_tone(0.05, 1760.0, 1760.0, 0.3))
+	_library["duel_hurt"] = _wav(_mix([_noise(0.16, 0.45, 0.002, 2.5, 3), _tone(0.18, 260.0, 120.0, 0.4, 0.002, 2.0)]))
+	_library["duel_down"] = _wav(_mix([_tone(1.2, 400.0, 60.0, 0.5, 0.005, 1.0), _noise(0.9, 0.3, 0.01, 1.2, 6)]))
+	_library["champion"] = _wav(_mix([_notes([523.0, 659.0, 784.0, 1046.0, 1319.0], 0.14, 0.4),
+		_shift(_mix([_tone(1.2, 1046.0, 1046.0, 0.25, 0.02, 0.8), _tone(1.2, 1319.0, 1319.0, 0.18, 0.02, 0.8),
+			_tone(1.2, 1568.0, 1568.0, 0.14, 0.02, 0.8)]), 0.7)]))
+	_library["music_duel"] = _wav(_duel_music(), true)
+
 	_library["music_menu"] = _wav(_menu_music(), true)
 	_library["ambience"] = _wav(_cave_ambience(), true)
 
@@ -266,6 +288,32 @@ func _race_music() -> PackedFloat32Array:
 		var half := fmod(t + beat * 0.5, beat)
 		v += (rng.randf() * 2.0 - 1.0) * 0.05 * exp(-half * 60.0)
 		v += sin(TAU * root * 3.0 * t) * 0.03 * (0.5 + 0.5 * sin(TAU * t / 8.0))
+		out[i] = v
+	return _fade_edges(out, 0.02)
+
+
+## The race loop's bass line at double time, with a driving hat and a rising minor riff on
+## top. Eight seconds, seamless, same length and key family as the race music.
+func _duel_music() -> PackedFloat32Array:
+	var frames := int(8.0 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(frames)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 47
+	var beat := 0.25
+	var riff: Array[float] = [220.0, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94, 196.0]
+	for i in frames:
+		var t := float(i) / RATE
+		var bar := int(t / 2.0) % 4
+		var root: float = [55.0, 55.0, 49.0, 61.74][bar]
+		var since := fmod(t, beat)
+		var v := sin(TAU * root * t) * 0.24 * exp(-since * 7.0)
+		v += sin(TAU * root * 2.0 * t) * 0.06
+		var off := fmod(t + beat * 0.5, beat)
+		v += (rng.randf() * 2.0 - 1.0) * 0.06 * exp(-off * 70.0)
+		var step := int(t / 0.5) % riff.size()
+		var note_t := fmod(t, 0.5)
+		v += signf(sin(TAU * riff[step] * t)) * 0.035 * exp(-note_t * 6.0)
 		out[i] = v
 	return _fade_edges(out, 0.02)
 

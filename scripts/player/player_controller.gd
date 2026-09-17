@@ -50,6 +50,15 @@ var _speed_effect_timer: float = 0.0
 ## keypress can be read as a gravity command instead. Read by the HUD for the preview.
 var gravity_armed: bool = false
 
+## --- Freedom Duel. 0 means cave rules; the duel sets 1, 2 or 3. ---
+## 3: walk the floor plane and jump. 2: walk the floor plane, no jump. 1: walk one axis only.
+## No Gravity Moves at any level: the cave's charges play no part in the duel.
+var duel_dof: int = 0
+## At 1 DOF, the one direction left to walk along.
+var duel_axis: Vector3 = Vector3.ZERO
+## Freedom Surge and similar arena effects.
+var duel_speed: float = 1.0
+
 ## --- Networking. All false offline; offline play never touches any of this. ---
 ## A remote racer's body on this machine: no simulation, it follows transforms the
 ## network sends. Used for other players and bots on a client, and for humans on the server.
@@ -152,8 +161,8 @@ func _physics_process(delta: float) -> void:
 		planar = Vector3.ZERO
 	else:
 		planar = _apply_planar_movement(planar, up, delta)
-		if jump_requested and _coyote_timer > 0.0 and not gravity_armed:
-			vertical = up * AppConfig.JUMP_VELOCITY
+		if jump_requested and _coyote_timer > 0.0 and not gravity_armed and can_jump():
+			vertical = up * (AppConfig.DUEL_JUMP_VELOCITY if duel_dof > 0 else AppConfig.JUMP_VELOCITY)
 			_coyote_timer = 0.0
 			on_floor = false
 			jumped.emit()
@@ -189,9 +198,11 @@ func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vecto
 	var axes := movement_axes()
 	var wish: Vector3 = axes["right"] * move_input.x - axes["forward"] * move_input.y
 	wish = wish - up * wish.dot(up)
+	if duel_dof == 1 and duel_axis != Vector3.ZERO:
+		wish = duel_axis * wish.dot(duel_axis)
 
 	var speed: float = AppConfig.SPRINT_SPEED if sprint_input else AppConfig.WALK_SPEED
-	speed *= speed_multiplier
+	speed *= speed_multiplier * duel_speed
 
 	if wish.length_squared() > 0.001:
 		return planar.lerp(wish.normalized() * speed, minf(1.0, acceleration * delta))
@@ -225,6 +236,11 @@ func _puppet_step(delta: float) -> void:
 	global_basis = Basis(current.slerp(net_target_rotation, t)).orthonormalized()
 
 
+## Jumping is the third degree of freedom in the duel. The cave always allows it.
+func can_jump() -> bool:
+	return duel_dof == 0 or duel_dof >= 3
+
+
 ## The rig asks this rather than is_on_floor(): a puppet never calls move_and_slide.
 func grounded() -> bool:
 	return net_on_floor if net_puppet else is_on_floor()
@@ -239,7 +255,10 @@ func _gather_local_input() -> void:
 		sprint_input = false
 		gravity_armed = false
 		return
-	_read_gravity_chord()
+	if duel_dof == 0:
+		_read_gravity_chord()
+	else:
+		gravity_armed = false
 	if gravity_armed:
 		move_input = Vector2.ZERO
 		return

@@ -26,7 +26,8 @@ const STATE_NAMES := ["Offline", "Connecting", "Connected", "Reconnecting", "Fai
 
 ## Bump when any RPC signature changes. Mismatched clients are turned away with a message
 ## rather than failing in confusing ways mid-race.
-const PROTOCOL_VERSION := 1
+## 2: Freedom Duel messages (c_duel_fire, s_duel_state, s_duel_event).
+const PROTOCOL_VERSION := 2
 const HELLO_TIMEOUT := 10.0
 const SILENT_TIMEOUT := 20.0
 const PING_INTERVAL := 3.0
@@ -523,6 +524,15 @@ func c_emote(k: int) -> void:
 		m.server_on_emote(id, k)
 
 
+## Freedom Duel: this client's finalist pulled a trigger. The server decides what it hit.
+@rpc("any_peer", "call_remote", "reliable")
+func c_duel_fire(kind: String, origin: Vector3, dir: Vector3) -> void:
+	var id := _sender()
+	var m := _match_for(id)
+	if m != null:
+		m.server_on_duel_fire(id, kind, origin, dir)
+
+
 ## Test harness only, and only honoured by a server started with --test-mode.
 @rpc("any_peer", "call_remote", "reliable")
 func c_test_teleport(pos: Vector3) -> void:
@@ -624,6 +634,8 @@ func send_to_server(method: String, args: Array) -> void:
 		0: rpc_id(1, method)
 		1: rpc_id(1, method, args[0])
 		2: rpc_id(1, method, args[0], args[1])
+		3: rpc_id(1, method, args[0], args[1], args[2])
+		4: rpc_id(1, method, args[0], args[1], args[2], args[3])
 		5: rpc_id(1, method, args[0], args[1], args[2], args[3], args[4])
 
 
@@ -821,6 +833,18 @@ func s_replaced(rid: int, new_name: String) -> void:
 func s_correct(pos: Vector3, rot: Quaternion, grav: int) -> void:
 	if client_match != null:
 		client_match.client_on_correct(pos, rot, grav)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_duel_state(state: Dictionary) -> void:
+	if client_match != null:
+		client_match.client_on_duel_state(state)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_duel_event(kind: String, args: Array) -> void:
+	if client_match != null:
+		client_match.client_on_duel_event(kind, args)
 
 
 @rpc("authority", "call_remote", "reliable")

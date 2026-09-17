@@ -40,6 +40,17 @@ var _hesitate: float = 0.0
 ## and only that single fact is passed into knowledge -- the same as seeing it.
 var _hazard_cells: Dictionary = {}
 
+# --- Freedom Duel ------------------------------------------------------------------------
+var _duel: FreedomDuel
+var _duel_rng := RandomNumberGenerator.new()
+var _strafe_sign := 1.0
+var _strafe_timer := 0.0
+var _hop_timer := 1.5
+var _aim_error := Vector3.ZERO
+var _aim_timer := 0.0
+var _stuck_timer := 0.0
+var _fire_pause := 0.0
+
 
 func setup(graph: CaveGraph, bot_name: String, colour: Color, personality: int, p_skill: int = 2) -> void:
 	skill = clampi(p_skill, 0, 2)
@@ -49,6 +60,7 @@ func setup(graph: CaveGraph, bot_name: String, colour: Color, personality: int, 
 		if f["kind"] in ["piston", "spider"]:
 			_hazard_cells[f["cell"]] = true
 	_graph = graph
+	_duel_rng.seed = personality * 7919 + 17
 	display_name = bot_name
 	# Stable per-bot route preference and reaction speed, so four bots do not run the
 	# same line and cross the finish line together.
@@ -74,6 +86,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if not _body.input_enabled or _body.health.is_eliminated:
 		_body.move_input = Vector2.ZERO
+		return
+	if _body.duel_dof > 0:
+		_duel_tick(delta)
 		return
 	if _body.gravity.is_transitioning:
 		_body.move_input = Vector2.ZERO
@@ -216,3 +231,113 @@ func _steer_towards(world_target: Vector3) -> void:
 
 func _grav() -> int:
 	return BotPlanner.grav_index(_body.gravity.gravity_dir)
+
+
+# --- Freedom Duel ------------------------------------------------------------------------
+## A finalist bot. Deliberately simple: face the opponent, keep a middle distance, strafe,
+## shoot when the shot lines up, Axis Lock when it would land, go for a Freedom Core that is
+## closer to it than to the opponent, hop to dodge when it has the third DOF. It aims with
+## the same body and head a human turns with the mouse, and fires through the same
+## FreedomDuel.fire() -- the duel's rules apply to it exactly as to a person.
+func _duel_tick(delta: float) -> void:
+	if _duel == null:
+		_duel = WorldScope.first(self, "freedom_duel") as FreedomDuel
+	if _duel == null or not _duel.is_fighting() or not _duel.fighters.has(_body):
+		# Qualified 1st waiting in the arena, or the countdown: stand ready.
+		_body.move_input = Vector2.ZERO
+		return
+	var foe := _duel.opponent_of(_body)
+	if foe == null:
+		_body.move_input = Vector2.ZERO
+		return
+	var up := _body.gravity.local_up()
+	var eye := _body.head.global_position
+	var foe_centre := foe.global_position + up * 0.3
+	var to_foe := foe_centre - eye
+	var dist := to_foe.length()
+	var los := _duel_line_of_sight(eye, foe)
+
+	# Aim, with an error that shrinks with skill and is re-rolled a few times a second.
+	_aim_timer -= delta
+	if _aim_timer <= 0.0:
+		_aim_timer = 0.3
+		var spread: float = [1.5, 1.0, 0.65][skill] * clampf(dist / 12.0, 0.5, 2.0)
+		_aim_error = Vector3(_duel_rng.randf_range(-1, 1), _duel_rng.randf_range(-0.6, 0.6), _duel_rng.randf_range(-1, 1)) * spread
+	var aim := (foe_centre + _aim_error - eye).normalized()
+	var turn: float = [4.0, 7.0, 10.0][skill] * delta
+	var flat := aim - up * aim.dot(up)
+	if flat.length() > 0.05:
+		var want := Basis.looking_at(flat.normalized(), up).get_rotation_quaternion()
+		var have := _body.global_basis.get_rotation_quaternion()
+		_body.global_basis = Basis(have.slerp(want, minf(1.0, turn))).orthonormalized()
+	var pitch := asin(clampf(aim.dot(up), -1.0, 1.0))
+	_body.head.rotation.x = move_toward(_body.head.rotation.x, pitch, turn)
+
+	var st: Dictionary = _duel.fighters[_body]
+	var foe_st: Dictionary = _duel.fighters[foe]
+	var facing := -_body.head.global_basis.z
+	var aligned := facing.dot(to_foe.normalized()) > cos(0.12)
+	if los and aligned:
+		if float(st["lock_cd"]) <= 0.0 and float(foe_st["lock_left"]) <= 0.0 				and float(foe_st["immune_left"]) <= 0.0 and dist < 30.0:
+			_duel.fire(_body, "lock")
+		elif float(st["pulse_cd"]) <= 0.0 and _fire_pause <= 0.0:
+			_duel.fire(_body, "pulse")
+			# A person re-centres between shots; a bot holding the trigger would out-shoot anyone.
+			_fire_pause = [0.9, 0.6, 0.35][skill]
+	_fire_pause -= delta
+
+	# Where to be.
+	var pos := _body.global_position
+	var goal := foe.global_position
+	var my_dof := _duel.effective_dof(_body)
+	if _duel.core_active:
+		var mine := pos.distance_to(_duel.core_position)
+		var theirs := foe.global_position.distance_to(_duel.core_position)
+		if mine < theirs or my_dof < 3:
+			goal = _duel.arena.waypoint(pos, _duel.core_position)
+	var to_goal := goal - pos
+	to_goal -= up * to_goal.dot(up)
+	var approach := Vector3.ZERO
+	if goal != foe.global_position:
+		approach = to_goal.normalized() if to_goal.length() > 0.3 else Vector3.ZERO
+	elif not los or dist > 15.0:
+		approach = to_goal.normalized()
+	elif dist < 7.0:
+		approach = -to_goal.normalized() * 0.7
+
+	_strafe_timer -= delta
+	if _strafe_timer <= 0.0:
+		_strafe_timer = _duel_rng.randf_range(0.8, 2.0)
+		_strafe_sign = -_strafe_sign if _duel_rng.randf() < 0.7 else _strafe_sign
+	var right := facing.cross(up).normalized()
+	var wish := approach + right * _strafe_sign * (0.8 if los else 0.3)
+
+	# Stuck on cover: turn the strafe around, and hop if the third DOF allows it.
+	var moving := (_body.velocity - up * _body.velocity.dot(up)).length()
+	_stuck_timer = _stuck_timer + delta if wish.length() > 0.3 and moving < 1.0 else 0.0
+	if _stuck_timer > 0.6:
+		_stuck_timer = 0.0
+		_strafe_sign = -_strafe_sign
+		if _body.can_jump():
+			_body.jump_requested = true
+
+	_hop_timer -= delta
+	if _hop_timer <= 0.0:
+		_hop_timer = _duel_rng.randf_range(1.2, 3.0)
+		if los and _body.can_jump() and skill > 0:
+			_body.jump_requested = true
+
+	_body.sprint_input = true
+	if wish.length() < 0.05:
+		_body.move_input = Vector2.ZERO
+		return
+	var axes := _body.movement_axes()
+	var dir := wish.normalized()
+	_body.move_input = Vector2(dir.dot(axes["right"]), -dir.dot(axes["forward"])).normalized()
+
+
+func _duel_line_of_sight(eye: Vector3, foe: PlayerController) -> bool:
+	var space := _body.get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(eye, foe.global_position, 1 | 2, [_body.get_rid()])
+	var hit := space.intersect_ray(query)
+	return hit.is_empty() or hit["collider"] == foe

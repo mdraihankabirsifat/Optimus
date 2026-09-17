@@ -43,6 +43,8 @@ func _ready() -> void:
 		world.fixed_seed = s
 		world.bot_count = BOTS
 		world.bot_skill = _skill
+		# Measures cave traversal only; the Freedom Duel would stop the field at two finishers.
+		world.duel_enabled = false
 		add_child(world)
 		await get_tree().process_frame
 		# No human in these races. Eliminating the local player would start the offline

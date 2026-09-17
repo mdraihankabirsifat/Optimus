@@ -1,5 +1,9 @@
 extends Control
 ## Placements, times, DNF/eliminated markers, per-racer stats, the seed, and three ways on.
+##
+## Prompt 2: the Freedom Duel decides the top two. The Champion leads, the duel runner-up is
+## 2nd, and everyone else follows in cave order. The first racer out of the cave is
+## "Qualified 1st", never "Winner" -- only the duel makes a Champion.
 
 func _ready() -> void:
 	UiKit.setup_screen(self)
@@ -16,10 +20,17 @@ func _ready() -> void:
 			you = entry
 	var headline := "Race Over"
 	var headline_colour := UiKit.EMBER
+	var duel: Dictionary = GameState.last_duel
 	if not you.is_empty():
-		if you["finished"]:
-			headline = "You finished %s" % _ordinal(int(you["place"]))
-			if int(you["place"]) == 1:
+		if int(you.get("duel_place", 0)) == 1:
+			headline = "CHAMPION!" if duel.get("fought", false) else "Champion by default"
+			headline_colour = UiKit.EMBER
+		elif int(you.get("duel_place", 0)) == 2:
+			headline = "Finalist  -  2nd"
+			headline_colour = UiKit.SKY
+		elif you["finished"]:
+			headline = "You finished %s" % _ordinal(results.find(you) + 1)
+			if int(you["place"]) == 1 and duel.is_empty():
 				headline = "Victory!"
 		elif you["eliminated"]:
 			headline = "Eliminated"
@@ -34,27 +45,52 @@ func _ready() -> void:
 		AudioManager.play_sfx("record")
 		col.add_child(UiKit.title("New best on this cave!  Your ghost will race you next time.", 22, UiKit.SKY))
 
+	var champion := _entry_with(results, 1)
+	var runner := _entry_with(results, 2)
+	if not champion.is_empty():
+		var line := "Freedom Duel:  %s is Champion" % champion["name"]
+		if not runner.is_empty():
+			line = "Freedom Duel:  %s beat %s in %s" % [champion["name"], runner["name"],
+				MatchController.format_time(float(duel.get("duration", 0.0)))]
+			if String(duel.get("reason", "")) == "time":
+				line += "  (on hearts at the time limit)"
+		elif duel.has("reason"):
+			line += "  (by default: %s)" % duel["reason"]
+		col.add_child(UiKit.title(line, 24, UiKit.EMBER))
+
 	var panel := PanelContainer.new()
 	col.add_child(panel)
 	var grid := GridContainer.new()
-	grid.columns = 6
+	grid.columns = 7
 	grid.add_theme_constant_override("h_separation", 34)
 	grid.add_theme_constant_override("v_separation", 10)
 	panel.add_child(grid)
-	for h: String in ["", "Racer", "Result", "Moves used", "Boxes", "Damage"]:
+	for h: String in ["", "Racer", "Cave", "Freedom Duel", "Moves used", "Boxes", "Damage"]:
 		grid.add_child(UiKit.label(h, 17, UiKit.TEXT_DIM))
 
-	for entry: Dictionary in results:
+	var has_duel := not champion.is_empty()
+	for i in results.size():
+		var entry: Dictionary = results[i]
 		var racer_name: String = entry["name"]
 		var stats: Dictionary = GameState.stats.get(racer_name, {})
 		var colour: Color = stats.get("colour", UiKit.TEXT)
 		var place_text := _ordinal(int(entry["place"])) if entry["finished"] else "--"
-		grid.add_child(UiKit.label(place_text, 22, UiKit.EMBER if place_text == "1st" else UiKit.TEXT_DIM))
-		grid.add_child(UiKit.label(racer_name, 22, colour))
+		var place_size := 22
+		if has_duel:
+			place_text = _ordinal(i + 1) if entry["finished"] or entry.get("stopped_by_duel", false) else "--"
+			if int(entry.get("duel_place", 0)) == 1:
+				place_text = "CHAMPION"
+				place_size = 26
+		grid.add_child(UiKit.label(place_text, place_size, UiKit.EMBER if place_text in ["1st", "CHAMPION"] else UiKit.TEXT_DIM))
+		grid.add_child(UiKit.label(racer_name, place_size, colour))
 		var result_text := "DNF"
 		var result_colour := UiKit.TEXT_DIM
+		if entry.get("stopped_by_duel", false):
+			result_text = "DNF  (%d from the exit)" % int(entry.get("progress", 0)) if int(entry.get("progress", 999)) < 999 else "DNF"
 		if entry["finished"]:
 			result_text = MatchController.format_time(float(entry["finish_time"]))
+			if int(entry.get("qualified", 0)) > 0:
+				result_text = "Q%d  %s" % [int(entry["qualified"]), result_text]
 			result_colour = UiKit.TEXT
 		elif entry.get("disconnected", false):
 			result_text = "DISCONNECTED"
@@ -62,6 +98,7 @@ func _ready() -> void:
 			result_text = "ELIMINATED"
 			result_colour = UiKit.DANGER
 		grid.add_child(UiKit.label(result_text, 22, result_colour))
+		grid.add_child(UiKit.label(_duel_text(entry), 20, UiKit.EMBER if int(entry.get("duel_place", 0)) == 1 else UiKit.TEXT))
 		grid.add_child(UiKit.label(str(stats.get("moves_used", 0)), 22))
 		grid.add_child(UiKit.label(str(stats.get("boxes", 0)), 22))
 		grid.add_child(UiKit.label("%.1f" % float(stats.get("damage_taken", 0.0)), 22))
@@ -103,6 +140,26 @@ func _ready() -> void:
 		SceneRouter.start_match(), 220))
 	row.add_child(UiKit.button("Main Menu", func() -> void: SceneRouter.go_to(SceneRouter.MAIN_MENU), 220))
 	rematch.grab_focus.call_deferred()
+
+
+func _entry_with(results: Array, duel_place: int) -> Dictionary:
+	for entry: Dictionary in results:
+		if int(entry.get("duel_place", 0)) == duel_place:
+			return entry
+	return {}
+
+
+## "won  4.5 dmg  2 locks  1 core" for the finalists; a dash for everyone else.
+func _duel_text(entry: Dictionary) -> String:
+	var place := int(entry.get("duel_place", 0))
+	if place == 0:
+		return "-"
+	var st: Dictionary = entry.get("duel_stats", {})
+	if not GameState.last_duel.get("fought", false):
+		return "won by default"
+	return "%s  %.1f dmg  %d lock%s  %d core%s" % ["won" if place == 1 else "lost",
+		float(st.get("damage_dealt", 0.0)), int(st.get("locks_landed", 0)), "" if int(st.get("locks_landed", 0)) == 1 else "s",
+		int(st.get("cores", 0)), "" if int(st.get("cores", 0)) == 1 else "s"]
 
 
 ## FUN-008: one line of the race's most notable moments, from stats the race recorded.

@@ -12,6 +12,8 @@ signal shield_changed(active: bool)
 signal shield_absorbed()
 signal second_chance_changed(active: bool)
 signal second_chance_used()
+## Freedom Duel: hearts ran out. Never eliminated() -- losing the duel is not a cave death.
+signal duel_down()
 
 var hearts: float = 5.0
 var is_eliminated: bool = false
@@ -29,6 +31,8 @@ var _damage_enabled: bool = true
 ## Online client: hearts belong to the server. Local hazards still animate and still
 ## overlap this racer, but only the server's copy of them can take a heart.
 var net_client: bool = false
+## Freedom Duel rules: short invulnerability, no Second Chance, zero hearts is duel_down.
+var duel_mode: bool = false
 
 
 func _ready() -> void:
@@ -62,7 +66,7 @@ func apply_damage(amount: float, source: String = "unknown", cooldown: float = 0
 	if cooldown > 0.0:
 		_source_cooldowns[source] = cooldown
 	is_invulnerable = true
-	_invuln_timer = AppConfig.INVULNERABILITY_TIME
+	_invuln_timer = AppConfig.DUEL_INVULNERABILITY if duel_mode else AppConfig.INVULNERABILITY_TIME
 
 	if has_shield:
 		has_shield = false
@@ -71,6 +75,12 @@ func apply_damage(amount: float, source: String = "unknown", cooldown: float = 0
 		return true
 
 	hearts = maxf(0.0, hearts - amount)
+	if duel_mode:
+		damaged.emit(amount, source)
+		hearts_changed.emit(hearts)
+		if hearts <= 0.0:
+			duel_down.emit()
+		return true
 	if hearts <= 0.0 and has_second_chance:
 		has_second_chance = false
 		hearts = 0.5
@@ -128,8 +138,33 @@ func net_apply(p_hearts: float, shield: bool, second_chance: bool, p_eliminated:
 		if lost > 0.0:
 			damaged.emit(lost, "server")
 		hearts_changed.emit(hearts)
+	if duel_mode:
+		return
 	if p_eliminated or hearts <= 0.0:
 		eliminate()
+
+
+## Freedom Duel start: full hearts, no invulnerability or cave power-ups carried in.
+func begin_duel(p_hearts: float) -> void:
+	duel_mode = true
+	is_eliminated = false
+	is_invulnerable = false
+	_invuln_timer = 0.0
+	_source_cooldowns.clear()
+	if has_second_chance:
+		has_second_chance = false
+		second_chance_changed.emit(false)
+	if has_shield:
+		has_shield = false
+		shield_changed.emit(false)
+	hearts = p_hearts
+	hearts_changed.emit(hearts)
+
+
+func drop_shield() -> void:
+	if has_shield:
+		has_shield = false
+		shield_changed.emit(false)
 
 
 func eliminate() -> void:

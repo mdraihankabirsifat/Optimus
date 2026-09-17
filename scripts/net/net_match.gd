@@ -58,6 +58,13 @@ var _grace_until: Dictionary = {}
 var _last_correction: Dictionary = {}
 var _humans_resolved_at: float = -1.0
 var _results_sent: bool = false
+## Freedom Duel: the whole duel state goes out on every change and a few times a second.
+var _duel: FreedomDuel
+var _duel_dirty: bool = false
+var _duel_timer: float = 0.0
+const DUEL_SEND_RATE := 10.0
+## How far a client's claimed muzzle may be from where the server has that finalist.
+const DUEL_AIM_SLACK := 3.0
 
 # Client
 var _spider_targets: Array = []
@@ -149,7 +156,64 @@ func _setup_server(config: Dictionary) -> void:
 		var gone := rid >= 0 and bool(mc.racers[rid]["disconnected"])
 		_broadcast("s_eliminated", [rid, time, gone]))
 	mc.match_ended.connect(_server_send_results)
+	_setup_server_duel()
 
+
+## The server owns the duel. Every decision -- qualification, freedom, hits, locks, cores,
+## shifts, sudden death, the Champion -- is made by the FreedomDuel here and sent out; each
+## event is sent once, from the one place it happened, so nothing can be applied twice.
+func _setup_server_duel() -> void:
+	_duel = world.get("duel")
+	if _duel == null:
+		return
+	var mark := func(_a: Variant = null, _b: Variant = null) -> void: _duel_dirty = true
+	_duel.qualified.connect(func(_b: PlayerController, _o: int) -> void: _send_duel_state())
+	_duel.phase_changed.connect(func(p: FreedomDuel.Phase) -> void:
+		if p == FreedomDuel.Phase.INTRO:
+			# Humans are puppets here; hold them at their arena spawn until their clients
+			# arrive, correcting any cave pose still in flight.
+			for body: PlayerController in [_duel.finalist_a, _duel.finalist_b]:
+				_last_correction.erase(racers.find(body))
+		_send_duel_state())
+	_duel.shot.connect(func(shooter: PlayerController, kind: String, from: Vector3, to: Vector3, hit: PlayerController) -> void:
+		_broadcast("s_duel_event", ["shot", [racers.find(shooter), kind, from, to, racers.find(hit) if hit != null else -1]])
+		_duel_dirty = true)
+	_duel.axis_locked.connect(func(t: PlayerController, removed: String) -> void:
+		_send_duel_state()
+		_broadcast("s_duel_event", ["locked", [racers.find(t), removed]]))
+	_duel.lock_resisted.connect(func(t: PlayerController) -> void:
+		_broadcast("s_duel_event", ["resisted", [racers.find(t)]]))
+	_duel.core_captured.connect(func(b: PlayerController, effect: String) -> void:
+		_send_duel_state()
+		_broadcast("s_duel_event", ["core", [racers.find(b), effect]]))
+	_duel.axis_restored.connect(mark)
+	_duel.core_spawned.connect(mark)
+	_duel.dof_shift.connect(mark)
+	_duel.dof_shift_ended.connect(mark)
+	_duel.sudden_death_started.connect(mark)
+	_duel.duel_ended.connect(func(c: PlayerController, r: PlayerController, reason: String) -> void:
+		_send_duel_state()
+		_broadcast("s_duel_event", ["end", [racers.find(c), racers.find(r) if r != null else -1, reason]]))
+
+
+func _send_duel_state() -> void:
+	_duel_dirty = false
+	_duel_timer = 1.0 / DUEL_SEND_RATE
+	_broadcast("s_duel_state", [_duel.net_state()])
+
+
+func server_on_duel_fire(peer: int, kind: String, origin: Vector3, dir: Vector3) -> void:
+	var b := _human_body(peer)
+	if b == null or _duel == null or not _duel.is_fighting() or not _duel.fighters.has(b):
+		return
+	if kind != "pulse" and kind != "lock":
+		return
+	if not origin.is_finite() or not dir.is_finite() or dir.length_squared() < 0.25:
+		return
+	# The shot must start at the shooter, give or take a snapshot of lag.
+	if origin.distance_to(b.net_target_position) > DUEL_AIM_SLACK:
+		origin = b.net_target_position + Vector3(0, 0.6, 0)
+	_duel.fire(b, kind, origin, dir.normalized())
 
 func _rid_named(racer_name: String) -> int:
 	for r: Dictionary in mc.racers:
@@ -183,6 +247,11 @@ func _server_process(delta: float) -> void:
 		_send_timer = 1.0 / SEND_RATE
 		_broadcast("s_snapshot", [mc.elapsed, _server_time, _pose_list(), _spider_list()])
 
+	if _duel != null and _duel.phase != FreedomDuel.Phase.OFF:
+		_duel_timer -= delta
+		if _duel_dirty or _duel_timer <= 0.0:
+			_send_duel_state()
+
 	_check_humans_resolved()
 
 
@@ -215,6 +284,13 @@ func _spider_list() -> Array:
 ## Nobody should wait on bots once every human is done. Same grace as offline.
 func _check_humans_resolved() -> void:
 	if mc.phase != MatchController.Phase.RACING:
+		return
+	if _duel != null and _duel.claims_end():
+		# From the first qualifier on, the duel's own time limits guarantee the ending; the
+		# human grace would otherwise hand Qualified 1st the title before anyone could follow.
+		_humans_resolved_at = -1.0
+		if _peer_of_rid.is_empty():
+			mc.force_end()
 		return
 	var connected_humans := 0
 	var unresolved_humans := 0
@@ -625,6 +701,30 @@ func client_on_results(results: Array, stats: Dictionary, elapsed: float) -> voi
 		s["colour"] = Color.html(String(s.get("colour", "ffffff")))
 		local_stats[racer_name] = s
 	mc.net_end(results, elapsed)
+
+
+func client_on_duel_state(state: Dictionary) -> void:
+	var duel: FreedomDuel = world.get("duel")
+	if duel == null:
+		return
+	var was := duel.phase
+	duel.net_apply_state(state)
+	if was < FreedomDuel.Phase.INTRO and duel.phase >= FreedomDuel.Phase.INTRO:
+		# The cave is over for everyone who is not fighting.
+		var me := _local()
+		if me != null and not duel.is_finalist(me):
+			me.input_enabled = false
+
+
+func client_on_duel_event(kind: String, args: Array) -> void:
+	var duel: FreedomDuel = world.get("duel")
+	if duel != null:
+		duel.net_event(kind, args)
+
+
+func send_duel_fire(kind: String, origin: Vector3, dir: Vector3) -> void:
+	if role == "client":
+		NetManager.send_to_server("c_duel_fire", [kind, origin, dir])
 
 
 func client_on_server_lost() -> void:

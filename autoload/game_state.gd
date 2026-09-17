@@ -27,6 +27,8 @@ var last_results: Array = []
 var stats: Dictionary = {}
 var last_match_seed: int = 0
 var last_match_duration: float = 0.0
+## Freedom Duel summary for results: {fought, duration, reason}. Empty when there was no duel.
+var last_duel: Dictionary = {}
 ## Set when the local racer's finish beat their best on this cave. Read by results.
 var new_record: bool = false
 var last_cave_size: int = 1
