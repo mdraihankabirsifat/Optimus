@@ -14,32 +14,27 @@ lighting, fog, ambience pitch and one signature prop. What remains is giving eac
 decor set, hazards and sound, in this order:
 
 1.1 Jungle mode
-    - Lift every Stone Age colour, material, light and decor choice out of cave_builder.gd into a
-      CaveTheme resource (albedo/roughness per surface, noise settings, fog colour and density,
-      ambient light, torch colour, decor kinds and weights, ambience track).
-    - Jungle theme: damp green-brown stone, hanging roots on ceilings, ferns in dead ends, water
-      drips, softer warm-green light shafts, bird and insect ambience.
+    - Its own decor set instead of recoloured Stone Age props: ferns in dead ends, vines on
+      walls, water drips, softer light shafts, bird and insect ambience.
     - Root curtains as a soft hazard: slow, never damage.
-    - Theme picked in the lobby and sent in the online match config; the generator is unchanged.
 
 1.2 Dark Cave mode
-    - Much lower ambient light; racers carry a small personal light that follows their own
-      local up. Torches rarer and more valuable as landmarks.
-    - Glow-worm ceilings as navigation cues; heavier fog; creaks and distant rumbles.
+    - The personal lamp and glow-worm ceilings exist. Next: rarer torches as precious landmarks,
+      creaks and distant rumbles, and a lamp that flickers when hearts are low.
     - Keep readability: the HUD and the gravity preview must never get harder to read.
 
 1.3 City Drain mode
-    - Concrete and brick materials, pipes along walls, grates over shafts (crumble tiles become
-      rusting grates), sodium-orange lighting, trickling water.
-    - Rats instead of spiders using the same rail logic; steam vents instead of fire.
+    - Concrete and pipes exist. Next: brick, grates over shafts (crumble tiles become rusting
+      grates), trickling water, rats instead of spiders on the same rail logic, steam vents
+      instead of fire.
 
 
 2. BOTS
 
-- 90-degree wall-walks for bots. CaveValidator already models (cell, any of 6 gravities) and
-  tests/test_wallwalk.gd proves the controller can walk up a wall into a shaft. The planner would
-  search six gravities, return (cell, gravity) steps, and the controller would request the
-  gravity the next step needs. Measure with test_bot and race_diag before shipping.
+- Bots plan over all six gravities and turn onto walls when that saves a Move. Preferring
+  walls outright made them finish less often (tests/bot_physical.gd: 70% vs 96%) because a
+  sideways gravity turns long corridors into falls. Teaching the planner which wall routes
+  stay walkable would let bots wall-run more often without losing races.
 - Difficulty personalities that change choices, never information: a cautious bot that hoards
   Moves, a gambler that shifts early, a box hunter that detours for boxes it has seen.
 - A proper utility score (exploration, clue alignment, expected box value, novelty, travel cost,
@@ -56,8 +51,8 @@ decor set, hazards and sound, in this order:
   sometimes the best route rather than just a trick.
 - Stronger Move economy: non-aligned shafts so one inversion no longer climbs everything.
 - Stronger exit cues that grow with proximity: airflow particles, a faint hum, warm light.
-- Developer visualisation overlay: cells, edges, spine, vertical links, hazards, boxes, and a
-  selected bot's discovered graph drawn in 3D behind a debug flag.
+- The debug overlay (F3 in debug runs) draws cells, edges, spine, shafts, hazards, boxes and a
+  bot's knowledge. Next: gravity-aware reachability heat per cell and Move-cost labels.
 
 
 4. HAZARDS, BOXES, ABILITIES

@@ -62,5 +62,8 @@ a junction with a shaft 3. The HUD shows it live.
 ## Debug
 
 - `godot --headless res://tests/test_cave.tscn` prints per-seed failures and statistics.
-- The in-game debug HUD (`AppConfig.DEBUG_HUD`) and `tests/cave_shot.tscn` visualise a cave.
+- **F3 in a debug run** (editor or source, never an exported build) toggles `CaveDebugView`:
+  every edge, the spine, shafts, spawn, the exit, boxes, hazards, and one bot's discovered graph and
+  current plan (F4 cycles bots) with a readout of what it knows. `tests/debug_view_shot.tscn` renders it.
+- `tests/cave_shot.tscn` and `tests/theme_shot.tscn` render the cave from a racer's view.
 - `M` in a race shows the discovered-only map: cells you stood in, never the exit.

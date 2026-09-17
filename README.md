@@ -62,7 +62,9 @@ Every race has 2-5 racers. The host sets the count, adds or removes bots, picks 
 | Tab | Next racer while spectating |
 | Enter | End the race early once you are done (offline) |
 
-Keys can be remapped in Settings. Invert Y, sensitivity, volumes, window size and quality too.
+Keys can be remapped in Settings. Running from source, F3 shows the developer overlay (cave graph and bot knowledge); exported builds do not have it.
+
+ Invert Y, sensitivity, volumes, window size and quality too.
 
 ## Rules at a glance
 

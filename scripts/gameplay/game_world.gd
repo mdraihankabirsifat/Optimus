@@ -220,6 +220,11 @@ func _ready() -> void:
 		lamp.position = Vector3(0.0, 0.6, 0.0)
 		_player.add_child(lamp)
 
+	if CaveDebugView.available() and net_role == "":
+		var debug_view := CaveDebugView.new()
+		add_child(debug_view)
+		debug_view.setup(self, graph)
+
 	AudioManager.stop_music()
 	AudioManager.play_ambience(theme.ambience_pitch, theme.ambience_volume_db)
 	match_controller.begin_countdown()
