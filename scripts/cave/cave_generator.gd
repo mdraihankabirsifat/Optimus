@@ -14,7 +14,9 @@ extends RefCounted
 
 ## Bump when generation logic changes. Peers with different versions cannot race together.
 ## 4: corridor-first tunnels, a route that climbs AND descends, long carved loops.
-const VERSION := 4
+## 5: Master Prompt 4 pacing -- bigger grids, more dead ends, long-cut detours that rejoin the
+##    route much later, and a minimum route-time floor per size.
+const VERSION := 5
 
 ## Set dressing and pickups. Dead ends are rewarded with boxes far more often than
 ## corridors are, so exploring a wrong turn is a gamble rather than a pure loss.
@@ -50,7 +52,18 @@ var loop_count := 3
 var loop_len_max := 10
 var loop_min_detour := 6
 var loop_vertical_chance := 0.25
-var max_attempts := 40
+var max_attempts := 140
+## Master Prompt 4: "long cuts" -- a wrong turn that does not dead-end but loops round and
+## rejoins the guaranteed route much further on, after a clearly longer walk.
+var long_cut_count := 2
+var long_cut_len_max := 34
+## A long cut must be at least this many cells longer than the route it bypasses.
+var long_cut_extra := 6
+## Minimum time the shortest route may take at walking pace (sprint now needs a gift), in
+## seconds. Caves under it are regenerated. See route_seconds() and docs/CAVE_GENERATION.md.
+var min_route_seconds := 45.0
+## Long cuts carved in the last generated cave, for metrics.
+var last_long_cuts := 0
 
 ## Resolved generation profile, recorded with results and records: "normal" or "rush180" etc.
 var profile := "normal"
@@ -81,6 +94,7 @@ func _build() -> bool:
 	if not _carve_spine():
 		return false
 	_add_branches()
+	_add_long_cuts()
 	_add_loops()
 	_place_hazards_and_boxes()
 	_place_decor()
@@ -91,13 +105,16 @@ func _build() -> bool:
 
 
 ## Named cave sizes for the lobby.
+## Master Prompt 4: the three sizes are the difficulty tiers (Short = Easy, Standard = Normal,
+## Long = Hard). `route_s` is the floor on the shortest route's walking time; ordinary,
+## exploring play runs roughly twice that, which is where the 90 / 120 / 150 s targets come from.
 const SIZE_PRESETS := [
-	{"name": "Short", "size": Vector3i(7, 3, 7), "min_distance": 10, "branches": 5, "loops": 2,
-		"boxes": 8, "fires": 5, "vertical": Vector2i(2, 3), "run": Vector2i(3, 5)},
-	{"name": "Standard", "size": Vector3i(9, 4, 9), "min_distance": 14, "branches": 8, "loops": 3,
-		"boxes": 12, "fires": 8, "vertical": Vector2i(3, 4), "run": Vector2i(3, 6)},
-	{"name": "Long", "size": Vector3i(11, 5, 11), "min_distance": 20, "branches": 12, "loops": 5,
-		"boxes": 16, "fires": 11, "vertical": Vector2i(4, 5), "run": Vector2i(4, 7)},
+	{"name": "Short", "size": Vector3i(9, 3, 9), "min_distance": 24, "branches": 10, "loops": 1,
+		"long_cuts": 2, "boxes": 9, "fires": 6, "vertical": Vector2i(2, 3), "run": Vector2i(3, 6), "route_s": 45.0},
+	{"name": "Standard", "size": Vector3i(11, 4, 11), "min_distance": 32, "branches": 14, "loops": 2,
+		"long_cuts": 2, "boxes": 13, "fires": 9, "vertical": Vector2i(3, 4), "run": Vector2i(4, 7), "route_s": 60.0},
+	{"name": "Long", "size": Vector3i(13, 5, 13), "min_distance": 40, "branches": 18, "loops": 3,
+		"long_cuts": 3, "boxes": 17, "fires": 12, "vertical": Vector2i(4, 5), "run": Vector2i(4, 8), "route_s": 75.0},
 ]
 
 
@@ -113,6 +130,9 @@ func apply_size_preset(index: int) -> void:
 	vertical_steps_max = (p["vertical"] as Vector2i).y
 	run_min = (p["run"] as Vector2i).x
 	run_max = (p["run"] as Vector2i).y
+	long_cut_count = int(p["long_cuts"])
+	min_route_seconds = float(p["route_s"])
+	branch_len_max = 6
 
 
 ## Prompt 3: size and ruleset together. Every generator that must agree with another machine
@@ -121,6 +141,21 @@ func configure(size_index: int, ruleset: String, rush_seconds: int) -> void:
 	apply_size_preset(size_index)
 	if ruleset == AppConfig.RULESET_RUSH:
 		apply_rush_profile(rush_seconds)
+	elif ruleset == AppConfig.RULESET_BATTLE:
+		apply_battle_profile()
+
+
+## Battle Mode: a cave to fight in, not to get lost in. More loops so there is always a way
+## round, fewer and shorter dead ends, no route-time floor (there is no exit to race to).
+func apply_battle_profile() -> void:
+	branch_count = maxi(2, branch_count / 3)
+	branch_len_max = 3
+	loop_count += 3
+	long_cut_count = 0
+	min_route_seconds = 0.0
+	min_spawn_finish_distance = maxi(8, min_spawn_finish_distance / 2)
+	max_fires = maxi(2, max_fires / 3)
+	profile = "battle"
 
 
 ## Rush: the same generator, told to make a cave that is quicker to read. Fewer and shorter
@@ -143,6 +178,9 @@ func apply_rush_profile(seconds: int) -> void:
 	run_max = maxi(run_min, run_max - 1)
 	max_boxes = maxi(4, roundi(float(max_boxes) * 0.6))
 	max_fires = maxi(2, roundi(float(max_fires) * 0.5))
+	# Rush keeps a time floor too, lower than Normal's so Rush stays the easier read.
+	min_route_seconds *= 0.5 + 0.2 * t
+	long_cut_count = mini(long_cut_count, 1)
 	profile = "rush%d" % s
 
 
@@ -468,6 +506,66 @@ func _add_branches() -> void:
 ## DIFFERENT part of the cave that was at least loop_min_detour hops away. Never a self-edge,
 ## never a shortcut between neighbours: taking the loop is a genuine trip that comes back
 ## somewhere recognisable. Some loops change level, joining upper and lower routes.
+## Master Prompt 4: long cuts. Start on the guaranteed route, carve through empty rock, and
+## close only onto the route much further along -- and only if the carved passage is clearly
+## longer than the stretch of route it skips, so it is a detour, never a shortcut.
+func _add_long_cuts() -> void:
+	last_long_cuts = 0
+	var spine := _graph.spine
+	if spine.size() < 10:
+		return
+	for attempt in long_cut_count * 40:
+		if last_long_cuts >= long_cut_count:
+			break
+		var from_i := _rng.randi_range(1, spine.size() - 8)
+		var origin: Vector3i = spine[from_i]
+		if _graph.degree(origin) > 2:
+			continue
+		var heading := _choose_heading(origin, -9, false)
+		if heading == -1:
+			continue
+		var from_spawn := _graph.distances_from(_graph.spawn_cell)
+		var origin_d := int(from_spawn.get(origin, 0))
+		var path: Array[Vector3i] = [origin]
+		var visited := {origin: true}
+		var closed := false
+		for step in long_cut_len_max:
+			var current: Vector3i = path[-1]
+			var dir_index := heading
+			if step > 3 and _rng.randf() < 0.22:
+				var turn := _choose_heading(current, heading, true)
+				if turn != -1:
+					heading = turn
+					dir_index = turn
+			var next: Vector3i = current + CaveGraph.DIRS[dir_index]
+			if not _in_bounds(next) or visited.has(next):
+				var turn2 := _choose_heading(current, heading, true)
+				if turn2 == -1:
+					break
+				heading = turn2
+				continue
+			if _graph.has_cell(next):
+				# Rejoin somewhere clearly further along, by a clearly longer walk.
+				var gain := int(from_spawn.get(next, 0)) - origin_d
+				if gain >= 4 and path.size() >= gain + long_cut_extra:
+					path.append(next)
+					closed = true
+				break
+			path.append(next)
+			visited[next] = true
+		if not closed:
+			continue
+		for k in range(1, path.size()):
+			_graph.link(path[k - 1], path[k])
+		last_long_cuts += 1
+
+
+## Shortest spawn-to-exit time at walking pace plus a little per Move (turn, line up).
+static func route_seconds(graph: CaveGraph, moves: int) -> float:
+	var hops := int(graph.distances_from(graph.spawn_cell).get(graph.finish_cell, 0))
+	return float(hops) * CaveBuilder.CELL_SIZE / AppConfig.WALK_SPEED + float(moves) * 2.5
+
+
 func _add_loops() -> void:
 	var made := 0
 	for attempt in loop_count * 15:
@@ -517,8 +615,8 @@ func _validate() -> bool:
 		last_failure = "the guaranteed route needs %d Moves, budget is %d" % [spine_cost, max_spine_climbs]
 		return false
 
-	if _graph.dead_end_count() < 2:
-		last_failure = "fewer than two dead ends"
+	if _graph.dead_end_count() < maxi(2, branch_count / 3):
+		last_failure = "only %d dead ends" % _graph.dead_end_count()
 		return false
 	if _graph.cycle_count() < mini(loop_count, 2):
 		last_failure = "only %d real loops" % _graph.cycle_count()
@@ -562,6 +660,13 @@ func _validate() -> bool:
 	last_min_moves = CaveValidator.min_moves_to_finish(_graph, AppConfig.MOVE_CHARGES_START)
 	if last_min_moves == CaveValidator.UNREACHABLE:
 		last_failure = "exit unreachable within %d Moves under gravity rules" % AppConfig.MOVE_CHARGES_START
+		return false
+
+	# Master Prompt 4: a floor on how quick the fastest possible run can be. Under it the cave
+	# is thrown away and the next attempt carved, rather than hoping the average works out.
+	var seconds := route_seconds(_graph, last_min_moves)
+	if seconds < min_route_seconds:
+		last_failure = "shortest route takes %.0f s, floor is %.0f s" % [seconds, min_route_seconds]
 		return false
 
 	return true

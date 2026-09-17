@@ -17,12 +17,22 @@ func _ready() -> void:
 			ruleset = "rush"
 			rush = int(arg.trim_prefix("rush="))
 	var m := CaveMetrics.new()
+	var attempts := 0
+	var long_cuts := 0
+	var failures := 0
+	var started := Time.get_ticks_msec()
 	for s in seeds:
 		var gen := CaveGenerator.new()
 		gen.configure(size_index, ruleset, rush)
 		var g := gen.generate(s)
 		if g != null:
 			m.add(g)
+			attempts += gen.attempts_used
+			long_cuts += gen.last_long_cuts
+		else:
+			failures += 1
 	print("%s size %d" % [ruleset if ruleset == "normal" else "rush %ds" % rush, size_index])
 	print(m.report())
+	print("failures %d  attempts/cave %.1f  long cuts/cave %.1f  ms/cave %.0f" % [failures, float(attempts) / maxf(1, m.caves),
+		float(long_cuts) / maxf(1, m.caves), float(Time.get_ticks_msec() - started) / maxf(1, seeds)])
 	get_tree().quit()

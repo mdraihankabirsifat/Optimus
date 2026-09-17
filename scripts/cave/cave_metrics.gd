@@ -26,6 +26,8 @@ var min_moves := 0
 var off_route_cells := 0
 ## Distribution of route lengths, for reporting spread rather than one lucky seed.
 var route_list: Array[int] = []
+## Master Prompt 4: shortest-route walking seconds per cave (CaveGenerator.route_seconds).
+var route_seconds_list: Array[float] = []
 
 
 func add(g: CaveGraph) -> void:
@@ -36,7 +38,9 @@ func add(g: CaveGraph) -> void:
 	var hops: int = int(from_spawn.get(g.finish_cell, 0))
 	route_hops += hops
 	route_list.append(hops)
-	min_moves += CaveValidator.min_moves_to_finish(g)
+	var mm := CaveValidator.min_moves_to_finish(g)
+	min_moves += mm
+	route_seconds_list.append(CaveGenerator.route_seconds(g, mm))
 	for c: Vector3i in g.cells:
 		if int(from_spawn.get(c, 0)) + int(to_exit.get(c, 0)) > hops:
 			off_route_cells += 1
@@ -127,6 +131,7 @@ func report() -> String:
 		"junction share %.0f%%" % [100.0 * junctions / maxf(1.0, float(cells))],
 		"route hops avg %.1f (min %d, median %d, max %d)   Moves needed avg %.2f   off-route cells %.0f%%"
 			% [route_hops / n, _pct(0.0), _pct(0.5), _pct(1.0), min_moves / n, 100.0 * off_route_cells / maxf(1.0, float(cells))],
+		"route walking seconds min %.0f  median %.0f  max %.0f" % [_sec(0.0), _sec(0.5), _sec(1.0)],
 		"straight run avg %.2f cells, longest %d" % [average_run(), longest_run],
 		"spine hops between junctions avg %.2f" % average_junction_gap(),
 		"levels/cave %.2f   caves with 3+ levels %d   spine ups %.2f downs %.2f   caves climbing AND descending %d"
@@ -138,5 +143,13 @@ func _pct(q: float) -> int:
 	if route_list.is_empty():
 		return 0
 	var sorted := route_list.duplicate()
+	sorted.sort()
+	return sorted[clampi(roundi(q * float(sorted.size() - 1)), 0, sorted.size() - 1)]
+
+
+func _sec(q: float) -> float:
+	if route_seconds_list.is_empty():
+		return 0.0
+	var sorted := route_seconds_list.duplicate()
 	sorted.sort()
 	return sorted[clampi(roundi(q * float(sorted.size() - 1)), 0, sorted.size() - 1)]

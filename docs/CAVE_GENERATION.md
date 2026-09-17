@@ -6,7 +6,7 @@ A cave is a `CaveGraph`: a dictionary of `Vector3i` lattice cells, each an 8 x 8
 air with a 6-bit mask of open faces (+X, -X, +Y, -Y, +Z, -Z). Pure data, no nodes, no randomness.
 `CaveBuilder` turns it into geometry. `CaveGenerator` makes it from one integer seed.
 
-## Steps (`scripts/cave/cave_generator.gd`, VERSION 4)
+## Steps (`scripts/cave/cave_generator.gd`, VERSION 5)
 
 Prompt 2 made the cave corridor-first: long passages, real loops, dead ends, and routes that
 go both up and down. Numbers below are the Standard preset; Short and Long scale them
@@ -106,6 +106,47 @@ dead ends and a smaller off-route share, and every Rush cave still has a loop an
 
 Prompt 3 decor rule: stalagmites, stalactites and crystal clusters are solid now, so they are placed
 only in chambers (spikes only in landmark chambers). Doorway funnels were already there.
+
+## Length, dead ends and long cuts (Prompt 4)
+
+Prompt 4 asks for caves that take longer to get out of, with more dead ends and with "long cuts":
+detours that leave the route and rejoin it further along, so taking one costs time but is not a
+trap. Three generator knobs do it, all per size preset:
+
+| Preset | Size | Branches (dead ends) | Long cuts | Route floor |
+|---|---|---|---|---|
+| Short ("easy") | 9x3x9 | 10 | 2 | 45 s of walking |
+| Standard | 11x4x11 | 14 | 2 | 60 s |
+| Long | 13x5x13 | 18 | 3 | 75 s |
+
+`_add_long_cuts()` runs between the branches and the loops. It picks a cell on the route, walks a
+corridor away from it (up to `long_cut_len_max` cells) and rejoins the route at least
+`long_cut_extra` hops further along, so the detour is always longer than the straight line it
+replaces. `CaveGenerator.last_long_cuts` reports how many a cave actually got.
+
+The floor is a *lower bound on the fastest possible run*, not an average. `route_seconds(graph,
+moves)` values the shortest gravity-aware route at `hops x CELL_SIZE / WALK_SPEED` plus 2.5 s per
+Gravity Move, which is what a racer who already knows the way would need. A cave under its floor is
+thrown away and the seed is regenerated (up to `max_attempts`, now 140). Since the exit is hidden,
+ordinary play explores roughly twice the shortest route, so the 45 / 60 / 75 s floors are the
+documented reading of "an easy cave takes at least 90 seconds": 45 s of pure walking, about 90 s
+played. Harder sizes scale with it.
+
+Rush keeps its promise to be easier than Normal: `apply_rush_profile()` scales the floor to
+0.5-0.7 of Normal's and allows at most one long cut, so every Rush assertion in `test_cave`
+(shorter route, fewer dead ends, smaller off-route share) still holds.
+
+Battle Mode uses `apply_battle_profile()`: a third of the branches, short stubs, three extra loops,
+no long cuts, no route floor and fewer fires -- an arena to circle in, not a maze to solve. There is
+no exit to reach, so route length means nothing there.
+
+Measured (`tests/cave_metrics.tscn -- seeds=30 size=N`, walking seconds of the shortest route):
+
+| Size | Fastest | Median | Slowest | Long cuts per cave | Failed seeds |
+|---|---|---|---|---|---|
+| Short | 45 s | 56 s | 78 s | 1.0 | 0 |
+| Standard | 61 s | 72 s | 104 s | 1.7 | 0 |
+| Long | 77 s | 93 s | 126 s | 2.5 | 0 |
 
 ## Validation
 
