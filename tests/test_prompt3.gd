@@ -17,6 +17,9 @@ func _ready() -> void:
 	await _test_heart_exchange()
 	_test_bindings()
 	await _test_compass()
+	await _test_bot_pit(false)
+	await _test_bot_pit(true)
+	await _test_bot_zero_moves()
 
 	print("")
 	print("==================================================")
@@ -360,6 +363,140 @@ func _test_compass() -> void:
 		all_east = all_east and absf(b - 90.0) < 6.0
 	_check("chained shifts on floor, ceiling and walls never remap east", all_east)
 	racer.queue_free()
+
+
+# --- Request 12: bots escape a ledge with gravity ---------------------------------------
+
+## Stands in for GameWorld: the bot's parent answers "is regen on" and trades hearts with the
+## same rules the real world uses.
+class BotHost:
+	extends Node3D
+	var _move_regen := false
+	func request_heart_exchange(body: PlayerController) -> String:
+		if _move_regen:
+			return "off while Move regeneration is on"
+		if body.gravity.charges >= AppConfig.MOVE_CHARGES_MAX:
+			return "your Moves are full"
+		if not body.health.exchange_heart():
+			return "you need a full heart"
+		body.gravity.add_charges(1)
+		return ""
+
+
+## Three tunnel cells in a row along +X. In the middle one a ledge 1.7 high crosses the whole
+## tunnel: too high to jump (a jump clears about 1.3). With `shaft_above` the middle cell has no
+## ceiling (a shaft goes up), so the bot must use a side wall instead of the ceiling.
+func _pit_world(shaft_above: bool) -> Dictionary:
+	var host := BotHost.new()
+	add_child(host)
+	var g := CaveGraph.new()
+	var a := Vector3i(10, 3, 10)
+	var b := Vector3i(11, 3, 10)
+	var c := Vector3i(12, 3, 10)
+	for cell in [a, b, c]:
+		g.add_cell(cell)
+	g.link(a, b)
+	g.link(b, c)
+	if shaft_above:
+		g.add_cell(Vector3i(11, 4, 10))
+		g.link(b, Vector3i(11, 4, 10))
+	g.spawn_cell = a
+	g.finish_cell = c
+	var builder := CaveBuilder.new()
+	builder.theme = CaveTheme.by_id("stone_age")
+	builder.build(g, host, -1)
+	var ledge := StaticBody3D.new()
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(0.8, 1.7, CaveBuilder.TUNNEL_HALF * 2.0)
+	shape.shape = box
+	ledge.add_child(shape)
+	host.add_child(ledge)
+	ledge.global_position = CaveBuilder.cell_to_world(b) + Vector3(0, CaveBuilder.FLOOR_Y + 0.85, 0)
+	var bot: PlayerController = load("res://scenes/bots/bot_player.tscn").instantiate()
+	host.add_child(bot)
+	bot.global_position = CaveBuilder.floor_position(a)
+	var ctrl: BotController = bot.get_node("BotController")
+	ctrl.setup(g, "Pit", Color.ORANGE, 1, 2)
+	return {"host": host, "bot": bot, "ctrl": ctrl, "goal_x": ledge.global_position.x + 1.5, "graph": g}
+
+
+func _test_bot_pit(shaft_above: bool) -> void:
+	_section("bot escapes a ledge it cannot jump, using the %s" % ("side wall" if shaft_above else "ceiling"))
+	var w := _pit_world(shaft_above)
+	var bot: PlayerController = w["bot"]
+	var ctrl: BotController = w["ctrl"]
+	var shifts := [0]
+	bot.gravity.shift_started.connect(func(_d: Vector3) -> void: shifts[0] += 1)
+	var start_moves := bot.gravity.charges
+	var crossed := false
+	for i in 60 * 40:
+		await get_tree().physics_frame
+		if bot.global_position.x > float(w["goal_x"]):
+			crossed = true
+			break
+	print("    %s after %d frames, shifts %d, moves %d->%d, %s" % ["crossed" if crossed else "stuck", _frames_used(crossed),
+		shifts[0], start_moves, bot.gravity.charges, ctrl.debug_state()])
+	_check("the bot gets past the ledge (%s)" % ("wall" if shaft_above else "ceiling"), crossed)
+	_check("each Move was charged once per real shift", start_moves - bot.gravity.charges == shifts[0])
+	_check("no endless flipping (%d shifts)" % shifts[0], shifts[0] <= 3)
+	(w["host"] as Node).queue_free()
+	await _frames(2)
+
+
+var _frame_mark := 0
+func _frames_used(_crossed: bool) -> int:
+	return Engine.get_physics_frames() - _frame_mark
+
+
+func _test_bot_zero_moves() -> void:
+	_section("a trapped bot with no Moves")
+	var w := _pit_world(false)
+	var bot: PlayerController = w["bot"]
+	var ctrl: BotController = w["ctrl"]
+	var host: BotHost = w["host"]
+	host._move_regen = true
+	bot.gravity.charges = 0
+	for i in 60 * 14:
+		await get_tree().physics_frame
+	_check("regen on: it waits for a regenerated Move instead of flailing (%s)" % ctrl.debug_state(),
+		ctrl.wait_reason.contains("regenerated") and bot.gravity.charges == 0 and is_equal_approx(bot.health.hearts, 5.0))
+	bot.gravity.add_charges(1)
+	var crossed := false
+	for i in 60 * 25:
+		await get_tree().physics_frame
+		if bot.global_position.x > float(w["goal_x"]):
+			crossed = true
+			break
+	_check("when the Move arrives it resumes and escapes", crossed)
+	host.queue_free()
+	await _frames(2)
+
+	w = _pit_world(false)
+	bot = w["bot"]
+	ctrl = w["ctrl"]
+	bot.gravity.charges = 0
+	crossed = false
+	for i in 60 * 30:
+		await get_tree().physics_frame
+		if bot.global_position.x > float(w["goal_x"]):
+			crossed = true
+			break
+	_check("regen off: it trades one heart for the Move it needs and escapes", crossed and is_equal_approx(bot.health.hearts, 4.0))
+	(w["host"] as Node).queue_free()
+	await _frames(2)
+
+	w = _pit_world(false)
+	bot = w["bot"]
+	ctrl = w["ctrl"]
+	bot.gravity.charges = 0
+	bot.health.hearts = 1.0
+	for i in 60 * 14:
+		await get_tree().physics_frame
+	_check("on its last heart it will not trade itself into a deadline; it reports being trapped (%s)" % ctrl.debug_state(),
+		ctrl.recovery_note.contains("trapped") and not bot.health.in_grace())
+	(w["host"] as Node).queue_free()
+	await _frames(2)
 
 
 func _name(g: Vector3) -> String:

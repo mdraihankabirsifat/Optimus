@@ -59,8 +59,20 @@ func _ready() -> void:
 				if absf(d.y) < 0.5:
 					shifts["side"] += 1)
 		var start := Time.get_ticks_msec()
+		# Seconds each bot has gone without moving 1.5 units: the stall a watchdog must explain.
+		var stall := {}
+		var anchor := {}
+		for b: Node3D in world.bots:
+			stall[b] = 0.0
+			anchor[b] = b.global_position
 		while mc.phase != MatchController.Phase.ENDED and mc.elapsed < RACE_LIMIT:
 			await get_tree().physics_frame
+			for b: Node3D in world.bots:
+				if b.global_position.distance_to(anchor[b]) > 1.5:
+					anchor[b] = b.global_position
+					stall[b] = 0.0
+				else:
+					stall[b] += 1.0 / 60.0
 			if Time.get_ticks_msec() - start > 240000:
 				break
 			var open_bots := 0
@@ -80,7 +92,10 @@ func _ready() -> void:
 				line += "  %s %s" % [r["name"], MatchController.format_time(r["finish_time"])]
 			else:
 				var body := r["body"] as PlayerController
-				line += "  %s DNF@%s" % [r["name"], CaveBuilder.world_to_cell(body.global_position)]
+				var bc: BotController = body.get_node("BotController")
+				var why := "eliminated" if r["eliminated"] else "stuck %.0fs" % stall[body]
+				line += "  %s DNF@%s[%s g%d m%d h%.1f %s]" % [r["name"], CaveBuilder.world_to_cell(body.global_position), why,
+					bc._grav(), body.gravity.charges, body.health.hearts, bc.debug_state()]
 			moves += int(world.stats[r["name"]]["moves_used"])
 		side_shifts += int(shifts["side"])
 		print(line)

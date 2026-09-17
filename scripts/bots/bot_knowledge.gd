@@ -29,6 +29,25 @@ var clue_vertical: int = 0
 ## every physics frame and inflate the revisit penalty into the thousands.
 var _last_cell: Vector3i = Vector3i(-9999, -9999, -9999)
 
+## Prompt 3: passages this bot physically failed to get through, and until when (its own
+## clock). Temporary on purpose: a racer standing in a doorway is gone a moment later.
+var blocked: Dictionary = {}
+var now: float = 0.0
+
+
+func block_edge(cell: Vector3i, dir_index: int, seconds: float) -> void:
+	blocked["%s|%d" % [cell, dir_index]] = now + seconds
+
+
+func is_blocked(cell: Vector3i, dir_index: int) -> bool:
+	var key := "%s|%d" % [cell, dir_index]
+	if not blocked.has(key):
+		return false
+	if float(blocked[key]) <= now:
+		blocked.erase(key)
+		return false
+	return true
+
 
 ## Record what the bot can see from where it is standing: this cell and which of its six
 ## faces are open. It learns that neighbours exist, but not what is inside them.

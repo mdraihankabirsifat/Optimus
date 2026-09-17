@@ -140,6 +140,8 @@ func _dijkstra(knowledge: BotKnowledge, from: Vector3i, start_g: int,
 		for dir_index in 6:
 			if not knowledge.discovered.is_linked(cell, dir_index):
 				continue
+			if knowledge.is_blocked(cell, dir_index):
+				continue
 			if falling and dir_index != fall_dir:
 				continue
 			var neighbour: Vector3i = cell + CaveGraph.DIRS[dir_index]

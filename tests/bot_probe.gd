@@ -58,7 +58,7 @@ func _ready() -> void:
 		for b: Node3D in world.bots:
 			var body := b as PlayerController
 			var c: BotController = b.get_node("BotController")
-			print("t=%d %s grav %s pos %s cell %s floor %s vel %s input %s path %s enabled %s" % [t, c.display_name, body.gravity.gravity_dir,
+			print("t=%d %s grav %s pos %s cell %s floor %s vel %s input %s path %s enabled %s | %s" % [t, c.display_name, body.gravity.gravity_dir,
 				body.global_position, CaveBuilder.world_to_cell(body.global_position), body.is_on_floor(),
-				body.velocity, body.move_input, c.get("_path").slice(0, 3), body.input_enabled])
+				body.velocity, body.move_input, c.get("_path").slice(0, 3), body.input_enabled, c.debug_state()])
 	get_tree().quit()

@@ -40,6 +40,31 @@ var _hesitate: float = 0.0
 ## and only that single fact is passed into knowledge -- the same as seeing it.
 var _hazard_cells: Dictionary = {}
 
+# --- Prompt 3: progress watchdog ---------------------------------------------------------
+## Seconds without real progress (moving 1.2 units) before each recovery stage.
+const STALL_REPLAN := 2.5
+const STALL_BLOCK := 5.0
+const STALL_ESCAPE := 8.0
+const STALL_CYCLE := 14.0
+const BLOCK_SECONDS := 20.0
+## Gravity escapes a bot may spend in one cell before it stops trying there.
+const ESCAPES_PER_CELL := 2
+var _clock := 0.0
+var _stall := 0.0
+var _anchor := Vector3.INF
+var _stage := 0
+var _escapes: Dictionary = {}
+var _yield_timer := 0.0
+var _yield_dir := Vector3.ZERO
+## After turning onto a wall to escape, walk "up" that wall (toward the old ceiling) this long
+## to clear the lip before the route resumes.
+var _climb_timer := 0.0
+var _climb_dir := Vector3.ZERO
+## Developer diagnostics: what the bot is doing about a stall, or why it is waiting.
+var recovery_note := ""
+var wait_reason := ""
+var recoveries := 0
+
 # --- Freedom Duel ------------------------------------------------------------------------
 var _duel: FreedomDuel
 var _duel_rng := RandomNumberGenerator.new()
@@ -102,16 +127,140 @@ func _physics_process(delta: float) -> void:
 		_body.move_input = Vector2.ZERO
 		return
 
+	_clock += delta
+	knowledge.now = _clock
 	_think_timer -= delta
 	if _path.is_empty() or _think_timer <= 0.0:
 		_replan(cell)
 
 	_advance_path(cell)
+	if _climb_timer > 0.0:
+		_climb_timer -= delta
+		var axes := _body.movement_axes()
+		var d := _climb_dir - (axes["up"] as Vector3) * _climb_dir.dot(axes["up"])
+		if d.length() > 0.1:
+			d = d.normalized()
+			_body.move_input = Vector2(d.dot(axes["right"]), -d.dot(axes["forward"]))
+			return
+	_watchdog(cell, delta)
 	if _path.is_empty():
 		_body.move_input = Vector2.ZERO
 		return
 
 	_execute_step(cell, _path[0])
+	_yield_to_racers(delta)
+
+
+## Prompt 3: bots must never stand still without a reason. Real progress is moving; tiny
+## jitter is not. An explained wait (countdown, easy-bot pause, gravity turn, waiting for a
+## regenerated Move) never escalates. An unexplained stall escalates in stages, each one
+## something a human could do: think again, give up on that doorway for a while and hop,
+## then spend a Move to walk a different surface out -- never teleporting, never free Moves.
+func _watchdog(cell: Vector3i, delta: float) -> void:
+	if _anchor == Vector3.INF or _body.global_position.distance_to(_anchor) > 1.2:
+		_anchor = _body.global_position
+		_stall = 0.0
+		_stage = 0
+		recovery_note = ""
+		wait_reason = ""
+		return
+	if wait_reason != "" and _body.gravity.charges > 0:
+		wait_reason = ""
+		_stall = STALL_ESCAPE - 0.5
+	if wait_reason != "":
+		return
+	_stall += delta
+	if _stage == 0 and _stall >= STALL_REPLAN:
+		_stage = 1
+		recoveries += 1
+		recovery_note = "replan"
+		_path.clear()
+	elif _stage == 1 and _stall >= STALL_BLOCK:
+		_stage = 2
+		recovery_note = "blocked edge, hop"
+		if not _path.is_empty():
+			var dir := CaveGraph.DIRS.find(_path[0] - cell)
+			if dir >= 0:
+				knowledge.block_edge(cell, dir, BLOCK_SECONDS)
+		if _body.can_jump():
+			_body.jump_requested = true
+		_path.clear()
+	elif _stage == 2 and _stall >= STALL_ESCAPE:
+		_stage = 3
+		_gravity_escape(cell)
+	elif _stall >= STALL_CYCLE:
+		_stage = 1
+		_stall = STALL_REPLAN
+		_path.clear()
+
+
+## Out of a pit or a snag by changing surface: flip to the ceiling if there is one, else turn
+## onto a solid wall. Paid for like any other Move; with no Move left it waits for regen, or
+## trades a heart when that is legal and it is not the last one, or reports itself trapped.
+func _gravity_escape(cell: Vector3i) -> void:
+	if int(_escapes.get(cell, 0)) >= ESCAPES_PER_CELL:
+		recovery_note = "trapped here: escapes spent"
+		return
+	var down_dir := BotPlanner.GRAV_TO_DIR[_grav()]
+	var target_dir := -1
+	var up_dir := CaveGraph.opposite(down_dir)
+	if _graph.has_cell(cell) and not knowledge.discovered.is_linked(cell, up_dir):
+		target_dir = up_dir   # a real ceiling above: flip onto it
+	else:
+		for d: int in 6:
+			if d == down_dir or d == up_dir:
+				continue
+			if not knowledge.discovered.is_linked(cell, d):
+				target_dir = d   # a solid wall: turn onto it
+				break
+	if target_dir < 0:
+		recovery_note = "trapped here: no surface to use"
+		return
+	if _body.gravity.charges <= 0:
+		var world := _body.get_parent()
+		if bool(world.get("_move_regen")):
+			wait_reason = "waiting for a regenerated Move"
+			return
+		if _body.health.hearts >= AppConfig.HEART_EXCHANGE_COST * 2.0 and world.has_method("request_heart_exchange"):
+			if String(world.call("request_heart_exchange", _body)) != "":
+				recovery_note = "trapped here: no Move to spend"
+				return
+		else:
+			recovery_note = "trapped here: no Move to spend"
+			return
+	_escapes[cell] = int(_escapes.get(cell, 0)) + 1
+	recovery_note = "gravity escape"
+	if target_dir != up_dir:
+		# Onto a wall: once turned, climb toward the old ceiling to get above the lip.
+		_climb_dir = Vector3(CaveGraph.DIRS[up_dir])
+		_climb_timer = 1.4 + AppConfig.GRAVITY_TRANSITION_TIME
+	_body.move_input = Vector2.ZERO
+	_body.gravity.request_direction(Vector3(CaveGraph.DIRS[target_dir]))
+	_path.clear()
+
+
+## Two racers nose to nose in a tunnel: the one with the higher id steps to its right for a
+## moment, so they pass instead of pushing forever. Deterministic, so they never both yield.
+func _yield_to_racers(delta: float) -> void:
+	if _yield_timer > 0.0:
+		_yield_timer -= delta
+		var axes := _body.movement_axes()
+		var d := _yield_dir
+		_body.move_input = (_body.move_input + Vector2(d.dot(axes["right"]), -d.dot(axes["forward"]))).limit_length(1.0)
+		return
+	if _body.move_input.length() < 0.2 or _stall < 0.6:
+		return
+	var axes := _body.movement_axes()
+	var wish: Vector3 = (axes["right"] * _body.move_input.x - axes["forward"] * _body.move_input.y).normalized()
+	for other: Node in WorldScope.nodes(self, "racers"):
+		var o := other as PlayerController
+		if o == null or o == _body or o.collision_layer == 0:
+			continue
+		var rel := o.global_position - _body.global_position
+		if rel.length() < 1.4 and rel.normalized().dot(wish) > 0.5 and _body.get_instance_id() > o.get_instance_id():
+			_yield_dir = (axes["right"] as Vector3)
+			_yield_timer = 0.7
+			return
 
 
 ## A box within arm's reach is something the bot can plainly see, so opening it breaks no
@@ -342,3 +491,11 @@ func _duel_line_of_sight(eye: Vector3, foe: PlayerController) -> bool:
 	var query := PhysicsRayQueryParameters3D.create(eye, foe.global_position, 1 | 2, [_body.get_rid()])
 	var hit := space.intersect_ray(query)
 	return hit.is_empty() or hit["collider"] == foe
+
+
+## Developer diagnostics only (tests, logs, F3 overlay). Never shown to players.
+func debug_state() -> String:
+	var next := str(_path[0]) if not _path.is_empty() else "-"
+	return "path %d next %s exit %s stage %d %s%s recoveries %d" % [_path.size(), next,
+		"known" if knowledge.exit_found else "unknown", _stage, recovery_note,
+		(" wait: " + wait_reason) if wait_reason != "" else "", recoveries]
