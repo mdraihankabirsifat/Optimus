@@ -31,6 +31,8 @@ var _planner := BotPlanner.new()
 var _graph: CaveGraph
 var _body: PlayerController
 var _path: Array[Vector3i] = []
+## Planner gravity each path cell must be entered under (BotPlanner.last_gravities).
+var _path_gravs: Array[int] = []
 var _think_timer: float = 0.0
 var _exit_was_known: bool = false
 var _hesitate: float = 0.0
@@ -139,7 +141,8 @@ func _observe(cell: Vector3i) -> void:
 
 func _replan(cell: Vector3i) -> void:
 	_think_timer = think_interval
-	_path = _planner.plan(knowledge, cell, _gravity_is_up(), _body.gravity.charges)
+	_path = _planner.plan_from(knowledge, cell, _grav(), _body.gravity.charges)
+	_path_gravs = _planner.last_gravities.duplicate()
 
 
 ## Drop steps the bot has already reached. Comparing occupied cells rather than distance
@@ -147,6 +150,8 @@ func _replan(cell: Vector3i) -> void:
 func _advance_path(cell: Vector3i) -> void:
 	while not _path.is_empty() and _path[0] == cell:
 		_path.remove_at(0)
+		if not _path_gravs.is_empty():
+			_path_gravs.remove_at(0)
 
 
 func _execute_step(cell: Vector3i, target: Vector3i) -> void:
@@ -157,27 +162,42 @@ func _execute_step(cell: Vector3i, target: Vector3i) -> void:
 		_path.clear()
 		return
 
-	var vertical := dir_index == CaveGraph.DIR_UP or dir_index == CaveGraph.DIR_DOWN
-	if vertical:
-		_execute_vertical(cell, dir_index)
-	else:
-		_steer_towards(CaveBuilder.cell_to_world(target))
-		_body.sprint_input = skill >= 2 or (skill == 1 and _path.size() >= 3)
-
-
-## Vertical moves are made by gravity, not by walking. Line up under the shaft first, then
-## flip the frame if the shaft runs against the way the bot is currently falling.
-func _execute_vertical(cell: Vector3i, dir_index: int) -> void:
+	var current := _grav()
+	var wanted := _path_gravs[0] if not _path_gravs.is_empty() else current
+	if not _planner._can_traverse(dir_index, wanted):
+		wanted = current if _planner._can_traverse(dir_index, current) else wanted
+	var wanted_dir: int = BotPlanner.GRAV_TO_DIR[wanted]
 	var centre := CaveBuilder.cell_to_world(cell)
-	if _horizontal_distance(centre) > CENTRE_TOLERANCE:
-		_steer_towards(centre)
-		_body.sprint_input = false
+
+	if wanted != current:
+		# A Move first. If the step is a fall along the new gravity -- up a shaft after an
+		# inversion, say -- line up with the opening before spending it.
+		if dir_index == wanted_dir and _distance_across(centre, wanted_dir) > CENTRE_TOLERANCE:
+			_steer_towards(centre)
+			_body.sprint_input = false
+			return
+		_body.move_input = Vector2.ZERO
+		_body.gravity.request_direction(Vector3(CaveGraph.DIRS[wanted_dir]))
 		return
 
-	_body.move_input = Vector2.ZERO
-	var grav: int = BotPlanner.GRAV_UP if _gravity_is_up() else BotPlanner.GRAV_DOWN
-	if not _planner._can_traverse(dir_index, grav):
-		_body.gravity.request_inversion()
+	if dir_index == BotPlanner.GRAV_TO_DIR[current]:
+		# Falling along our own gravity: line up with the opening, then let go.
+		if _distance_across(centre, dir_index) > CENTRE_TOLERANCE:
+			_steer_towards(centre)
+			_body.sprint_input = false
+		else:
+			_body.move_input = Vector2.ZERO
+		return
+
+	_steer_towards(CaveBuilder.cell_to_world(target))
+	_body.sprint_input = skill >= 2 or (skill == 1 and _path.size() >= 3)
+
+
+## Distance from `world_target` measured in the plane perpendicular to a grid axis.
+func _distance_across(world_target: Vector3, axis_dir: int) -> float:
+	var axis := Vector3(CaveGraph.DIRS[axis_dir])
+	var to_target := world_target - _body.global_position
+	return (to_target - axis * to_target.dot(axis)).length()
 
 
 func _steer_towards(world_target: Vector3) -> void:
@@ -193,11 +213,5 @@ func _steer_towards(world_target: Vector3) -> void:
 	_body.move_input = Vector2(local.x, local.z).normalized()
 
 
-func _horizontal_distance(world_target: Vector3) -> float:
-	var to_target := world_target - _body.global_position
-	var up := _body.gravity.local_up()
-	return (to_target - up * to_target.dot(up)).length()
-
-
-func _gravity_is_up() -> bool:
-	return _body.gravity.gravity_dir.is_equal_approx(Vector3.UP)
+func _grav() -> int:
+	return BotPlanner.grav_index(_body.gravity.gravity_dir)

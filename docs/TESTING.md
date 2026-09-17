@@ -13,6 +13,7 @@ godot --headless res://tests/test_wallwalk.tscn   # physics agrees with the vali
 godot --headless res://tests/test_net_lobby.tscn  # lobby rules, no sockets
 godot --headless res://tests/test_net_sim.tscn    # server authority and client mirror, no sockets
 godot --headless res://tests/test_net.tscn        # real WebSocket race: server + 2 clients, ~60 s
+godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=20   # physical bot races, ~3 min
 ```
 
 ## Results on 17 September 2026 (Windows 11, Godot 4.7.2)
@@ -22,7 +23,8 @@ godot --headless res://tests/test_net.tscn        # real WebSocket race: server 
 | test_gravity | 157 | pass |
 | test_cave | 27 plus per-seed assertions over 200 seeds | pass |
 | test_match | 43 | pass |
-| test_bot | 26, 60 caves | pass |
+| test_bot | 30, 60 caves | pass |
+| bot_physical | 80 physical 4-bot races | 77/80 bots finish (96%) |
 | test_flow | 46 | pass |
 | test_wallwalk | 3 (3 wall climbs, 5 drops) | pass |
 | test_net_lobby | 37 | pass |
@@ -57,7 +59,7 @@ tie-breaks by racer id; time limit; DNF.
 **Bots:** knowledge starts empty and grows only by observation; planner blind to the unseen exit;
 paths never cross undiscovered cells; backtracks out of a dead end; follows its own clue with every
 personality; one bot's clue is not another's; cannot plan up a shaft with 0 Moves; eliminated by
-normal damage and then makes no moves; at least 90% of 60 caves solved, never over 5 charges.
+normal damage and then makes no moves; crosses an arch with one 90-degree wall-walk where inversions need two; at least 90% of 60 caves solved, never over 5 charges.
 
 **Match/network:** 2 to 5 racers; Online humans-only; Mixed with bots and fill; 2 humans + 2 bots;
 same cave hash on server and clients (and Linux server vs Windows clients); independent gravity

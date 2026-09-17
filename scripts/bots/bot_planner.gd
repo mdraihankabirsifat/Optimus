@@ -8,15 +8,22 @@ extends RefCounted
 ## amount of cleverness.
 ##
 ## Search runs over states of (cell, gravity orientation) rather than cells alone, because
-## whether an edge is walkable depends on which way the bot is currently falling. Gravity
-## is restricted to down/up: the cave's vertical structure is Y-axis only, so a 180
-## inversion is always the right tool and pathing for 90 degree wall-walks would cost far
-## more than it buys. Documented as a deliberate simplification in docs/MVP_SCOPE.md.
+## whether an edge is walkable depends on which way the bot is currently falling.
+##
+## BOT-011: with wall_walks_enabled the search covers all six gravities, so a bot can choose
+## a 90-degree turn onto a wall -- walking up a shaft wall, or crossing an arch with one Move
+## where two inversions would be needed. Every shift, 90 or 180, costs one Move, the same
+## rule a human plays under. tests/test_wallwalk.gd shows the body can physically do it.
 
 const STEP_COST := 1.0
 ## A charge is precious. Weighted so the planner takes a long way round rather than
 ## spending a Move it does not need.
 const INVERSION_COST := 12.0
+## Extra planning cost of a 180 over a 90. Measured in tests/bot_physical.gd over 40 bot
+## races: at 0.5 bots chose walls 55 times but finished 70% (vs 98%) and spent 2.5x the
+## Moves -- sideways gravity makes long corridors into falls. At 0 bots turn onto a wall only
+## when it is strictly cheaper, such as crossing an arch on one Move instead of two.
+const FLIP_EXTRA_COST := 0.0
 ## Nudges the bot toward fresh ground instead of pacing a corridor it already knows.
 const REVISIT_PENALTY := 2.5
 ## A cell the bot has seen fire, a piston or a spider in. Worth a few steps of detour.
@@ -34,6 +41,20 @@ const CLUE_LEVEL_WEIGHT := 3.0
 
 const GRAV_DOWN := 0
 const GRAV_UP := 1
+const GRAV_PLUS_X := 2
+const GRAV_MINUS_X := 3
+const GRAV_PLUS_Z := 4
+const GRAV_MINUS_Z := 5
+## Planner gravity index -> CaveGraph direction index of that gravity.
+const GRAV_TO_DIR: Array[int] = [CaveGraph.DIR_DOWN, CaveGraph.DIR_UP, CaveGraph.DIR_PLUS_X,
+	CaveGraph.DIR_MINUS_X, CaveGraph.DIR_PLUS_Z, CaveGraph.DIR_MINUS_Z]
+
+## Off: bots only ever invert (the pre-BOT-011 behaviour). On: all six gravities.
+static var wall_walks_enabled: bool = true
+
+## Filled by every plan: the gravity each returned cell must be entered under, as planner
+## gravity indices. The controller shifts when the next step needs a different one.
+var last_gravities: Array[int] = []
 
 ## Per-bot preference noise. Without it every bot shares one planner and one set of
 ## observations, so four bots walk the same route and finish within a fraction of a second
@@ -50,7 +71,13 @@ var frontier_jitter: float = 0.0
 ## plans a route it can actually walk instead of one it cannot pay for.
 func plan(knowledge: BotKnowledge, from: Vector3i, gravity_is_up: bool,
 		charges: int = 99) -> Array[Vector3i]:
-	var start_g: int = GRAV_UP if gravity_is_up else GRAV_DOWN
+	return plan_from(knowledge, from, GRAV_UP if gravity_is_up else GRAV_DOWN, charges)
+
+
+## As plan(), starting under any planner gravity.
+func plan_from(knowledge: BotKnowledge, from: Vector3i, start_g: int,
+		charges: int = 99) -> Array[Vector3i]:
+	last_gravities.clear()
 	# Spend freely once the exit is known; hold something back while still searching.
 	var spendable: int = charges if knowledge.exit_found \
 		else maxi(0, charges - EXPLORE_RESERVE)
@@ -99,13 +126,21 @@ func _dijkstra(knowledge: BotKnowledge, from: Vector3i, start_g: int,
 		var cell: Vector3i = cell_of[current]
 		var grav: int = grav_of[current]
 
-		# Option 1: invert gravity in place. Costs a Move, and is simply unavailable
+		# Option 1: change gravity in place. Costs a Move, and is simply unavailable
 		# when the bot has none left -- the same rule a human plays under.
 		if charges > 0:
-			_relax_inversion(cell, grav, best, dist, prev, cell_of, grav_of, open)
+			for other: int in gravities():
+				if other != grav:
+					var extra := FLIP_EXTRA_COST if wall_walks_enabled and _is_flip(grav, other) else 0.0
+					_relax_shift(cell, grav, other, best + extra, dist, prev, cell_of, grav_of, open)
 		# Option 2: travel to a linked neighbour the bot has already seen.
+		# Under a sideways gravity an open wall is not a choice: the racer falls through it.
+		var fall_dir := GRAV_TO_DIR[grav]
+		var falling := grav >= GRAV_PLUS_X and knowledge.discovered.is_linked(cell, fall_dir)
 		for dir_index in 6:
 			if not knowledge.discovered.is_linked(cell, dir_index):
+				continue
+			if falling and dir_index != fall_dir:
 				continue
 			var neighbour: Vector3i = cell + CaveGraph.DIRS[dir_index]
 			if not knowledge.has_seen(neighbour):
@@ -128,10 +163,9 @@ func _dijkstra(knowledge: BotKnowledge, from: Vector3i, start_g: int,
 	return {"dist": dist, "prev": prev, "cell_of": cell_of}
 
 
-func _relax_inversion(cell: Vector3i, grav: int, best: float, dist: Dictionary,
+func _relax_shift(cell: Vector3i, grav: int, flipped: int, best: float, dist: Dictionary,
 		prev: Dictionary, cell_of: Dictionary, grav_of: Dictionary,
 		open: Dictionary) -> void:
-	var flipped := GRAV_DOWN if grav == GRAV_UP else GRAV_UP
 	var flip_key := _key(cell, flipped)
 	var flip_cost: float = best + INVERSION_COST
 	if flip_cost >= float(dist.get(flip_key, INF)):
@@ -143,14 +177,31 @@ func _relax_inversion(cell: Vector3i, grav: int, best: float, dist: Dictionary,
 	open[flip_key] = true
 
 
-## Walking sideways is always fine, and so is falling. Moving against your own gravity is
-## not -- that is what an inversion is for.
+static func _is_flip(a: int, b: int) -> bool:
+	return GRAV_TO_DIR[a] == CaveGraph.opposite(GRAV_TO_DIR[b])
+
+
+## Gravities the search may use.
+static func gravities() -> Array[int]:
+	if wall_walks_enabled:
+		return [GRAV_DOWN, GRAV_UP, GRAV_PLUS_X, GRAV_MINUS_X, GRAV_PLUS_Z, GRAV_MINUS_Z]
+	return [GRAV_DOWN, GRAV_UP]
+
+
+## Planner gravity index for a world gravity vector.
+static func grav_index(gravity_dir: Vector3) -> int:
+	var snapped := GravityController.snap_to_cardinal(gravity_dir)
+	for g in GRAV_TO_DIR.size():
+		if Vector3(CaveGraph.DIRS[GRAV_TO_DIR[g]]).is_equal_approx(snapped):
+			return g
+	return GRAV_DOWN
+
+
+## Walking across your own floor plane is always fine, and so is falling. Moving against your
+## own gravity is not -- that is what a Move is for. For a sideways gravity, "across" includes
+## straight up and down a wall.
 func _can_traverse(dir_index: int, grav: int) -> bool:
-	if dir_index == CaveGraph.DIR_UP:
-		return grav == GRAV_UP      # "up" is downhill when you are falling upward
-	if dir_index == CaveGraph.DIR_DOWN:
-		return grav == GRAV_DOWN
-	return true
+	return dir_index != CaveGraph.opposite(GRAV_TO_DIR[grav])
 
 
 ## The closest cell the bot knows exists but has never entered.
@@ -168,7 +219,7 @@ func _nearest_frontier_key(knowledge: BotKnowledge, dist: Dictionary,
 			if not knowledge.discovered.is_linked(neighbour, back):
 				continue
 
-			for grav in [GRAV_DOWN, GRAV_UP]:
+			for grav: int in gravities():
 				var key := _key(neighbour, grav)
 				if not dist.has(key):
 					continue
@@ -191,7 +242,7 @@ func _least_visited_key(knowledge: BotKnowledge, dist: Dictionary) -> String:
 	var fewest := 1 << 30
 	var best_cost := INF
 	for cell: Vector3i in knowledge.discovered.cells:
-		for grav in [GRAV_DOWN, GRAV_UP]:
+		for grav: int in gravities():
 			var key := _key(cell, grav)
 			if not dist.has(key) or float(dist[key]) <= 0.0:
 				continue
@@ -231,7 +282,7 @@ func _taste(cell: Vector3i) -> float:
 func _best_key_for_cell(dist: Dictionary, cell: Vector3i) -> String:
 	var best_key := ""
 	var best := INF
-	for grav in [GRAV_DOWN, GRAV_UP]:
+	for grav: int in gravities():
 		var key := _key(cell, grav)
 		if dist.has(key) and float(dist[key]) < best:
 			best = float(dist[key])
@@ -242,25 +293,28 @@ func _best_key_for_cell(dist: Dictionary, cell: Vector3i) -> String:
 ## Walks the predecessor chain back to the start, dropping repeated cells so the caller
 ## gets a clean list of places to walk rather than a list of state changes.
 func _reconstruct(prev: Dictionary, goal_key: String, from: Vector3i) -> Array[Vector3i]:
-	var cells: Array[Vector3i] = []
+	var keys: Array[String] = []
 	var key := goal_key
 	var guard := 0
 	while key != "" and guard < 4096:
 		guard += 1
-		cells.append(_cell_from_key(key))
+		keys.append(key)
 		if not prev.has(key):
 			break
 		key = prev[key]
 
-	cells.reverse()
+	keys.reverse()
 
 	var path: Array[Vector3i] = []
-	for cell: Vector3i in cells:
+	last_gravities.clear()
+	for k: String in keys:
+		var cell := _cell_from_key(k)
 		if cell == from and path.is_empty():
 			continue
 		if not path.is_empty() and path[-1] == cell:
 			continue
 		path.append(cell)
+		last_gravities.append(int(k.get_slice(",", 3)))
 	return path
 
 

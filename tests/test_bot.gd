@@ -22,6 +22,7 @@ func _ready() -> void:
 	_test_backtracks_from_dead_end()
 	_test_follows_its_own_clue()
 	_test_zero_moves_cannot_climb()
+	_test_uses_wall_walk_when_it_saves_a_move()
 	await _test_bot_is_eliminated_by_normal_rules()
 	_test_exploration_finds_the_exit()
 
@@ -176,6 +177,49 @@ func _test_zero_moves_cannot_climb() -> void:
 	_check("with 0 Moves the shaft above is not a route", broke.is_empty() or broke[-1] != Vector3i(0, 1, 0))
 	var rich := planner.plan(k, Vector3i(0, 0, 0), false, 1)
 	_check("with 1 Move it is", not rich.is_empty() and rich[-1] == Vector3i(0, 1, 0))
+
+
+## BOT-011: over an arch (up one shaft, across, down another) two inversions cost 2 Moves;
+## one 90-degree turn onto the east wall costs 1. A bot with wall-walks finds the 1.
+func _test_uses_wall_walk_when_it_saves_a_move() -> void:
+	_section("uses a 90-degree wall-walk when it saves a Move")
+	var g := CaveGraph.new()
+	g.link(Vector3i(0, 0, 0), Vector3i(0, 1, 0))
+	g.link(Vector3i(0, 1, 0), Vector3i(1, 1, 0))
+	g.link(Vector3i(1, 1, 0), Vector3i(1, 0, 0))
+	g.link(Vector3i(1, 0, 0), Vector3i(1, 0, 1))
+	var k := BotKnowledge.new()
+	for c: Vector3i in g.sorted_cells():
+		k.observe(c, int(g.cells[c]), c == Vector3i(1, 0, 1))
+	var was := BotPlanner.wall_walks_enabled
+
+	BotPlanner.wall_walks_enabled = true
+	var planner := BotPlanner.new()
+	var path := planner.plan_from(k, Vector3i(0, 0, 0), BotPlanner.GRAV_DOWN, 1)
+	var sideways := planner.last_gravities.any(func(gr: int) -> bool: return gr >= BotPlanner.GRAV_PLUS_X)
+	_check("with one Move it still reaches the exit", not path.is_empty() and path[-1] == Vector3i(1, 0, 1))
+	_check("by turning onto a wall", sideways)
+
+	_check("that route spends exactly one Move", _shifts(BotPlanner.GRAV_DOWN, planner.last_gravities) == 1)
+
+	# The planner only checks that a Move is left, not how many, so an up/down-only bot plans
+	# the same arch with two flips; the controller then finds it cannot pay for the second.
+	BotPlanner.wall_walks_enabled = false
+	var up_down := BotPlanner.new()
+	up_down.plan_from(k, Vector3i(0, 0, 0), BotPlanner.GRAV_DOWN, 5)
+	_check("inversions alone need two Moves for the same arch",
+		_shifts(BotPlanner.GRAV_DOWN, up_down.last_gravities) == 2)
+	BotPlanner.wall_walks_enabled = was
+
+
+func _shifts(start: int, gravs: Array[int]) -> int:
+	var n := 0
+	var current := start
+	for gr: int in gravs:
+		if gr != current:
+			n += 1
+			current = gr
+	return n
 
 
 ## A bot is a racer like any other: hearts run out, it is out of the race.

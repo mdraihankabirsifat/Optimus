@@ -146,7 +146,6 @@ everything above is complete and committed, and it is bound by the abort gate in
 | ID | Task | Pri | Definition of Done |
 |---|---|---|---|
 | NET-007 | Deploy the server to Render | P2 | Needs the team's Render account. Steps in docs/NETWORKING.md |
-| BOT-011 | Bots use 90° wall-walks | P2 | Planner over six gravities; test_bot still ≥ 90% |
 | ART-012 | Jungle / Dark Cave / City Drain themes as data | P3 | Theme picked in lobby, generator untouched |
 | SHIP-001 | Windows exe on a machine without Godot | P0 | Plays a race to results |
 | SHIP-006 | 60-90 s video | P0 | Shot list in docs/SUBMISSION_CHECKLIST.md |
@@ -229,6 +228,7 @@ Completed 17 September 2026.
 | LEVEL-014 | `CaveValidator`: gravity-aware solvability over (cell, gravity, Moves), structural checks, wired into generation. Every one of 200 seeds solvable within 5 Moves |
 | AXIS-011 | `test_wallwalk`: the real controller walks up a wall into a shaft and drops through open floors, as the validator assumes |
 | BOT-010 | Bots use clues from boxes they open themselves |
+| BOT-011 | Planner searches all six gravities; bots turn onto a wall when it saves a Move (arch test). `tests/bot_physical.gd`: 77/80 physical bot races finish. Preferring walls outright dropped that to 70%, so it is not preferred |
 | UI-016 | Pause menu Controls page; online pause never pauses the race |
 | UI-017 | Settings: invert Y, window size, graphics quality, key remapping with swap |
 | SHIP-001a | Windows exe launches as the game and as a dedicated server (dev machine) |

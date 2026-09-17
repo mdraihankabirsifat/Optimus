@@ -132,7 +132,7 @@ local-multiplayer, godot, game-jam · **Engine:** Godot · **Platforms:** Window
 
 ## Known bugs (for the page)
 
-- Bots only use 180° gravity flips, not 90° wall-walks.
+- Bots use a 90° wall-walk only when it saves a Move, so they mostly flip 180°.
 - The capsule dips slightly into the floor during a gravity turn; it corrects when the turn ends.
 - Stalagmites and crystals have no collision.
 - Online: a free Render server can take up to a minute to wake; a dropped player cannot rejoin a race

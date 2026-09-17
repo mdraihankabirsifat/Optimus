@@ -157,7 +157,7 @@ docs/            CORE_MECHANICS, ARCHITECTURE, NETWORKING, CAVE_GENERATION, TEST
 - The online server has not been deployed to Render by the team; it runs locally, from the exe and in Docker.
 - A free Render server sleeps when idle; the first connection can take up to a minute.
 - Online play cannot be joined mid-race, and a dropped client cannot rejoin its race.
-- Bots only use 180° inversions, never 90° wall-walks.
+- Bots turn onto walls only when it saves a Move, which is rare, so most bot Moves are 180° flips.
 - The player capsule dips about 0.3 units into the floor mid-rotation; it corrects on completion.
 - Decor (stalagmites, crystals) has no collision.
 - Jungle, Dark Cave and City Drain environments are not built; Stone Age is the only environment.
