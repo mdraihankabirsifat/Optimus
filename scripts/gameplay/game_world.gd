@@ -76,9 +76,6 @@ var _last_cell := Vector3i(-999, -999, -999)
 var _ghost: GhostRacer
 var _ghost_frames: Array = []
 var _ghost_timer := 0.0
-## FUN-003: per rival, whether it was behind the local racer last frame.
-var _behind: Dictionary = {}
-var _overtake_cooldown: Dictionary = {}
 var _crumb_mat: StandardMaterial3D
 
 @onready var _player: PlayerController = $Player
@@ -173,9 +170,13 @@ func _ready() -> void:
 		_spawn_net_racers()
 	else:
 		_player.global_position = CaveBuilder.floor_position(graph.spawn_cell)
-		_player.display_name = "You"
+		var my_name := local_display_name()
+		_player.display_name = my_name
 		_player.set_racer_colour(PLAYER_COLOUR)
-		_register(_player, "You", PLAYER_COLOUR, false)
+		var label := _player.get_node_or_null("NameLabel") as Label3D
+		if label != null:
+			label.text = my_name
+		_register(_player, my_name, PLAYER_COLOUR, false)
 		_spawn_bots()
 
 	for box: MysteryBox in WorldScope.nodes(self, "mystery_boxes"):
@@ -270,6 +271,18 @@ func _ready() -> void:
 	AudioManager.play_ambience(theme.ambience_pitch, theme.ambience_volume_db)
 	match_controller.begin_countdown()
 	_prewarm_effects()
+
+
+## Prompt 3: the saved player name offline, "You" if none was ever entered. Bots keep their
+## names; a player who picks a bot's name gets " (you)" so stats and results never merge.
+func local_display_name() -> String:
+	var n := LobbyState.clean_name(SettingsManager.player_name)
+	if n == "" or not _from_menu:
+		n = "You"
+	for bot_name: String in BOT_NAMES:
+		if n.to_lower() == bot_name.to_lower():
+			n = "%s (you)" % n.left(LobbyState.NAME_MAX - 6)
+	return n
 
 
 func _is_server() -> bool:
@@ -423,6 +436,7 @@ func _register(racer: PlayerController, racer_name: String, colour: Color, is_bo
 
 func _register_stats(racer_name: String, colour: Color, is_bot: bool) -> void:
 	stats[racer_name] = {
+		"hearts_traded": 0,
 		"boxes": 0,
 		"moves_used": 0,
 		"damage_taken": 0.0,
@@ -458,7 +472,6 @@ func _process(delta: float) -> void:
 		_tick_regen(delta)
 	_tick_heartbeat(delta)
 	_track_local(delta)
-	_check_overtakes(delta)
 	if net_role == "" and bots.is_empty() and _local_resolved_at >= 0.0 \
 			and match_controller.phase == MatchController.Phase.RACING \
 			and match_controller.elapsed - _local_resolved_at > 2.0:
@@ -468,11 +481,11 @@ func _process(delta: float) -> void:
 		if duel != null and duel.claims_end():
 			hud.set_banner(_duel_spectate_banner())
 		elif net_role == "client":
-			hud.set_banner("Spectating %s    [Tab] next racer    the race ends when the others resolve"
+			hud.set_banner("Spectating %s    [" + UiKit.binding_text("spectate_next") + "] next racer    the race ends when the others resolve"
 				% _spectate_target_name())
 		else:
 			var left := AppConfig.LOCAL_RESOLVED_GRACE - (match_controller.elapsed - _local_resolved_at)
-			hud.set_banner("Spectating %s    [Tab] next racer    [Enter] end race now  (%ds)"
+			hud.set_banner("Spectating %s    [" + UiKit.binding_text("spectate_next") + "] next racer    [" + UiKit.binding_text("skip_wait") + "] end race now  (%ds)"
 				% [_spectate_target_name(), ceili(maxf(left, 0.0))])
 			if left <= 0.0:
 				match_controller.force_end()
@@ -534,38 +547,6 @@ func _drop_breadcrumb() -> void:
 	mark.global_position = _player.global_position - up * 0.88
 
 
-## FUN-003: a callout when a rival runs past you in the same corridor, or you past it.
-func _check_overtakes(delta: float) -> void:
-	if match_controller.phase != MatchController.Phase.RACING or _local_resolved_at >= 0.0:
-		return
-	var up := _player.gravity.local_up()
-	var fwd := -_player.global_basis.z
-	fwd = (fwd - up * fwd.dot(up)).normalized()
-	for other: Node3D in _others():
-		var b := other as PlayerController
-		_overtake_cooldown[b] = maxf(0.0, float(_overtake_cooldown.get(b, 0.0)) - delta)
-		if not b.input_enabled:
-			_behind.erase(b)
-			continue
-		var rel := b.global_position - _player.global_position
-		if rel.length() > 7.0:
-			_behind.erase(b)
-			continue
-		var along := rel.dot(fwd)
-		var behind := along < -0.5
-		var ahead := along > 1.0
-		if _behind.has(b) and _overtake_cooldown[b] <= 0.0:
-			if _behind[b] and ahead and b.velocity.length() > _player.velocity.length():
-				hud.toast("%s overtook you" % b.display_name, b.racer_colour, 2.0)
-				b.rig.emote("see ya!")
-				_overtake_cooldown[b] = 8.0
-			elif not _behind[b] and behind and _player.velocity.length() > b.velocity.length():
-				hud.toast("You passed %s" % b.display_name, _player.racer_colour, 2.0)
-				_overtake_cooldown[b] = 8.0
-		if behind or ahead:
-			_behind[b] = behind
-
-
 ## AXIS-010: optional slow Move regeneration, identical for every racer. Offline and on the
 ## server only: a client's charges are whatever the server says.
 func _tick_regen(delta: float) -> void:
@@ -605,6 +586,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if event.is_action_pressed("toggle_map"):
 		hud.toggle_map()
+	if event.is_action_pressed("exchange_heart", false) and not event.is_echo() and _local_resolved_at < 0.0:
+		_local_exchange()
 	for k in 3:
 		if event.is_action_pressed("emote_%d" % (k + 1)) and match_controller.phase != MatchController.Phase.PENDING:
 			var text: String = EMOTES[k]
@@ -671,8 +654,8 @@ func _on_duel_phase(p: FreedomDuel.Phase) -> void:
 func _duel_spectate_banner() -> String:
 	match duel.phase:
 		FreedomDuel.Phase.WAITING:
-			var skip := "    [Enter] end now" if net_role == "" else ""
-			return "Spectating %s    [Tab] next racer    %s is Qualified 1st, waiting for a second finalist%s" \
+			var skip := ("    [%s] end now" % UiKit.binding_text("skip_wait")) if net_role == "" else ""
+			return "Spectating %s    [" + UiKit.binding_text("spectate_next") + "] next racer    %s is Qualified 1st, waiting for a second finalist%s" \
 				% [_spectate_target_name(), duel.finalist_a.display_name, skip]
 		FreedomDuel.Phase.INTRO, FreedomDuel.Phase.FIGHT:
 			return ""
@@ -844,6 +827,73 @@ func _on_cave_time_up(qualifiers: int) -> void:
 		hud.show_centre("TIME UP  -  NO QUALIFIERS", 4.0, UiKit.DANGER)
 	elif qualifiers == 1:
 		hud.show_centre("TIME UP", 3.0, UiKit.DANGER)
+
+
+# --- Prompt 3: trading a heart for a Move ------------------------------------------------
+
+var _last_heart_armed_until: float = -1.0
+
+
+## The one authoritative transaction, used by the local player offline, by the server for a
+## client's request, and by bots. Validates everything, then takes exactly one heart and adds
+## exactly one Move, and starts the last-heart deadline if that was the final heart.
+## Returns "" on success or a player-readable reason.
+func request_heart_exchange(body: PlayerController) -> String:
+	if net_role == "client":
+		return "the server decides"
+	if match_controller.phase != MatchController.Phase.RACING or match_controller.cave_expired:
+		return "only while racing in the cave"
+	var r := {}
+	for racer: Dictionary in match_controller.racers:
+		if racer["body"] == body:
+			r = racer
+	if r.is_empty() or r["finished"] or r["eliminated"]:
+		return "only while racing in the cave"
+	if duel != null and duel.is_finalist(body):
+		return "not after qualifying"
+	if _move_regen:
+		return "off while Move regeneration is on"
+	if not body.input_enabled:
+		return "only while racing in the cave"
+	if body.gravity.charges >= AppConfig.MOVE_CHARGES_MAX:
+		return "your Moves are full"
+	var problem := body.health.exchange_problem()
+	if problem != "":
+		return problem
+	if not body.health.exchange_heart():
+		return "you need a full heart"
+	body.gravity.add_charges(1)
+	bump_stat(body.display_name, "hearts_traded")
+	return ""
+
+
+## Local key press. Spending the last heart needs a second press, with the deadline explained.
+func _local_exchange() -> void:
+	var h := _player.health
+	var now := match_controller.elapsed
+	if h.hearts >= AppConfig.HEART_EXCHANGE_COST and h.hearts < AppConfig.HEART_EXCHANGE_COST * 2.0 \
+			and not h.in_grace() and now > _last_heart_armed_until:
+		_last_heart_armed_until = now + AppConfig.LAST_HEART_CONFIRM
+		hud.toast("Last heart: press %s again. You get a Move and %ds to live -- this cannot be cancelled."
+			% [UiKit.binding_text("exchange_heart"), int(AppConfig.LAST_HEART_GRACE)], UiKit.DANGER, AppConfig.LAST_HEART_CONFIRM)
+		AudioManager.play_sfx("denied", -6.0)
+		return
+	_last_heart_armed_until = -1.0
+	if net_role == "client":
+		net_match.send_exchange()
+		return
+	on_exchange_result(_player, request_heart_exchange(_player))
+
+
+func on_exchange_result(body: PlayerController, reason: String) -> void:
+	if body != _player or hud == null:
+		return
+	if reason == "":
+		AudioManager.play_sfx("move_refill")
+		hud.toast("Traded a heart for a Move", UiKit.SKY, 2.0)
+	else:
+		AudioManager.play_sfx("denied", -4.0)
+		hud.toast("Cannot trade a heart: %s" % reason, UiKit.TEXT_DIM, 2.0)
 
 
 func _restart() -> void:

@@ -220,11 +220,6 @@ static func settings_panel() -> ScrollContainer:
 	col.add_child(_toggle("Invert mouse Y", "invert_y"))
 
 	col.add_child(_toggle("Fullscreen", "fullscreen"))
-	if OS.get_name() != "Web":
-		var sizes: Array[String] = []
-		for r: Vector2i in SettingsManager.RESOLUTIONS:
-			sizes.append("%d x %d" % [r.x, r.y])
-		col.add_child(_option_row("Window size", "resolution", sizes))
 	col.add_child(_option_row("Graphics quality", "graphics_quality", SettingsManager.QUALITY_NAMES))
 	col.add_child(_toggle("Head bob", "head_bob"))
 	col.add_child(_toggle("Camera shake and hitstop", "camera_effects"))
@@ -260,8 +255,9 @@ static func controls_table() -> Control:
 		["Discovered map", key_for("toggle_map")],
 		["Emotes", "%s %s %s" % [key_for("emote_1"), key_for("emote_2"), key_for("emote_3")]],
 		["Menu", key_for("pause")],
-		["Freedom Duel: Pulse Blaster", "Left mouse"],
-		["Freedom Duel: Axis Lock", "Right mouse / Q"],
+		["Trade a heart for a Move", key_for("exchange_heart")],
+		["Freedom Duel: Pulse Blaster", key_for("duel_fire")],
+		["Freedom Duel: Axis Lock", key_for("duel_lock")],
 		["Spectate next racer", key_for("spectate_next")],
 		["End race early (offline, once resolved)", key_for("skip_wait")],
 	]
@@ -278,17 +274,42 @@ static func ruleset_text(ruleset: String, rush_seconds: int) -> String:
 	return "Normal, no time limit"
 
 
-## The first key bound to an action, as a player would read it.
-static func key_for(action: String) -> String:
+## Prompt 3: THE one place that turns an action into the text a player reads. Every hint in
+## the game (box prompt, gravity preview, spectator and duel lines, map, tips, How to Play,
+## controls table) calls this, so a remap in Settings shows everywhere at once. Keyboard,
+## mouse and pad bindings; several bindings joined with " / "; nothing bound says so.
+static func binding_text(action: String) -> String:
 	if not InputMap.has_action(action):
-		return "?"
+		return "unbound"
+	var parts: Array[String] = []
 	for event: InputEvent in InputMap.action_get_events(action):
-		var key := event as InputEventKey
-		if key == null:
-			continue
-		var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
-		return OS.get_keycode_string(code)
-	return "unbound"
+		var text := ""
+		if event is InputEventKey:
+			var key := event as InputEventKey
+			var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
+			if key.physical_keycode != KEY_NONE:
+				code = DisplayServer.keyboard_get_keycode_from_physical(key.physical_keycode) \
+					if DisplayServer.get_name() != "headless" else key.physical_keycode
+			text = OS.get_keycode_string(code)
+		elif event is InputEventMouseButton:
+			text = {MOUSE_BUTTON_LEFT: "Left mouse", MOUSE_BUTTON_RIGHT: "Right mouse",
+				MOUSE_BUTTON_MIDDLE: "Middle mouse"}.get((event as InputEventMouseButton).button_index,
+				"Mouse %d" % (event as InputEventMouseButton).button_index)
+		elif event is InputEventJoypadButton:
+			text = "Pad %d" % (event as InputEventJoypadButton).button_index
+		if text != "" and text not in parts:
+			parts.append(text)
+	return "unbound" if parts.is_empty() else " / ".join(parts)
+
+
+## A held modifier plus a key, e.g. "G + Space".
+static func chord_text(modifier: String, action: String) -> String:
+	return "%s + %s" % [binding_text(modifier), binding_text(action)]
+
+
+## Old name, kept for callers: now the full formatter.
+static func key_for(action: String) -> String:
+	return binding_text(action)
 
 
 static func _option_row(text: String, property: String, names: Array[String]) -> HBoxContainer:
@@ -310,7 +331,7 @@ static func _option_row(text: String, property: String, names: Array[String]) ->
 const ACTION_LABELS := {
 	"move_forward": "Forward", "move_back": "Back", "move_left": "Left", "move_right": "Right",
 	"jump": "Jump / flip", "sprint": "Sprint", "gravity_mod": "Gravity Move",
-	"interact": "Open box", "toggle_map": "Map",
+	"interact": "Open box", "toggle_map": "Map", "exchange_heart": "Heart for a Move",
 }
 
 

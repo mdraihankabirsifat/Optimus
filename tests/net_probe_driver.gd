@@ -13,6 +13,7 @@ var out_path := ""
 var code_path := ""
 var obs := {}
 var _states: Array[String] = []
+var _notices: Array[String] = []
 
 
 func _ready() -> void:
@@ -26,15 +27,38 @@ func _ready() -> void:
 			"out": out_path = kv[1]
 			"codefile": code_path = kv[1]
 	NetManager.state_changed.connect(func(_s: int) -> void: _states.append(NetManager.state_name()))
+	NetManager.notice.connect(func(text: String, _e: bool) -> void: _notices.append(text))
 	_run()
 
 
 func _run() -> void:
-	NetManager.connect_to_server("ws://127.0.0.1:%d" % port, "Host" if role == "host" else "Guest")
+	NetManager.connect_to_server("ws://127.0.0.1:%d" % port, {"host": "Host", "guest": "Guest"}.get(role, "Solo"))
 	if not await _until(func() -> bool: return NetManager.is_online(), 20.0):
 		_finish("never connected: " + NetManager.last_error)
 		return
 	obs["connected"] = true
+
+	if role == "other":
+		# A second arena on the same server at the same time: its own code, its own members.
+		NetManager.create_room("online")
+		NetManager.create_room("online")
+		if not await _until(func() -> bool: return NetManager.in_room(), 10.0):
+			_finish("other arena was never created")
+			return
+		await get_tree().create_timer(1.0).timeout
+		obs["other_code"] = NetManager.lobby["code"]
+		obs["other_members"] = (NetManager.lobby["slots"] as Array).size()
+		await _until(func() -> bool: return FileAccess.file_exists(code_path), 30.0)
+		obs["host_code"] = FileAccess.get_file_as_string(code_path).strip_edges()
+		await get_tree().create_timer(6.0).timeout
+		obs["other_members_later"] = (NetManager.lobby["slots"] as Array).size()
+		NetManager.join_room("??")
+		await get_tree().create_timer(0.5).timeout
+		NetManager.join_room("ZZZZ")
+		await get_tree().create_timer(0.8).timeout
+		obs["notices"] = _notices
+		_finish("")
+		return
 
 	if role == "host":
 		NetManager.create_room("mixed")
@@ -51,6 +75,9 @@ func _run() -> void:
 			return
 		NetManager.host_action("fill_bots")
 		NetManager.host_action("seed", 4242)
+		NetManager.host_action("ruleset", "rush")
+		NetManager.host_action("rush_seconds", 480)
+		NetManager.host_action("rush_seconds", 999)
 		var startable := func() -> bool:
 			return String(NetManager.lobby.get("start_problem", "x")) == "" \
 				and (NetManager.lobby["slots"] as Array).size() == 4
@@ -69,6 +96,13 @@ func _run() -> void:
 			_finish("could not join room " + code)
 			return
 		obs["joined"] = code
+		var saw_rules := func() -> bool: return String(NetManager.lobby.get("ruleset", "")) == "rush" \
+			and int(NetManager.lobby.get("rush_seconds", 0)) == 480
+		obs["guest_saw_rush_480"] = await _until(saw_rules, 20.0)
+		var names: Array = []
+		for slot: Dictionary in NetManager.lobby.get("slots", []):
+			names.append(slot["name"])
+		obs["guest_saw_names"] = names
 		NetManager.set_ready(true)
 
 	if not await _until(func() -> bool: return _match() != null and _match().mc.phase == MatchController.Phase.RACING, 40.0):
@@ -80,6 +114,9 @@ func _run() -> void:
 	var other_rid := 1 if m.local_rid == 0 else 0
 	var other := m.racers[other_rid]
 	obs["local_rid"] = m.local_rid
+	obs["race_ruleset"] = String(world.get("ruleset"))
+	obs["race_rush_seconds"] = int(world.get("rush_seconds"))
+	obs["rush_limit_on_client"] = m.mc.cave_time_limit
 	obs["racer_count"] = m.racers.size()
 	obs["graph_hash_matches"] = (world.get("graph") as CaveGraph).graph_hash() == int(GameState.net_config["graph_hash"])
 	obs["graph_hash"] = (world.get("graph") as CaveGraph).graph_hash()
@@ -101,6 +138,16 @@ func _run() -> void:
 		obs["my_gravity"] = NetMatch.dir_index(me.gravity.gravity_dir)
 		obs["my_charges"] = me.gravity.charges
 		obs["host_charges_seen"] = other.gravity.charges
+
+	if role == "guest":
+		# Trade a heart for a Move through the server, twice in a row: the debounce keeps it to one.
+		me.gravity.net_set_charges(me.gravity.charges)
+		var moves_before := me.gravity.charges
+		m.send_exchange()
+		m.send_exchange()
+		await get_tree().create_timer(1.5).timeout
+		obs["hearts_after_exchange"] = me.health.hearts
+		obs["moves_after_exchange"] = me.gravity.charges - moves_before
 
 	# Both racers reach for the same box at the same race time.
 	var box: MysteryBox = null

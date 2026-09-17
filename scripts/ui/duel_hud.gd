@@ -300,7 +300,7 @@ func _on_draw() -> void:
 				_draw_weapons(font, s, vs)
 			elif not local_in_arena:
 				var target := _spectated_name()
-				var line := "SPECTATING %s    [Tab] switch finalist" % target.to_upper()
+				var line := "SPECTATING %s    [%s] switch finalist" % [target.to_upper(), UiKit.binding_text("spectate_next")]
 				_text(font, line, Vector2(vs.x * 0.5, vs.y - 40.0 * s), 22.0 * s, UiKit.TEXT, true)
 		_:
 			pass
@@ -336,7 +336,7 @@ func _draw_waiting(font: Font, s: float, vs: Vector2) -> void:
 		rect.position + Vector2(w * 0.5, 94.0 * s), 24.0 * s, UiKit.TEXT, true)
 	var hint := "You are safe here. Warm up: you will start with 3DOF (move and jump)."
 	if _duel.wait_time >= AppConfig.DUEL_SKIP_AFTER and GameState.net_role == "":
-		hint = "[Enter] stop waiting and take Champion by default"
+		hint = "[%s] stop waiting and take Champion by default" % UiKit.binding_text("skip_wait")
 	_text(font, hint, rect.position + Vector2(w * 0.5, 128.0 * s), 20.0 * s, UiKit.TEXT_DIM, true)
 
 
@@ -376,7 +376,7 @@ func _fighter_block(font: Font, body: PlayerController, rect: Rect2, right: bool
 	var st: Dictionary = _duel.fighters.get(body, {})
 	var align_x := rect.end.x if right else rect.position.x
 	var name := body.display_name
-	if body == _player and name != "You":
+	if body == _player and name != "You" and not name.ends_with("(you)"):
 		name += " (you)"
 	var tag := "Q2" if body == _duel.finalist_b else "Q1"
 	_text(font, "%s  %s" % [name, tag] if not right else "%s  %s" % [tag, name],
@@ -434,9 +434,9 @@ func _draw_weapons(font: Font, s: float, vs: Vector2) -> void:
 	var gap := 24.0 * s
 	var y := vs.y - 86.0 * s
 	var x0 := vs.x * 0.5 - w - gap * 0.5
-	_weapon_bar(font, Rect2(Vector2(x0, y), Vector2(w, 16.0 * s)), "PULSE BLASTER  [LMB]",
+	_weapon_bar(font, Rect2(Vector2(x0, y), Vector2(w, 16.0 * s)), "PULSE BLASTER  [%s]" % UiKit.binding_text("duel_fire"),
 		1.0 - float(st["pulse_cd"]) / AppConfig.PULSE_COOLDOWN, PULSE_COLOUR, s)
-	_weapon_bar(font, Rect2(Vector2(x0 + w + gap, y), Vector2(w, 16.0 * s)), "AXIS LOCK  [RMB / Q]",
+	_weapon_bar(font, Rect2(Vector2(x0 + w + gap, y), Vector2(w, 16.0 * s)), "AXIS LOCK  [%s]" % UiKit.binding_text("duel_lock"),
 		1.0 - float(st["lock_cd"]) / AppConfig.AXIS_LOCK_COOLDOWN, LOCK_COLOUR, s)
 	var hint := "3DOF: move + jump" if _player.duel_dof >= 3 else ("2DOF: no jump" if _player.duel_dof == 2 else "1DOF: one axis only")
 	_text(font, hint, Vector2(vs.x * 0.5, y + 48.0 * s), 18.0 * s, UiKit.TEXT_DIM, true)

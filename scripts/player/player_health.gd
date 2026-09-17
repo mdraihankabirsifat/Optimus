@@ -14,6 +14,9 @@ signal second_chance_changed(active: bool)
 signal second_chance_used()
 ## Freedom Duel: hearts ran out. Never eliminated() -- losing the duel is not a cave death.
 signal duel_down()
+## Prompt 3: a heart was traded for a Move. `last_heart` when it started the grace deadline.
+signal heart_exchanged(last_heart: bool)
+signal last_heart_started(seconds: float)
 
 var hearts: float = 5.0
 var is_eliminated: bool = false
@@ -33,6 +36,9 @@ var _damage_enabled: bool = true
 var net_client: bool = false
 ## Freedom Duel rules: short invulnerability, no Second Chance, zero hearts is duel_down.
 var duel_mode: bool = false
+## Prompt 3, last-heart grace: seconds left before elimination after trading the final heart.
+## -1 when not in grace. Set once; nothing extends or resets it. Qualifying clears it.
+var grace_left: float = -1.0
 
 
 func _ready() -> void:
@@ -41,6 +47,14 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if grace_left >= 0.0 and not is_eliminated:
+		grace_left -= delta
+		if grace_left <= 0.0:
+			grace_left = 0.0
+			# A client only shows the countdown; the server's copy eliminates.
+			if not net_client:
+				grace_left = -1.0
+				eliminate()
 	if _invuln_timer > 0.0:
 		_invuln_timer -= delta
 		if _invuln_timer <= 0.0:
@@ -140,12 +154,62 @@ func net_apply(p_hearts: float, shield: bool, second_chance: bool, p_eliminated:
 		hearts_changed.emit(hearts)
 	if duel_mode:
 		return
-	if p_eliminated or hearts <= 0.0:
+	if p_eliminated or (hearts <= 0.0 and grace_left < 0.0):
 		eliminate()
+
+
+## Online client: the server's grace deadline, or -1 for none.
+func net_set_grace(seconds: float) -> void:
+	if seconds >= 0.0 and grace_left < 0.0:
+		grace_left = seconds
+		last_heart_started.emit(seconds)
+	elif seconds < 0.0:
+		grace_left = -1.0
+	elif absf(seconds - grace_left) > 0.5:
+		grace_left = seconds
+
+
+func in_grace() -> bool:
+	return grace_left >= 0.0
+
+
+## Why a heart cannot be traded right now, or "" if it can. The caller (GameWorld) adds the
+## race-phase checks; this is the health side of the rule.
+func exchange_problem() -> String:
+	if duel_mode:
+		return "not in the Freedom Duel"
+	if is_eliminated:
+		return "eliminated"
+	if not _damage_enabled:
+		return "not during the countdown"
+	if hearts < AppConfig.HEART_EXCHANGE_COST:
+		return "you need a full heart"
+	return ""
+
+
+## The health half of the transaction: take exactly one heart, and start the grace deadline
+## if that was the last. Not damage: shields, invulnerability and Second Chance play no part.
+func exchange_heart() -> bool:
+	if exchange_problem() != "":
+		return false
+	hearts = maxf(0.0, hearts - AppConfig.HEART_EXCHANGE_COST)
+	var last := hearts <= 0.0
+	hearts_changed.emit(hearts)
+	if last and grace_left < 0.0:
+		grace_left = AppConfig.LAST_HEART_GRACE
+		last_heart_started.emit(grace_left)
+	heart_exchanged.emit(last)
+	return true
+
+
+## Qualifying, the duel or leaving the cave ends the cave-only deadline.
+func clear_grace() -> void:
+	grace_left = -1.0
 
 
 ## Freedom Duel start: full hearts, no invulnerability or cave power-ups carried in.
 func begin_duel(p_hearts: float) -> void:
+	grace_left = -1.0
 	duel_mode = true
 	is_eliminated = false
 	is_invulnerable = false

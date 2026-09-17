@@ -58,6 +58,7 @@ var _grace_until: Dictionary = {}
 var _last_correction: Dictionary = {}
 var _humans_resolved_at: float = -1.0
 var _results_sent: bool = false
+var _last_exchange: Dictionary = {}
 ## Freedom Duel: the whole duel state goes out on every change and a few times a second.
 var _duel: FreedomDuel
 var _duel_dirty: bool = false
@@ -133,6 +134,7 @@ func _setup_server(config: Dictionary) -> void:
 		b.health.hearts_changed.connect(mark)
 		b.health.shield_changed.connect(mark)
 		b.health.second_chance_changed.connect(mark)
+		b.health.last_heart_started.connect(mark)
 		b.gravity.charges_changed.connect(mark)
 		b.gravity.shift_started.connect(func(d: Vector3) -> void:
 			_broadcast("s_shift", [rid, dir_index(d)]))
@@ -239,7 +241,7 @@ func _server_process(delta: float) -> void:
 		if is_instance_valid(b):
 			var flags := (1 if b.health.has_shield else 0) | (2 if b.health.has_second_chance else 0) \
 				| (4 if b.health.is_eliminated else 0)
-			_broadcast("s_racer_state", [rid, b.health.hearts, b.gravity.charges, flags])
+			_broadcast("s_racer_state", [rid, b.health.hearts, b.gravity.charges, flags, b.health.grace_left])
 	_dirty.clear()
 
 	_send_timer -= delta
@@ -596,12 +598,37 @@ func client_on_snapshot(elapsed: float, server_time: float, poses: Array, spider
 		_spider_targets[i] = spiders[i]
 
 
-func client_on_racer_state(rid: int, hearts: float, charges: int, flags: int) -> void:
+func client_on_racer_state(rid: int, hearts: float, charges: int, flags: int, grace: float = -1.0) -> void:
 	if rid < 0 or rid >= racers.size():
 		return
 	var b := racers[rid]
 	b.gravity.net_set_charges(charges)
+	b.health.net_set_grace(grace)
 	b.health.net_apply(hearts, (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0)
+
+
+## Prompt 3: this client asked to trade a heart. The server validates and applies it, then the
+## usual racer state carries the new hearts, Moves and deadline back.
+func server_on_exchange(peer: int) -> void:
+	var b := _human_body(peer)
+	if b == null:
+		return
+	var rid := _rid_for(peer)
+	if _server_time - float(_last_exchange.get(rid, -INF)) < AppConfig.HEART_EXCHANGE_DEBOUNCE:
+		return
+	_last_exchange[rid] = _server_time
+	var reason: String = world.call("request_heart_exchange", b)
+	NetManager.server_send(peer, "s_exchange", [reason])
+	_dirty[rid] = true
+
+
+func send_exchange() -> void:
+	if role == "client":
+		NetManager.send_to_server("c_exchange", [])
+
+
+func client_on_exchange(reason: String) -> void:
+	world.call("on_exchange_result", _local(), reason)
 
 
 func client_on_shift(rid: int, idx: int) -> void:

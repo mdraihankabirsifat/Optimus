@@ -57,7 +57,7 @@ func _ready() -> void:
 		var player: PlayerController = get_tree().get_first_node_in_group("local_player")
 		box.interact(player)
 		_check(box.is_open, "box opens")
-		_check(int(GameState.stats["You"]["boxes"]) == 1, "box counted in stats")
+		_check(int(GameState.stats[player.display_name]["boxes"]) == 1, "box counted in stats")
 
 	world.pause_menu.open()
 	_check(get_tree().paused, "pause menu pauses")

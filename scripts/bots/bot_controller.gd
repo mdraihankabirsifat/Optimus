@@ -278,7 +278,7 @@ func _duel_tick(delta: float) -> void:
 	var facing := -_body.head.global_basis.z
 	var aligned := facing.dot(to_foe.normalized()) > cos(0.12)
 	if los and aligned:
-		if float(st["lock_cd"]) <= 0.0 and float(foe_st["lock_left"]) <= 0.0 				and float(foe_st["immune_left"]) <= 0.0 and dist < 30.0:
+		if float(st["lock_cd"]) <= 0.0 and float(foe_st["lock_left"]) <= 0.0 \n				and float(foe_st["immune_left"]) <= 0.0 and dist < 30.0:
 			_duel.fire(_body, "lock")
 		elif float(st["pulse_cd"]) <= 0.0 and _fire_pause <= 0.0:
 			_duel.fire(_body, "pulse")

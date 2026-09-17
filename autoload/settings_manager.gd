@@ -27,8 +27,6 @@ var best_times: Dictionary = {}
 var seen_tutorial: bool = false
 ## Invert vertical mouse look.
 var invert_y: bool = false
-## Windowed size, index into RESOLUTIONS. Ignored in fullscreen and in the browser.
-var resolution: int = 1
 ## 0 Low (lower 3D resolution), 1 Medium, 2 High (antialiasing). Kept to one choice.
 var graphics_quality: int = 1
 ## Online: the name shown to other racers, and the last server used.
@@ -37,14 +35,18 @@ var server_url: String = ""
 ## Remapped keys: action -> physical keycode. Only changed actions are stored.
 var key_bindings: Dictionary = {}
 
-const RESOLUTIONS: Array[Vector2i] = [Vector2i(1024, 576), Vector2i(1280, 720), Vector2i(1600, 900), Vector2i(1920, 1080)]
+## Prompt 3: there is no Window Size setting any more. The OS resizes the window; this is only
+## the size a window is restored to when it has none that fits the screen.
+const WINDOWED_DEFAULT := Vector2i(1280, 720)
+## Room left for the title bar and taskbar when fitting a window onto a monitor.
+const TITLE_BAR_ROOM := 48
 const QUALITY_NAMES: Array[String] = ["Low", "Medium", "High"]
 ## Actions a player may rebind from Settings.
 const REMAPPABLE: Array[String] = ["move_forward", "move_back", "move_left", "move_right", "jump",
-	"sprint", "gravity_mod", "interact", "toggle_map"]
+	"sprint", "gravity_mod", "interact", "toggle_map", "exchange_heart"]
 
 var _default_keys: Dictionary = {}
-var _applied_resolution: int = -1
+var _window_checked := false
 
 
 func _ready() -> void:
@@ -72,7 +74,8 @@ func load_settings() -> void:
 	acceleration = clampf(float(cfg.get_value("feel", "acceleration", acceleration)), 4.0, 30.0)
 	best_times = cfg.get_value("records", "best_times", best_times)
 	invert_y = bool(cfg.get_value("input", "invert_y", invert_y))
-	resolution = clampi(int(cfg.get_value("video", "resolution", resolution)), 0, RESOLUTIONS.size() - 1)
+	# Old saves may hold ["video", "resolution"]. It is ignored on purpose: a 1920x1080 window
+	# on a 1080p monitor is what pushed the title bar off the top of the screen.
 	graphics_quality = clampi(int(cfg.get_value("video", "quality", graphics_quality)), 0, 2)
 	player_name = String(cfg.get_value("online", "player_name", player_name))
 	server_url = String(cfg.get_value("online", "server_url", server_url))
@@ -100,7 +103,6 @@ func save_settings() -> void:
 	cfg.set_value("feel", "acceleration", acceleration)
 	cfg.set_value("records", "best_times", best_times)
 	cfg.set_value("input", "invert_y", invert_y)
-	cfg.set_value("video", "resolution", resolution)
 	cfg.set_value("video", "quality", graphics_quality)
 	cfg.set_value("online", "player_name", player_name)
 	cfg.set_value("online", "server_url", server_url)
@@ -161,23 +163,57 @@ func apply() -> void:
 	_set_bus("SFX", sfx_volume)
 	# Headless test runs have no window; only touch it when one exists.
 	if DisplayServer.get_name() != "headless":
-		var target := DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen \
-			else DisplayServer.WINDOW_MODE_WINDOWED
-		if DisplayServer.window_get_mode() != target:
-			DisplayServer.window_set_mode(target)
-		if not fullscreen and OS.get_name() != "Web" and _applied_resolution != resolution:
-			_applied_resolution = resolution
-			var want := RESOLUTIONS[resolution]
-			if DisplayServer.window_get_size() != want:
-				DisplayServer.window_set_size(want)
-				var screen := DisplayServer.screen_get_usable_rect()
-				DisplayServer.window_set_position(screen.position + (screen.size - want) / 2)
+		_apply_window_mode()
 	var vp := get_viewport()
 	if vp != null:
 		# GL Compatibility: bilinear 3D scaling and MSAA are the two cheap, reliable levers.
 		vp.scaling_3d_scale = 0.75 if graphics_quality == 0 else 1.0
 		vp.msaa_3d = Viewport.MSAA_2X if graphics_quality == 2 else Viewport.MSAA_DISABLED
 	changed.emit()
+
+
+## Prompt 3: fullscreen OFF must be a normal decorated window -- title bar, minimise,
+## maximise, close -- that fits on the monitor. A maximised window is left maximised.
+func _apply_window_mode() -> void:
+	var mode := DisplayServer.window_get_mode()
+	var is_full := mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if fullscreen:
+		if not is_full:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	if OS.get_name() == "Web":
+		# The browser owns its own chrome; only leave browser fullscreen.
+		if is_full:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		return
+	if is_full:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		_window_checked = false
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, false)
+	if not _window_checked and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED:
+		_window_checked = true
+		# After leaving fullscreen the OS restores the size on the next frame; fit it then.
+		_fit_window.call_deferred()
+
+
+## Keep a windowed window, title bar included, inside the usable area of its monitor.
+func _fit_window() -> void:
+	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		return
+	var screen := DisplayServer.window_get_current_screen()
+	var usable := DisplayServer.screen_get_usable_rect(screen)
+	var room := Vector2i(usable.size.x - 16, usable.size.y - TITLE_BAR_ROOM)
+	var size := DisplayServer.window_get_size()
+	if size.x > room.x or size.y > room.y or size.x < 640 or size.y < 360:
+		size = Vector2i(mini(WINDOWED_DEFAULT.x, room.x), mini(WINDOWED_DEFAULT.y, room.y))
+		DisplayServer.window_set_size(size)
+	var pos := DisplayServer.window_get_position()
+	var min_pos := usable.position + Vector2i(0, TITLE_BAR_ROOM / 2)
+	var max_pos := usable.position + usable.size - size
+	if pos.x < usable.position.x or pos.y < min_pos.y or pos.x > max_pos.x or pos.y > max_pos.y:
+		pos = usable.position + (usable.size - size) / 2
+		pos.y = maxi(pos.y, min_pos.y)
+		DisplayServer.window_set_position(pos)
 
 
 func set_and_save(property: String, value: Variant) -> void:

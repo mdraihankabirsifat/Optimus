@@ -258,17 +258,42 @@ func roster() -> Array:
 
 # --- Sanitising -----------------------------------------------------------------------
 
-static func sanitize_name(raw: String) -> String:
+## Prompt 3: display names are plain text, 1-20 characters, any language. Control characters,
+## newlines and markup brackets are dropped; runs of spaces collapse. A name is never an
+## identity -- the peer id is -- so this only has to be safe to show.
+const NAME_MAX := 20
+
+
+static func clean_name(raw: String) -> String:
 	var out := ""
-	for ch in raw.strip_edges():
+	var last_space := true
+	for ch in raw:
 		var c := ch.unicode_at(0)
-		var ok := (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) \
-			or ch in [" ", "_", "-", "."]
-		if ok:
-			out += ch
-		if out.length() >= 16:
+		if c < 32 or (c >= 0x7F and c <= 0x9F) or c == 0x2028 or c == 0x2029:
+			continue
+		if ch in ["[", "]", "<", ">", "{", "}", "\\"]:
+			continue
+		var is_space := ch == " " or c == 0x3000 or c == 0x00A0
+		if is_space:
+			if last_space:
+				continue
+			ch = " "
+		last_space = is_space
+		out += ch
+		if out.length() >= NAME_MAX:
 			break
-	out = out.strip_edges()
+	return out.strip_edges()
+
+
+## "" if the typed name is usable, else what to tell the player.
+static func name_problem(raw: String) -> String:
+	if clean_name(raw) == "":
+		return "Enter a name (1-%d characters)." % NAME_MAX
+	return ""
+
+
+static func sanitize_name(raw: String) -> String:
+	var out := clean_name(raw)
 	return out if out != "" else "Racer"
 
 
@@ -296,7 +321,7 @@ func unique_name(base: String) -> String:
 	if not taken.has(base.to_lower()):
 		return base
 	for n in range(2, 10):
-		var candidate := "%s %d" % [base.left(13), n]
+		var candidate := "%s %d" % [base.left(NAME_MAX - 2), n]
 		if not taken.has(candidate.to_lower()):
 			return candidate
 	return "%s %d" % [base.left(10), members.size() + 1]

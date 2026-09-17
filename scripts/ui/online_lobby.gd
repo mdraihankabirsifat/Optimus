@@ -14,6 +14,9 @@ var _name_edit: LineEdit
 var _url_edit: LineEdit
 var _code_edit: LineEdit
 var _seed_edit: LineEdit
+## Prompt 3: one Create Arena request at a time; repeated clicks do not make several rooms.
+var _create_sent := false
+var _show_server := false
 
 
 func _ready() -> void:
@@ -122,6 +125,8 @@ func _show_notice(text: String, is_error: bool) -> void:
 		return
 	_notice.text = text
 	_notice.add_theme_color_override("font_color", UiKit.DANGER if is_error else UiKit.SKY)
+	if is_error:
+		_create_sent = false
 
 
 # --- Not connected ----------------------------------------------------------------------
@@ -136,36 +141,47 @@ func _build_connect() -> void:
 
 	grid.add_child(UiKit.label("Your name", 22))
 	_name_edit = LineEdit.new()
-	_name_edit.max_length = 16
+	_name_edit.max_length = LobbyState.NAME_MAX
 	_name_edit.custom_minimum_size = Vector2(420, 46)
 	_name_edit.text = SettingsManager.player_name if SettingsManager.player_name != "" else "Racer"
 	grid.add_child(_name_edit)
 
-	grid.add_child(UiKit.label("Server", 22))
+	# Players never need a server address: the configured shared service is the default. The
+	# field stays reachable for a LAN or local server, one click away.
 	_url_edit = LineEdit.new()
 	_url_edit.custom_minimum_size = Vector2(420, 46)
 	_url_edit.text = NetManager.server_url if NetManager.server_url != "" else NetManager.default_server_url()
 	_url_edit.placeholder_text = "ws://127.0.0.1:8910  or  wss://your-server.onrender.com"
-	grid.add_child(_url_edit)
-
-	var hint := UiKit.label("Start a local server with  SixWaysDown.exe --headless -- --server  "
-		+ "(or from source: godot --headless --path . -- --server). A sleeping free Render server can take up to a minute to wake.", 16, UiKit.TEXT_DIM)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size = Vector2(760, 0)
-	_body.add_child(hint)
+	if _show_server:
+		grid.add_child(UiKit.label("Server", 22))
+		grid.add_child(_url_edit)
+		var hint := UiKit.label("Start a local server with  SixWaysDown.exe --headless -- --server  "
+			+ "(or from source: godot --headless --path . -- --server). A sleeping free Render server can take up to a minute to wake.", 16, UiKit.TEXT_DIM)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.custom_minimum_size = Vector2(760, 0)
+		_body.add_child(hint)
 
 	var row := _row()
-	var connect := UiKit.button("Connect", _connect, 260)
+	var connect := UiKit.button("Continue", _connect, 260)
 	row.add_child(connect)
 	row.add_child(UiKit.button("Back", _back, 200))
+	if not _show_server:
+		row.add_child(UiKit.button("Server settings", func() -> void:
+			_show_server = true
+			_rebuild(), 220))
 	row.add_child(UiKit.button("Play offline instead", func() -> void: SceneRouter.go_to(SceneRouter.LOBBY), 300))
 	connect.grab_focus.call_deferred()
 
 
 func _connect() -> void:
+	var problem := LobbyState.name_problem(_name_edit.text)
+	if problem != "":
+		_show_notice(problem, true)
+		return
 	var player_name := LobbyState.sanitize_name(_name_edit.text)
 	SettingsManager.player_name = player_name
-	SettingsManager.server_url = _url_edit.text.strip_edges()
+	if _show_server:
+		SettingsManager.server_url = _url_edit.text.strip_edges()
 	SettingsManager.save_settings()
 	_show_notice("", false)
 	NetManager.connect_to_server(_url_edit.text, player_name)
@@ -190,20 +206,26 @@ func _build_room_choice() -> void:
 	col.add_theme_constant_override("separation", 14)
 	panel.add_child(col)
 
-	var create := UiKit.button("Create a room", func() -> void: NetManager.create_room(GameState.online_mode), 360)
+	var create := UiKit.button("Create Arena", func() -> void:
+		if _create_sent:
+			return
+		_create_sent = true
+		_show_notice("Creating your arena...", false)
+		NetManager.create_room(GameState.online_mode), 360)
 	col.add_child(create)
-	col.add_child(UiKit.label("You host: pick the racer count%s, the cave, and start."
+	col.add_child(UiKit.label("You host: pick Normal or Rush, the racer count%s and the cave, then share the code."
 		% (", add bots" if GameState.online_mode == LobbyState.MODE_MIXED else ""), 17, UiKit.TEXT_DIM))
+	col.add_child(UiKit.label("Join Arena: type the code a friend shared.", 17, UiKit.TEXT_DIM))
 
 	var join_row := HBoxContainer.new()
 	join_row.add_theme_constant_override("separation", 12)
 	_code_edit = LineEdit.new()
-	_code_edit.placeholder_text = "ROOM CODE"
+	_code_edit.placeholder_text = "CODE"
 	_code_edit.max_length = LobbyState.CODE_LENGTH
 	_code_edit.custom_minimum_size = Vector2(200, 50)
-	_code_edit.text_submitted.connect(func(t: String) -> void: NetManager.join_room(t))
+	_code_edit.text_submitted.connect(func(t: String) -> void: _join(t))
 	join_row.add_child(_code_edit)
-	join_row.add_child(UiKit.button("Join room", func() -> void: NetManager.join_room(_code_edit.text), 220))
+	join_row.add_child(UiKit.button("Join Arena", func() -> void: _join(_code_edit.text), 220))
 	col.add_child(join_row)
 
 	var row := _row()
@@ -219,9 +241,13 @@ func _build_room() -> void:
 	var host := NetManager.is_host()
 	var mixed := String(lobby["mode"]) == LobbyState.MODE_MIXED
 
+	_create_sent = false
 	var code_row := _row()
-	code_row.add_child(UiKit.title("ROOM  %s" % lobby["code"], 36, UiKit.SKY))
-	code_row.add_child(UiKit.label("share this code", 17, UiKit.TEXT_DIM))
+	code_row.add_child(UiKit.title("ARENA  %s" % lobby["code"], 40, UiKit.SKY))
+	var code := String(lobby["code"])
+	code_row.add_child(UiKit.button("Copy Code", func() -> void:
+		DisplayServer.clipboard_set(code)
+		_show_notice("Code %s copied. Friends choose Join Arena and type it." % code, false), 180))
 
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 20)
@@ -419,6 +445,16 @@ func _build_guest_view(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) -> vo
 	for line: String in lines:
 		if line != "":
 			cfg.add_child(UiKit.label(line, 19))
+
+
+## Check the code's shape here for instant feedback; the server still validates everything.
+func _join(raw: String) -> void:
+	var code := LobbyState.normalize_code(raw)
+	if code.length() != LobbyState.CODE_LENGTH:
+		_show_notice("Arena codes are %d letters or numbers, like K7QM." % LobbyState.CODE_LENGTH, true)
+		return
+	_show_notice("Joining %s..." % code, false)
+	NetManager.join_room(code)
 
 
 func _apply_seed() -> void:

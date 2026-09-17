@@ -27,7 +27,8 @@ const STATE_NAMES := ["Offline", "Connecting", "Connected", "Reconnecting", "Fai
 ## Bump when any RPC signature changes. Mismatched clients are turned away with a message
 ## rather than failing in confusing ways mid-race.
 ## 2: Freedom Duel messages (c_duel_fire, s_duel_state, s_duel_event).
-const PROTOCOL_VERSION := 2
+## 3: Prompt 3 -- heart exchange (c_exchange, s_exchange), grace in s_racer_state, rulesets.
+const PROTOCOL_VERSION := 3
 const HELLO_TIMEOUT := 10.0
 const SILENT_TIMEOUT := 20.0
 const PING_INTERVAL := 3.0
@@ -36,6 +37,9 @@ const CONNECT_TIMEOUT := 75.0
 const RECONNECT_ATTEMPTS := 3
 const RECONNECT_DELAY := 2.0
 const MAX_ROOMS := 32
+## Prompt 3: bounded retries for a unique code, and repeated create clicks answered once.
+const CODE_RETRIES := 64
+const CREATE_DEBOUNCE := 2.0
 const RESULTS_LINGER := 6.0
 
 var state: int = State.OFFLINE
@@ -55,6 +59,8 @@ var client_match: NetMatch
 
 # --- Server ---
 var _rooms: Dictionary = {}        # code -> LobbyState
+## Arena code -> server clock when it was created.
+var _created_at: Dictionary = {}
 var _room_of: Dictionary = {}      # peer id -> code
 var _peers: Dictionary = {}        # peer id -> {name, last_seen}
 var _pending: Dictionary = {}      # peer id -> connected at (awaiting hello)
@@ -233,6 +239,7 @@ func _close_room(code: String) -> void:
 			entry["viewport"].queue_free()
 		_matches.erase(code)
 	_rooms.erase(code)
+	_created_at.erase(code)
 	print("[server] room %s closed" % code)
 
 
@@ -348,18 +355,31 @@ func c_create_room(mode: String) -> void:
 	if id == 0:
 		return
 	if _room_of.has(id):
+		var current := _room_for(id)
+		# A repeated click or a retried request: the arena this player just made is the answer.
+		if current != null and current.host_id == id and not current.in_match \
+				and _clock - float(_created_at.get(current.code, -INF)) < CREATE_DEBOUNCE:
+			_send_lobby(current)
+			return
 		_leave_room(id, "made a new room")
 	if _rooms.size() >= MAX_ROOMS:
 		_tell(id, "The server is full right now. Try again shortly.")
 		return
-	var code := LobbyState.random_code(_rng)
-	while _rooms.has(code):
-		code = LobbyState.random_code(_rng)
+	var code := ""
+	for attempt in CODE_RETRIES:
+		var candidate := LobbyState.random_code(_rng)
+		if not _rooms.has(candidate):
+			code = candidate
+			break
+	if code == "":
+		_tell(id, "Could not make an arena code. Try again.")
+		return
 	var room := LobbyState.new(code, mode)
 	room.seed_value = _rng.randi() % 1000000
 	room.add_human(id, _peers[id]["name"])
 	_rooms[code] = room
 	_room_of[id] = code
+	_created_at[code] = _clock
 	print("[server] peer %d created %s room %s" % [id, room.mode, code])
 	_send_lobby(room)
 
@@ -370,9 +390,12 @@ func c_join_room(raw_code: String) -> void:
 	if id == 0:
 		return
 	var code := LobbyState.normalize_code(raw_code)
+	if code.length() != LobbyState.CODE_LENGTH:
+		_tell(id, "Arena codes are %d letters or numbers." % LobbyState.CODE_LENGTH)
+		return
 	var room: LobbyState = _rooms.get(code, null)
 	if room == null:
-		_tell(id, "No room with code %s." % (code if code != "" else "(empty)"))
+		_tell(id, "No arena with code %s. It may have closed -- check the code with your friend." % code)
 		return
 	if _room_of.get(id, "") == code:
 		_send_lobby(room)
@@ -532,6 +555,15 @@ func c_emote(k: int) -> void:
 	var m := _match_for(id)
 	if m != null:
 		m.server_on_emote(id, k)
+
+
+## Prompt 3: trade a heart for a Move. The server decides.
+@rpc("any_peer", "call_remote", "reliable")
+func c_exchange() -> void:
+	var id := _sender()
+	var m := _match_for(id)
+	if m != null:
+		m.server_on_exchange(id)
 
 
 ## Freedom Duel: this client's finalist pulled a trigger. The server decides what it hit.
@@ -788,9 +820,15 @@ func s_snapshot(elapsed: float, server_time: float, racers: Array, spiders: Arra
 
 
 @rpc("authority", "call_remote", "reliable")
-func s_racer_state(rid: int, hearts: float, charges: int, flags: int) -> void:
+func s_racer_state(rid: int, hearts: float, charges: int, flags: int, grace: float) -> void:
 	if client_match != null:
-		client_match.client_on_racer_state(rid, hearts, charges, flags)
+		client_match.client_on_racer_state(rid, hearts, charges, flags, grace)
+
+
+@rpc("authority", "call_remote", "reliable")
+func s_exchange(reason: String) -> void:
+	if client_match != null:
+		client_match.client_on_exchange(reason)
 
 
 @rpc("authority", "call_remote", "reliable")

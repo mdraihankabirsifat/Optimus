@@ -6,6 +6,8 @@ extends CanvasLayer
 const HEART_RED := Color(0.95, 0.25, 0.3)
 const PIP_ON := Color(0.36, 0.8, 1.0)
 const PIP_OFF := Color(0.2, 0.22, 0.26)
+## Which action each gravity-preview label stands for; the text shows its current binding.
+const PREVIEW_ACTIONS := {"W": "move_forward", "S": "move_back", "A": "move_left", "D": "move_right", "Space": "jump"}
 
 var _world: Node
 var _player: PlayerController
@@ -22,6 +24,9 @@ var _floor_label: Label
 var _centre_label: Label
 var _prompt_label: Label
 var _banner_label: Label
+## Prompt 3: the last-heart deadline and the heart-trade hint.
+var _grace_label: Label
+var _exchange_hint: Label
 var _toasts: VBoxContainer
 var _preview: Dictionary = {}
 
@@ -67,6 +72,8 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 	_centre_label = _anchored_label(Control.PRESET_CENTER, 110, Vector2(0, -120), UiKit.EMBER)
 	_prompt_label = _anchored_label(Control.PRESET_CENTER, 22, Vector2(0, 60), Color(1, 0.9, 0.6))
 	_banner_label = _anchored_label(Control.PRESET_CENTER_BOTTOM, 22, Vector2(0, -70))
+	_grace_label = _anchored_label(Control.PRESET_CENTER_TOP, 30, Vector2(0, 96), UiKit.DANGER)
+	_exchange_hint = _anchored_label(Control.PRESET_TOP_LEFT, 16, Vector2(30, 175), UiKit.SKY)
 	_banner_label.add_theme_constant_override("outline_size", 6)
 
 	_toasts = VBoxContainer.new()
@@ -112,6 +119,10 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 	_player.health.shield_absorbed.connect(func() -> void:
 		_flash = Color(0.6, 0.9, 1.0, 0.3)
 		toast("Shield absorbed the hit", UiKit.SKY))
+	_player.health.last_heart_started.connect(func(_s: float) -> void:
+		_flash = Color(1.0, 0.1, 0.05, 0.4)
+		AudioManager.play_sfx("heartbeat")
+		toast("Last heart spent: reach the exit in %d seconds" % int(AppConfig.LAST_HEART_GRACE), UiKit.DANGER, 3.0))
 	_player.health.eliminated.connect(func() -> void:
 		show_centre("ELIMINATED", 3.0, UiKit.DANGER))
 	var interaction := _player.get_node_or_null("Interaction") as PlayerInteraction
@@ -240,6 +251,18 @@ func _process(delta: float) -> void:
 	_axes_label.text = _axes_text()
 	_floor_label.text = "Standing on: %s" % surface_name(_player.gravity.gravity_dir)
 
+	var h := _player.health
+	if h.in_grace() and not h.is_eliminated:
+		var pulse := 0.7 + 0.3 * sin(_time * 8.0)
+		_grace_label.text = "LAST HEART SPENT  -  %ds remaining" % ceili(h.grace_left)
+		_grace_label.modulate = Color(1, 1, 1, pulse)
+	else:
+		_grace_label.text = ""
+	_exchange_hint.text = ""
+	if _exchange_allowed() and _player.gravity.charges < AppConfig.MOVE_CHARGES_MAX and h.hearts >= AppConfig.HEART_EXCHANGE_COST:
+		if _player.gravity.charges == 0:
+			_exchange_hint.text = "[%s] trade a heart for a Move" % UiKit.binding_text("exchange_heart")
+
 	_update_preview()
 	_stats_draw.queue_redraw()
 	_overlay_draw.queue_redraw()
@@ -263,9 +286,12 @@ func _update_preview() -> void:
 		else:
 			dir = _player.preview_shift_direction(locals[key])
 		var verb := "flip to" if key == "Space" else "walk on"
-		l.text = "%s  %s %s" % ["SPACE" if key == "Space" else key, verb, surface_name(dir)]
+		var label := UiKit.binding_text(PREVIEW_ACTIONS[key]).to_upper()
+		l.text = "%s  %s %s" % [label, verb, surface_name(dir)]
 		if g.charges <= 0:
-			l.text = "%s  no Moves left" % ("SPACE" if key == "Space" else key)
+			l.text = "%s  no Moves left" % label
+			if key == "Space" and _exchange_allowed():
+				l.text += "  -  [%s] trade a heart" % UiKit.binding_text("exchange_heart")
 		l.add_theme_color_override("font_color", UiKit.SKY if g.charges > 0 else UiKit.DANGER)
 		l.position = centre + spots[key] - l.size * 0.5
 
@@ -398,6 +424,7 @@ func _draw_stats(c: Control) -> void:
 			-1, 18, UiKit.SKY if _player.speed_multiplier > 1.0 else UiKit.DANGER)
 
 	_draw_gravity_gauge(c, Vector2(c.size.x - 70, 190))
+	_draw_compass(c, Vector2(c.size.x - 70, 300))
 
 
 ## A ring showing where the world's own floor is, from your point of view. When you are
@@ -417,6 +444,56 @@ func _draw_gravity_gauge(c: Control, centre: Vector2) -> void:
 		c.draw_circle(centre, 7 if world_down.z < 0 else 4, UiKit.EMBER)
 	c.draw_string(ThemeDB.fallback_font, centre + Vector2(-44, 60), "world floor",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiKit.TEXT_DIM)
+
+
+## Prompt 3: a compass fixed to the WORLD, deliberately. North is -Z, east +X, whatever
+## gravity you are under: turning your gravity never renames the directions, and a wall or
+## ceiling walker facing the same world direction reads the same bearing. This is the one
+## place world axes are the point, so it stays in the HUD and never feeds movement. It shows
+## only your own facing -- never the exit.
+func _draw_compass(c: Control, centre: Vector2) -> void:
+	var heading := compass_heading(_view_camera(), _last_bearing)
+	_last_bearing = heading["bearing"]
+	var bearing: float = heading["bearing"]
+	c.draw_circle(centre, 40, Color(0, 0, 0, 0.45))
+	c.draw_arc(centre, 40, 0, TAU, 32, Color(UiKit.EMBER, 0.45), 2.0)
+	var font := ThemeDB.fallback_font
+	var labels := {"N": 0.0, "E": 90.0, "S": 180.0, "W": 270.0}
+	for name: String in labels:
+		# Screen angle: your facing is always at the top.
+		var a := deg_to_rad(float(labels[name]) - bearing)
+		var p := centre + Vector2(sin(a), -cos(a)) * 29.0
+		var colour := UiKit.DANGER if name == "N" else UiKit.TEXT
+		c.draw_string(font, p + Vector2(-5, 6), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, colour)
+	c.draw_line(centre + Vector2(0, -12), centre + Vector2(0, -40), Color(UiKit.EMBER, 0.9), 2.0)
+	var caption := "%s  %03d" % [bearing_name(bearing), roundi(bearing) % 360]
+	if heading["vertical"] != "":
+		caption = "looking %s" % heading["vertical"]
+	c.draw_string(font, centre + Vector2(-44, 60), caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, UiKit.TEXT_DIM)
+
+
+var _last_bearing: float = 0.0
+
+
+func _view_camera() -> Camera3D:
+	var cam := _root.get_viewport().get_camera_3d()
+	return cam if cam != null else _player.camera
+
+
+## {bearing: degrees clockwise from world north (-Z), vertical: "" or "up"/"down"}.
+## Looking almost straight up or down there is no reliable heading, so the last one is kept.
+static func compass_heading(cam: Camera3D, last_bearing: float) -> Dictionary:
+	var fwd := -cam.global_basis.z
+	var flat := Vector2(fwd.x, fwd.z)
+	if flat.length() < 0.2:
+		return {"bearing": last_bearing, "vertical": "up" if fwd.y > 0.0 else "down"}
+	var bearing := rad_to_deg(atan2(flat.x, -flat.y))
+	return {"bearing": fposmod(bearing, 360.0), "vertical": ""}
+
+
+static func bearing_name(bearing: float) -> String:
+	var names := ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+	return names[roundi(fposmod(bearing, 360.0) / 45.0) % 8]
 
 
 func _draw_heart(c: Control, centre: Vector2, size: float, colour: Color, portion: float) -> void:
@@ -468,7 +545,7 @@ func _draw_map(c: Control) -> void:
 	for cell: Vector3i in visited:
 		levels[cell.y] = true
 	c.draw_string(ThemeDB.fallback_font, panel.position + Vector2(12, 22),
-		"MAP  ·  level %d  ·  %d cells found  [M]" % [here.y + 1, visited.size()],
+		"MAP  ·  level %d  ·  %d cells found  [%s]" % [here.y + 1, visited.size(), UiKit.binding_text("toggle_map")],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiKit.TEXT_DIM)
 	var origin := panel.position + panel.size * 0.5 + Vector2(0, 14) - Vector2(here.x, here.z) * cell_px
 	for cell: Vector3i in visited:
@@ -590,3 +667,8 @@ static func _ordinal(n: int) -> String:
 		2: return "2nd"
 		3: return "3rd"
 	return "%dth" % n
+
+
+## Heart trading is a cave action, switched off by Move regeneration.
+func _exchange_allowed() -> bool:
+	return not bool(_world.get("_move_regen")) and _match.phase == MatchController.Phase.RACING 		and _player.input_enabled and not _player.health.is_eliminated and _player.duel_dof == 0

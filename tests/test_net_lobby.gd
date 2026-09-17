@@ -92,9 +92,14 @@ func _ready() -> void:
 	_check(racing.start_problem() != "", "cannot start a second race at once")
 
 	print("-- sanitising")
-	_check(LobbyState.sanitize_name("  <b>Robo</b>\n") == "bRobob", "markup and control characters stripped")
+	# Prompt 3: names are plain text, 1-20 characters, any language.
+	_check(LobbyState.sanitize_name("  <b>Robo</b>\n") == "bRobo/b", "markup brackets and control characters stripped")
+	_check(LobbyState.sanitize_name("[color=red]X[/color]") == "color=redX/color", "BBCode brackets stripped")
 	_check(LobbyState.sanitize_name("") == "Racer", "empty name gets a default")
-	_check(LobbyState.sanitize_name("abcdefghijklmnopqrstuvwxyz").length() == 16, "names capped at 16")
+	_check(LobbyState.name_problem("") != "" and LobbyState.name_problem("   \t\n") != "", "blank names are refused with a message")
+	_check(LobbyState.name_problem("Sifat") == "", "an ordinary name is fine")
+	_check(LobbyState.sanitize_name("abcdefghijklmnopqrstuvwxyz").length() == 20, "names capped at 20")
+	_check(LobbyState.sanitize_name("Rāhim  সাকিব ✨") == "Rāhim সাকিব ✨", "Unicode kept, runs of spaces collapsed")
 	_check(LobbyState.normalize_code(" ab-cd ") == "ABCD", "codes upper-cased and cleaned")
 	_check(LobbyState.normalize_code("O0I1") == "", "ambiguous characters are not code characters")
 	var dup := LobbyState.new("DUPE", LobbyState.MODE_MIXED)

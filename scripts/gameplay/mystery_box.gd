@@ -116,7 +116,7 @@ func _process(delta: float) -> void:
 
 
 func prompt_text() -> String:
-	return "" if is_open else "[E]  Open Mystery Box"
+	return "" if is_open else "[%s]  Open Mystery Box" % UiKit.binding_text("interact")
 
 
 ## Bots call this too, after walking within reach. Same rules, same rewards.

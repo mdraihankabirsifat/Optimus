@@ -151,6 +151,10 @@ func _on_finish_body_entered(body: Node3D) -> void:
 	if "input_enabled" in body:
 		body.input_enabled = false
 	_unsolid(body)
+	# Reaching the exit ends any last-heart deadline: a finalist is never killed by the cave.
+	var finished_health: PlayerHealth = body.get("health")
+	if finished_health != null:
+		finished_health.clear_grace()
 
 	racer_finished.emit(racer["name"], racer["place"], racer["finish_time"])
 	if duel != null:
@@ -278,6 +282,8 @@ func net_finish(rid: int, place: int, time: float) -> void:
 	if is_instance_valid(body) and "input_enabled" in body:
 		body.input_enabled = false
 	_unsolid(body)
+	if is_instance_valid(body) and body.get("health") != null:
+		(body.get("health") as PlayerHealth).clear_grace()
 	racer_finished.emit(racer["name"], place, time)
 
 

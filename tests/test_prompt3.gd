@@ -14,6 +14,9 @@ func _ready() -> void:
 	await _test_fire_ceiling_bypass()
 	await _test_racer_collision()
 	await _test_spikes()
+	await _test_heart_exchange()
+	_test_bindings()
+	await _test_compass()
 
 	print("")
 	print("==================================================")
@@ -207,6 +210,156 @@ func _test_spikes() -> void:
 	crystal.queue_free()
 	room.queue_free()
 	await _frames(2)
+
+
+# --- Request 4: hearts for Moves --------------------------------------------------------
+
+func _race_world(regen: bool = false) -> Node3D:
+	var world: Node3D = load("res://scenes/game/game_world.tscn").instantiate()
+	world.randomise_seed = false
+	world.fixed_seed = 4242
+	world.bot_count = 2
+	add_child(world)
+	await get_tree().process_frame
+	world.set("_move_regen", regen)
+	for b: Node3D in world.bots:
+		b.get_node("BotController").set_physics_process(false)
+	return world
+
+
+func _test_heart_exchange() -> void:
+	_section("trading hearts for Moves")
+	var world: Node3D = await _race_world()
+	var mc: MatchController = world.match_controller
+	var me: PlayerController = world.local_player()
+	me.set_physics_process(false)
+	_check("no trade during the countdown", world.request_heart_exchange(me) != "" and is_equal_approx(me.health.hearts, 5.0))
+	mc._advance_countdown(10.0)
+	var start_moves := me.gravity.charges
+	_check("a trade succeeds while racing", world.request_heart_exchange(me) == "")
+	_check("one full heart for exactly one Move", is_equal_approx(me.health.hearts, 4.0) and me.gravity.charges == start_moves + 1)
+	me.gravity.charges = AppConfig.MOVE_CHARGES_MAX
+	_check("rejected at the Move cap, nothing taken", world.request_heart_exchange(me) != "" and is_equal_approx(me.health.hearts, 4.0))
+	me.gravity.charges = 0
+	me.health.hearts = 0.5
+	_check("half a heart cannot be traded", world.request_heart_exchange(me) != "" and me.gravity.charges == 0)
+	me.health.hearts = 1.5
+	world.request_heart_exchange(me)
+	_check("1.5 hearts -> 0.5 and a Move, no deadline", is_equal_approx(me.health.hearts, 0.5) and me.gravity.charges == 1 and not me.health.in_grace())
+	me.health.grant_shield()
+	me.health.hearts = 1.0
+	var eliminations := [0]
+	me.health.eliminated.connect(func() -> void: eliminations[0] += 1)
+	_check("the last heart can be traded", world.request_heart_exchange(me) == "")
+	_check("the last heart still grants the Move", me.gravity.charges == 2)
+	_check("trading the last heart does not eliminate", not me.health.is_eliminated and me.input_enabled)
+	_check("the 20 second deadline starts", is_equal_approx(me.health.grace_left, AppConfig.LAST_HEART_GRACE))
+	_check("a shield does not make the trade free", me.health.has_shield and is_equal_approx(me.health.hearts, 0.0))
+	me.health._process(5.0)
+	me.gravity.add_charges(1)
+	me.health.refill(1.0)
+	_check("a Heart Refill does not cancel the deadline", is_equal_approx(me.health.grace_left, 15.0) and is_equal_approx(me.health.hearts, 1.0))
+	world.request_heart_exchange(me)
+	_check("trading again does not reset or extend the deadline", is_equal_approx(me.health.grace_left, 15.0))
+	me.health._process(14.9)
+	_check("still alive just before the deadline", not me.health.is_eliminated)
+	me.health._process(0.2)
+	_check("eliminated once at the deadline", me.health.is_eliminated and eliminations[0] == 1)
+	me.health._process(5.0)
+	_check("the deadline never fires twice", eliminations[0] == 1)
+	_check("an eliminated racer cannot trade", world.request_heart_exchange(me) != "")
+
+	var bot := world.bots[0] as PlayerController
+	bot.health.hearts = 1.0
+	bot.gravity.charges = 0
+	_check("bots use the same trade", world.request_heart_exchange(bot) == "" and bot.health.in_grace())
+	mc._on_finish_body_entered(bot)
+	_check("qualifying clears the cave deadline", not bot.health.in_grace())
+	bot.health._process(30.0)
+	_check("a qualified racer is never killed by an old deadline", not bot.health.is_eliminated)
+
+	var other := world.bots[1] as PlayerController
+	other.health.hearts = 1.0
+	world.request_heart_exchange(other)
+	other.health.apply_damage(0.5, "fire_test")
+	_check("a real hit at zero hearts during the deadline still eliminates", other.health.is_eliminated)
+	world.queue_free()
+	await _frames(2)
+
+	var regen_world: Node3D = await _race_world(true)
+	(regen_world.match_controller as MatchController)._advance_countdown(10.0)
+	var r: PlayerController = regen_world.local_player()
+	r.set_physics_process(false)
+	_check("with Move regen on, trading is off", regen_world.request_heart_exchange(r) != ""
+		and is_equal_approx(r.health.hearts, 5.0) and not r.health.in_grace())
+	regen_world.queue_free()
+	await _frames(2)
+
+
+# --- Request 5: bindings ---------------------------------------------------------------
+
+func _test_bindings() -> void:
+	_section("every hint follows remapping")
+	var box := MysteryBox.new()
+	_check("default box hint names the default key", box.prompt_text().contains("[E]"))
+	SettingsManager.remap_action("interact", KEY_R)
+	_check("E -> R: the box hint says R at once", box.prompt_text().contains("[R]") and not box.prompt_text().contains("[E]"))
+	_check("R is the interact binding and E is not", UiKit.binding_text("interact") == "R")
+	var before_map := UiKit.binding_text("toggle_map")
+	SettingsManager.remap_action("interact", KEY_M)
+	_check("a conflict swaps both hints (interact M, map takes R)", UiKit.binding_text("interact") == "M"
+		and UiKit.binding_text("toggle_map") == "R")
+	SettingsManager.reset_keys()
+	_check("reset restores both hints", UiKit.binding_text("interact") == "E" and UiKit.binding_text("toggle_map") == before_map)
+	_check("mouse bindings read as mouse buttons", UiKit.binding_text("duel_fire") == "Left mouse")
+	_check("several bindings are all shown", UiKit.binding_text("duel_lock") == "Right mouse / Q")
+	_check("the gravity chord uses the same formatter", UiKit.chord_text("gravity_mod", "jump") == "G + Space")
+	_check("the new heart-trade action is bound and remappable", UiKit.binding_text("exchange_heart") == "H"
+		and "exchange_heart" in SettingsManager.REMAPPABLE)
+	_check("loading tips fill in keys", not String(load("res://scripts/ui/loading.gd").fill_keys("{exchange_heart}")).contains("{"))
+	box.free()
+
+
+# --- Request 7: compass -----------------------------------------------------------------
+
+func _test_compass() -> void:
+	_section("compass is fixed to the world")
+	var cam := Camera3D.new()
+	add_child(cam)
+	var ok_n := true
+	var ok_e := true
+	for up: Vector3 in [Vector3.UP, Vector3.DOWN, Vector3.LEFT, Vector3.RIGHT]:
+		cam.global_basis = Basis.looking_at(Vector3.FORWARD, up)
+		ok_n = ok_n and absf(float(RaceHUD.compass_heading(cam, 0.0)["bearing"])) < 0.5
+	for up: Vector3 in [Vector3.UP, Vector3.DOWN, Vector3.FORWARD, Vector3.BACK]:
+		cam.global_basis = Basis.looking_at(Vector3.RIGHT, up)
+		ok_e = ok_e and absf(float(RaceHUD.compass_heading(cam, 0.0)["bearing"]) - 90.0) < 0.5
+	_check("facing world -Z reads N however the camera is rolled (floor, ceiling, walls)", ok_n)
+	_check("facing world +X reads E however the camera is rolled", ok_e)
+	cam.global_basis = Basis.looking_at(Vector3.UP, Vector3.FORWARD)
+	var up_view := RaceHUD.compass_heading(cam, 123.0)
+	_check("looking straight up keeps the last bearing and says so", is_equal_approx(float(up_view["bearing"]), 123.0) and up_view["vertical"] == "up")
+	cam.global_basis = Basis.looking_at(Vector3(0.05, -1, 0).normalized(), Vector3.FORWARD)
+	_check("nearly straight down is stable too", RaceHUD.compass_heading(cam, 45.0)["vertical"] == "down")
+	_check("bearing names", RaceHUD.bearing_name(0.0) == "N" and RaceHUD.bearing_name(92.0) == "E" and RaceHUD.bearing_name(225.0) == "SW")
+	cam.queue_free()
+
+	# A real racer through chained gravity shifts, always facing world +X.
+	var racer := _racer()
+	await _frames(2)
+	var all_east := true
+	for g: Vector3 in [Vector3.DOWN, Vector3.UP, Vector3.FORWARD, Vector3.BACK, Vector3.DOWN]:
+		racer.gravity._align_body_to_gravity(g)
+		racer.head.rotation = Vector3.ZERO
+		# Yaw about local up until the camera faces world +X.
+		for i in 72:
+			if (-racer.camera.global_basis.z).dot(Vector3.RIGHT) > 0.999:
+				break
+			racer.rotate_object_local(Vector3.UP, TAU / 72.0)
+		var b := float(RaceHUD.compass_heading(racer.camera, 0.0)["bearing"])
+		all_east = all_east and absf(b - 90.0) < 6.0
+	_check("chained shifts on floor, ceiling and walls never remap east", all_east)
+	racer.queue_free()
 
 
 func _name(g: Vector3) -> String:

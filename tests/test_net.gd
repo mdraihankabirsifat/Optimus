@@ -27,7 +27,7 @@ func _ready() -> void:
 	var project := ProjectSettings.globalize_path("res://")
 	var dir := OS.get_user_data_dir().path_join("net_test")
 	DirAccess.make_dir_recursive_absolute(dir)
-	for f in ["host.json", "guest.json", "code.txt"]:
+	for f in ["host.json", "guest.json", "other.json", "code.txt"]:
 		if FileAccess.file_exists(dir.path_join(f)):
 			DirAccess.remove_absolute(dir.path_join(f))
 
@@ -43,6 +43,9 @@ func _ready() -> void:
 	_pids.append(OS.create_process(exe, ["--headless", "--path", project, "res://tests/net_probe.tscn", "--",
 		"--role=guest", "--out=%s" % dir.path_join("guest.json")] + common))
 
+	_pids.append(OS.create_process(exe, ["--headless", "--path", project, "res://tests/net_probe.tscn", "--",
+		"--role=other", "--out=%s" % dir.path_join("other.json")] + common))
+
 	var end := Time.get_ticks_msec() + int(TIMEOUT * 1000.0)
 	while Time.get_ticks_msec() < end and not FileAccess.file_exists(dir.path_join("host.json")):
 		await get_tree().create_timer(1.0).timeout
@@ -50,6 +53,7 @@ func _ready() -> void:
 
 	var host := _read(dir.path_join("host.json"))
 	var guest := _read(dir.path_join("guest.json"))
+	var other := _read(dir.path_join("other.json"))
 
 	print("-- connection and lobby")
 	_check(host.get("error", "missing") == "", "host completed its script (%s)" % host.get("error", "no output"))
@@ -87,6 +91,22 @@ func _ready() -> void:
 		"each client saw it open exactly once")
 	_check(int(host.get("box_opener_rid", -2)) == int(guest.get("box_opener_rid", -3))
 		and int(host.get("box_opener_rid", -1)) >= 0, "both agree on the single opener")
+
+	print("-- Prompt 3: arenas, synced rules, heart trade")
+	_check(String(other.get("other_code", "")) != "" and other.get("other_code", "") != other.get("host_code", "+"),
+		"a second arena on the same server gets its own code")
+	_check(int(other.get("other_members", 0)) == 1 and int(other.get("other_members_later", 0)) == 1,
+		"two clicks on Create Arena make one arena, and the two arenas stay separate")
+	var notices := " ".join(other.get("notices", []))
+	_check(notices.contains("letters or numbers") and notices.contains("No arena with code ZZZZ"),
+		"a malformed code and an unknown code are refused with clear messages")
+	_check(guest.get("guest_saw_rush_480", false), "the guest's lobby shows the host's Rush 8 minutes (and an invalid length was refused)")
+	_check("Host" in guest.get("guest_saw_names", []) and "Guest" in guest.get("guest_saw_names", []),
+		"both names appear in the guest's lobby")
+	_check(guest.get("race_ruleset", "") == "rush" and int(guest.get("race_rush_seconds", 0)) == 480
+		and is_equal_approx(float(guest.get("rush_limit_on_client", 0.0)), 480.0), "the race runs the host's rules on the guest")
+	_check(is_equal_approx(float(guest.get("hearts_after_exchange", 0.0)), 4.0) and int(guest.get("moves_after_exchange", 0)) == 1,
+		"a heart trade goes through the server once, even with a double press")
 
 	print("-- qualification and the Freedom Duel over WebSockets")
 	_check(int(host.get("my_place", 0)) == 1 and host.get("qualified_1st", false), "host reaches the exit first: Qualified 1st")

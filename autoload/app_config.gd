@@ -110,6 +110,13 @@ const SLOW_TIME := 5.0
 const MOVE_REGEN_INTERVAL := 25.0
 ## HEALTH-006: at or below this many hearts the screen and sound say so.
 const LOW_HEALTH := 1.0
+## Prompt 3: one full heart buys one Move. Spending the last heart leaves this long to live.
+const HEART_EXCHANGE_COST := 1.0
+const LAST_HEART_GRACE := 20.0
+## Server-side debounce between two exchange requests from one racer.
+const HEART_EXCHANGE_DEBOUNCE := 0.25
+## How long the "press again to spend your last heart" confirmation stays armed.
+const LAST_HEART_CONFIRM := 2.5
 ## How long the clue arrow stays on screen. Coarse direction only, never the exit itself.
 const CLUE_TIME := 9.0
 

@@ -3,18 +3,19 @@ extends Control
 ## teaches one thing. The cave itself is generated behind the next fade.
 
 const TIPS := [
-	"Hold G and look before you press anything: the HUD names the surface each key makes your floor.",
-	"Shafts only go up if you flip. G + Space turns the ceiling into the floor -- and the shaft into a drop.",
+	"Hold {gravity_mod} and look before you press anything: the HUD names the surface each key makes your floor.",
+	"Shafts only go up if you flip. {gravity_mod} + {jump} turns the ceiling into the floor -- and the shaft into a drop.",
 	"Fire covers a floor, never a wall. Rotate onto the wall and walk straight past it.",
 	"Spiders live on the world floor. Walk the ceiling and they cannot reach you.",
 	"Dead ends hide mystery boxes more often than corridors do.",
 	"DOF 3 means a junction with a shaft: more routes, but the vertical ones cost a Move.",
 	"A cracked, glowing floor over a hole will not hold for long.",
 	"A green SHORTCUT ring under a shaft means spending a Move there saves a long walk.",
-	"Tap Space for a hop, hold it for a full jump.",
-	"Press M for your map. It only shows where you have been.",
+	"Tap {jump} for a hop, hold it for a full jump.",
+	"Press {toggle_map} for your map. It only shows where you have been.",
 	"Bots know only what they have seen. They get lost too.",
 	"Out of Moves? Mystery boxes can refill one. So can Move regen, if the lobby turned it on.",
+	"No Move regen? {exchange_heart} trades a full heart for a Move. Your last heart gives you 20 seconds.",
 ]
 
 var _leaving := false
@@ -47,7 +48,7 @@ func _ready() -> void:
 		col.add_child(UiKit.title("Your best here  %s  --  your ghost races with you" % MatchController.format_time(best),
 			18, UiKit.SKY))
 	col.add_child(UiKit.label(""))
-	var tip := UiKit.label(TIPS[randi() % TIPS.size()], 22, UiKit.TEXT)
+	var tip := UiKit.label(fill_keys(TIPS[randi() % TIPS.size()]), 22, UiKit.TEXT)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tip.custom_minimum_size = Vector2(720, 0)
@@ -71,3 +72,11 @@ func _leave() -> void:
 		await get_tree().process_frame
 	GameState.launched_from_menu = true
 	SceneRouter.go_to(SceneRouter.GAME)
+
+
+## Replace {action} with that action's current binding, so tips follow remapping.
+static func fill_keys(text: String) -> String:
+	var out := text
+	for action: String in ["gravity_mod", "jump", "toggle_map", "interact", "exchange_heart", "sprint"]:
+		out = out.replace("{%s}" % action, UiKit.binding_text(action))
+	return out
