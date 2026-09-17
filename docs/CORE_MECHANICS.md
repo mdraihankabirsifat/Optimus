@@ -67,7 +67,7 @@ floor detection, snapping and slide correctly in the rotated frame.
 |---|---|
 | `W A S D` | Walk in the **current** gravity frame (see 3a) |
 | Mouse | 360° look — yaw on body, pitch on head |
-| `Shift` | Sprint |
+| `Shift` | Sprint, but only while a Sprint Gift window is open (Prompt 4) |
 | `E` | Interact / open mystery box |
 | `G` (hold) | Arms a Gravity Move. Suppresses WASD movement while held. |
 | `G` + `W` | Gravity rotates 90° **toward camera forward** |

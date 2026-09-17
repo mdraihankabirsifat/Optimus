@@ -17,6 +17,8 @@ var _seeds := 10
 var _skill := 2
 var _walls := -1
 var _rush := 0
+## Master Prompt 4: which cave size to race (0 Short, 1 Standard, 2 Long).
+var _size := 1
 
 
 func _ready() -> void:
@@ -29,6 +31,7 @@ func _ready() -> void:
 			"seeds": _seeds = int(kv[1])
 			"skill": _skill = int(kv[1])
 			"walls": _walls = int(kv[1])
+			"size": _size = int(kv[1])
 			"rush":
 				_rush = int(kv[1])
 				RACE_LIMIT = float(_rush)
@@ -50,6 +53,7 @@ func _ready() -> void:
 		world.fixed_seed = s
 		world.bot_count = BOTS
 		world.bot_skill = _skill
+		world.cave_size = _size
 		if _rush > 0:
 			world.ruleset = AppConfig.RULESET_RUSH
 			world.rush_seconds = _rush
@@ -118,4 +122,13 @@ func _ready() -> void:
 	avg = avg / maxf(1.0, float(times.size()))
 	print("\n  finished %d / %d (%.0f%%), average time %s, Moves used %d (%d sideways)"
 		% [finished, total, 100.0 * finished / maxf(1.0, total), MatchController.format_time(avg), moves, side_shifts])
+	times.sort()
+	var fastest: float = times[0] if not times.is_empty() else 0.0
+	var median: float = times[times.size() / 2] if not times.is_empty() else 0.0
+	var slowest: float = times[times.size() - 1] if not times.is_empty() else 0.0
+	# Master Prompt 4 asks for the distribution, above all the fastest run: that is the one that
+	# has to clear the cave's time floor.
+	print("  size %d completion times: fastest %s, median %s, slowest %s (%d finishes)"
+		% [_size, MatchController.format_time(fastest), MatchController.format_time(median),
+		MatchController.format_time(slowest), times.size()])
 	get_tree().quit(0 if float(finished) / maxf(1.0, total) >= 0.75 else 1)

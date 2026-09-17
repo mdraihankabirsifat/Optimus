@@ -164,6 +164,12 @@ local-multiplayer, godot, game-jam · **Engine:** Godot · **Platforms:** Window
 
 ## Known bugs (for the page)
 
+- Battle Mode has been played against bots and verified in tests, but never by 3-4 people on the
+  public server at once. The deployed server must be redeployed with this build (protocol 4, cave
+  generator 5) or every client is turned away with "Version mismatch".
+- Battle Mode uses the Pulse Blaster only -- no Axis Lock, no Freedom Core; those stay in the duel.
+- Caves are deliberately longer now (shortest route 45/60/75 s of walking by size, roughly double
+  that in ordinary play), so a Normal race on Long can run past five minutes.
 - Bots use a 90° wall-walk only when it saves a Move, so they mostly flip 180°.
 - The capsule dips slightly into the floor during a gravity turn; it corrects when the turn ends.
 - Stalagmites and crystals have no collision.

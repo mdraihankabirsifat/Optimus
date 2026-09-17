@@ -19,7 +19,34 @@ godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=20   # ph
 godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=10 rush=180   # Rush caves
 godot --headless --fixed-fps 60 res://tests/test_prompt3.tscn   # Prompt 3 physics, trades, hints, compass, pits
 godot --headless res://tests/cave_metrics.tscn -- seeds=60 size=1 rush=180   # cave shape numbers
+godot --headless --fixed-fps 60 res://tests/test_prompt4.tscn   # Prompt 4: Sprint Gifts, Battle Mode, cave floors
+godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=8 size=2 limit=300   # per-size completion times
 ```
+
+## Results after Master Prompt 4 (18 September 2026, Windows 11, Godot 4.7.2)
+
+Run with `--headless --fixed-fps 60` except `test_net` (real sockets, wall clock). Every row below
+was produced by an actual run of this code.
+
+| Suite | Checks | Result |
+|---|---|---|
+| **test_prompt4** (new) | 38: Sprint Gift gating, the exact 5 s window, refresh without stacking, expiry mid-hold, pickup and regrowth; Battle spawns 16+ units apart, one point per kill, no double kill, respawn delay and placement away from the killer, spawn protection, cave deaths credit nobody, no heart trade, no exit, a kill as the clock stops, tie-breaks and a draw, two Battle worlds kept apart; per-size cave floors and long cuts | pass |
+| test_gravity | 338 | pass |
+| test_cave | 134 (new generator: long cuts, route floors, Rush still easier) | pass |
+| test_match | 45 | pass |
+| test_bot | 30 | pass |
+| test_duel | 92 | pass |
+| test_flow | 46 | pass |
+| test_themes | 50 | pass |
+| test_wallwalk | 3 | pass |
+| test_net_lobby | 41 | pass |
+| test_net_sim | 88 (adds Battle Mode: the server scores, the client mirrors and never resolves its own shot) | pass |
+| test_net | 43, real WebSocket server + 2 clients | pass |
+| test_prompt3 | 71 (two bot-pit waits lengthened: bots walk now that Shift needs a gift) | pass |
+
+Battle Mode over real sockets with 3-4 clients at once has **not** been run: `test_net` drives two
+clients, and `test_net_sim` covers the Battle server/client split in-process. Concurrent Battle
+arenas are covered in-process only.
 
 ## Results after Master Prompt 3 (17 September 2026, Windows 11, Godot 4.7.2)
 

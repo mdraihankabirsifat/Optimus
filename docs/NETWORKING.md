@@ -99,6 +99,7 @@ Client to server (all reliable except pose):
 | `c_state(pos, rot, vel, grav, flags)` | 20 Hz pose. |
 | `c_shift(dir)`, `c_interact(box)`, `c_fell(unrecoverable)`, `c_emote(k)` | Intent. |
 | `c_duel_fire(kind, origin, dir)` | Freedom Duel trigger, `pulse` or `lock`. Refused outside the fight, on cooldown, for non-finalists or garbage; a muzzle more than 3 units from the shooter is pulled back to it. |
+| `c_battle_fire(origin, dir)` | Battle Mode trigger. Same validation as the duel's, plus the server drops a second request inside 80% of the blaster cooldown, so one trigger pull can never score twice. |
 | `c_test_teleport(pos)` | Honoured only by a server started with `--test-mode`. |
 
 Server to client: `s_welcome`, `s_notice`, `s_pong`, `s_lobby(snapshot)`, `s_left_room`,
@@ -108,7 +109,18 @@ Server to client: `s_welcome`, `s_notice`, `s_pong`, `s_lobby(snapshot)`, `s_lef
 `s_duel_state(state)` (phase, finalist rids, clock, shift, core, and per finalist DOF, axis, lock,
 immunity, core boost, cooldowns, hearts, shield, stats) and `s_duel_event(kind, args)` (`shot`,
 `locked`, `resisted`, `core`, `end`). Prompt 3 adds `c_exchange` / `s_exchange(reason)` and a
-fifth `grace_left` argument on `s_racer_state`. `PROTOCOL_VERSION` is 3.
+fifth `grace_left` argument on `s_racer_state`.
+
+Prompt 4 adds Battle Mode and Sprint Gifts: `s_battle_state(rows)` (per fighter: rid, kills, deaths,
+down, respawn left, protection left, when the score was reached) at 5 Hz and on every change, and
+`s_battle_event(kind, args)` (`kill`, `respawn`, `shot`); `s_gift(index, rid, available)` when a
+Sprint Gift is taken or grows back. `PROTOCOL_VERSION` is 4, and `CaveGenerator.VERSION` is 5, so a
+deployed server has to be redeployed with this code -- older clients are turned away by `c_hello`.
+
+Battle authority: only the server's `BattleMode` runs hitscans, credits kills, chooses respawn
+points and holds the scoreboard. A client predicts nothing but its own blaster cooldown; its
+`BattleMode.fire()` returns false, and its scoreboard, kill feed and down state are whatever
+`s_battle_state` / `s_battle_event` say (`tests/test_net_sim.gd`, "Battle Mode: the server scores").
 
 WebSocket runs over TCP, so every message arrives in order whatever transfer mode is declared.
 

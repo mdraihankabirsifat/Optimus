@@ -41,6 +41,18 @@ everything above is complete and committed, and it is bound by the abort gate in
 
 ---
 
+## MASTER PROMPT 4 (18 September, on top of Prompt 3)
+
+`OPTIMUS_Master_Prompt_4-3.txt`, three features. Evidence is `tests/test_prompt4.gd` (38 checks)
+unless noted.
+
+| ID | Request | Status | Evidence |
+|---|---|---|---|
+| P4-01 | Battle Timer Mode | DONE | New online/mixed ruleset reusing Create Arena and Join by Code. Host picks 3/5/8 minutes and the environment. Spread-out spawns, kills score, zero hearts respawns after 3 s with 2 s protection, live scoreboard and kill feed, deterministic end at the timer with a documented tie-break. Server-authoritative: `scripts/battle/battle_mode.gd` runs only on the host; clients mirror `s_battle_state`/`s_battle_event` (`test_net_sim`, "the server scores, the client mirrors"). |
+| P4-02 | Sprint needs a Sprint Gift | DONE | Shift alone walks. A green Sprint Gift opens a 5.000 s window, a second gift refreshes it without stacking, and it ends mid-hold. HUD countdown, remap-aware hints, bots obey the same rule and path to gifts they can see. |
+| P4-03 | Longer, branchier caves with long cuts | DONE | Per-size dead ends and "long cut" detours that rejoin the route later; a route-time floor per size (45/60/75 s of walking, about 90/120/150 s played) enforced at generation, seeds under it are regenerated. Rush stays easier than Normal (`test_cave`, 134 checks). `docs/CAVE_GENERATION.md` has the table. |
+| P4-04 | Nothing else changes | DONE | Normal, Rush and the Freedom Duel keep their rules: `test_match`, `test_duel`, `test_flow`, `test_prompt3`, `test_net` all pass unchanged in intent (two Prompt 3 bot-pit waits were lengthened because bots now walk instead of sprinting). |
+
 ## MASTER PROMPT 3 (17 September, on top of Prompt 2)
 
 `OPTIMUS_Master_Prompt_3.txt`, thirteen requests. Evidence is in `tests/test_prompt3.gd` unless noted.

@@ -457,7 +457,7 @@ func _test_bot_zero_moves() -> void:
 	var host: BotHost = w["host"]
 	host._move_regen = true
 	bot.gravity.charges = 0
-	for i in 60 * 14:
+	for i in 60 * 24:  # bots walk: Shift needs a Sprint Gift (Prompt 4)
 		await get_tree().physics_frame
 	_check("regen on: it waits for a regenerated Move instead of flailing (%s)" % ctrl.debug_state(),
 		ctrl.wait_reason.contains("regenerated") and bot.gravity.charges == 0 and is_equal_approx(bot.health.hearts, 5.0))
@@ -491,7 +491,7 @@ func _test_bot_zero_moves() -> void:
 	ctrl = w["ctrl"]
 	bot.gravity.charges = 0
 	bot.health.hearts = 1.0
-	for i in 60 * 14:
+	for i in 60 * 50:  # bots walk: Shift needs a Sprint Gift (Prompt 4)
 		await get_tree().physics_frame
 	_check("on its last heart it will not trade itself into a deadline; it reports being trapped (%s)" % ctrl.debug_state(),
 		ctrl.recovery_note.contains("trapped") and not bot.health.in_grace())

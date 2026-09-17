@@ -226,6 +226,7 @@ func _ready() -> void:
 	_check(same, "building results twice gives the same order")
 
 	await _client_mirror()
+	await _battle_mirror()
 
 	GameState.net_role = ""
 	NetManager._rooms.clear()
@@ -347,6 +348,54 @@ func _client_mirror() -> void:
 		"colour": "ff0000", "is_bot": false}}, 42.0)
 	_check(mc.phase == MatchController.Phase.ENDED and GameState.last_results_online, "results end the race")
 	_check((GameState.stats["Them"]["colour"] as Color).is_equal_approx(Color.RED), "server stats arrive with colours")
+	world.queue_free()
+	await get_tree().process_frame
+
+
+## Master Prompt 4: in Battle Mode the server still owns every hit, kill and score; the client
+## only draws what it is told and asks the server to fire.
+func _battle_mirror() -> void:
+	print("-- Battle Mode: the server scores, the client mirrors")
+	GameState.net_role = "client"
+	var room := LobbyState.new("DDDD", LobbyState.MODE_MIXED)
+	room.add_human(401, "Me")
+	room.add_human(402, "Them")
+	room.fill_with_bots()
+	var gen := CaveGenerator.new()
+	gen.configure(1, AppConfig.RULESET_BATTLE, 180)
+	var config := {"room": "DDDD", "seed": SEED_A, "cave_size": 1, "bot_skill": 1, "move_regen": false,
+		"mode": "mixed", "roster": room.roster(), "local_rid": 0, "ruleset": AppConfig.RULESET_BATTLE,
+		"rush_seconds": 180, "graph_hash": gen.generate(SEED_A).graph_hash()}
+	var world: Node3D = load("res://scenes/game/game_world.tscn").instantiate()
+	world.set("net_role", "client")
+	world.set("net_config", config)
+	add_child(world)
+	await get_tree().process_frame
+	var m: NetMatch = world.get("net_match")
+	var battle: BattleMode = world.get("battle")
+	var mc: MatchController = world.get("match_controller")
+	var me: PlayerController = m.racers[0]
+	var them: PlayerController = m.racers[1]
+	_check(battle != null and world.get("duel") == null and mc._finish_area == null,
+		"a client Battle world: no Freedom Duel, no exit")
+	m.client_on_go(0.0)
+	_check(battle.fire(me, me.global_position, Vector3.FORWARD) == false,
+		"a client never resolves its own shot")
+	_check(String(world.call("request_heart_exchange", me)) != "", "no heart trade in Battle Mode")
+
+	m.client_on_battle_state([[0, 2, 1, false, 0.0, 0.0, 12.0], [1, 3, 0, true, 2.0, 0.0, 9.0]])
+	_check(int(battle.fighters[me]["score"]) == 2 and int(battle.fighters[them]["deaths"]) == 0,
+		"the scoreboard is the server's")
+	_check(battle.fighters[them]["dead"] and not them.visible, "a racer the server calls down is drawn down")
+	var ranking := battle.build_ranking()
+	_check(ranking[0]["body"] == them, "the client ranks from the server's scores")
+	m.client_on_battle_event("respawn", [1, them.global_position + Vector3(4, 0, 0)])
+	_check(not battle.fighters[them]["dead"] and them.visible, "a respawn from the server brings them back")
+	var kills := []
+	battle.killed.connect(func(k: PlayerController, v: PlayerController) -> void: kills.append([k, v]))
+	m.client_on_battle_event("kill", [1, 0])
+	_check(kills.size() == 1 and kills[0][1] == me and battle.fighters[me]["dead"],
+		"the kill feed and my own downed state come from the server")
 	world.queue_free()
 	await get_tree().process_frame
 

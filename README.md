@@ -48,6 +48,7 @@ fight where getting out first earned you the third degree of freedom, and the wi
 | Bot Race | you + 0-4 bots (0 is Time Trial) | nothing, fully offline |
 | Online Race | 2-5 humans. **Create Arena** gives you a 4-character code (Copy Code); friends choose **Join Arena** and type it | a server |
 | Mixed Race | 2-5 racers, at least one human, fill empty slots with bots | a server |
+| Battle Mode | 2-5 fighters, timed free-for-all, most kills wins | a server (Online or Mixed) |
 
 Every race has 2-5 racers. The host sets the count, adds or removes bots, picks the cave and starts.
 
@@ -57,7 +58,7 @@ Every race has 2-5 racers. The host sets the count, adds or removes bots, picks 
 |---|---|
 | Mouse | Look |
 | W A S D | Walk |
-| Shift | Sprint |
+| Shift | Sprint -- **only while a Sprint Gift is running**, and only for 5 seconds |
 | Space | Jump (tap for a hop) |
 | **G + W / A / S / D** | Gravity Move: rotate 90° toward that side of your view |
 | **G + Space** | Gravity Move: flip 180° (ceiling becomes floor) |
@@ -86,9 +87,19 @@ shows only your own facing, never the exit.
 
 - **Enter your name** on the Play screen before any race (1-20 characters, any language). It is saved
   and shown everywhere, offline and online.
-- **Normal or Rush**, for every mode. Normal: the full cave, no time limit, the clock counts up.
+- **Normal, Rush or Battle.** Offline Bot Race is Normal or Rush; Battle is an online or mixed
+  room (bots may fill the empty slots). Normal: the full cave, no time limit, the clock counts up.
   Rush: 3, 5 or 8 minutes on an easier cave (about 40% shorter route, a third to half the dead ends).
   If time runs out with one qualifier they are Champion by default; with none, nobody is.
+- **Battle Mode**: 3, 5 or 8 minutes in a cave with no exit. Kill a rival with the Pulse Blaster for
+  one point. Losing your hearts is not elimination: you respawn 3 seconds later, far from whoever
+  killed you, with 2 seconds of spawn protection, full hearts and full Moves. Dying to the cave costs
+  you a death and gives nobody a point. Most kills when the clock stops wins; ties go to fewer deaths,
+  then to whoever reached the score first, and a full tie is a draw. No qualification, no Freedom Duel,
+  no Champion, and no heart trading.
+- **Sprint Gifts**: Shift on its own does nothing. Walk into a green Sprint Gift and Shift sprints for
+  exactly 5 seconds -- the HUD counts it down. A second gift refreshes the 5 seconds, it never stacks,
+  and the window runs out even while you hold Shift. Gifts grow back 15 seconds after they are taken.
 - **Trade a heart for a Move** (H): one full heart for one Move. Trading your last heart still gives
   the Move, then 20 seconds before elimination -- press twice, it cannot be cancelled, reaching the exit
   in time qualifies you as normal. Switched off when Move regen is on.
