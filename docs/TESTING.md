@@ -10,6 +10,8 @@ godot --headless res://tests/test_match.tscn      # match rules and health
 godot --headless res://tests/test_bot.tscn        # bot fairness and exploration
 godot --headless res://tests/test_flow.tscn       # every screen, lobby to results
 godot --headless res://tests/test_wallwalk.tscn   # physics agrees with the validator
+godot --headless res://tests/test_themes.tscn     # environments never change the race
+godot res://tests/theme_shot.tscn                 # (window) one screenshot per environment
 godot --headless res://tests/test_net_lobby.tscn  # lobby rules, no sockets
 godot --headless res://tests/test_net_sim.tscn    # server authority and client mirror, no sockets
 godot --headless res://tests/test_net.tscn        # real WebSocket race: server + 2 clients, ~60 s
@@ -27,6 +29,7 @@ godot --headless --fixed-fps 60 res://tests/bot_physical.tscn -- seeds=20   # ph
 | bot_physical | 80 physical 4-bot races | 77/80 bots finish (96%) |
 | test_flow | 46 | pass |
 | test_wallwalk | 3 (3 wall climbs, 5 drops) | pass |
+| test_themes | 30 | pass |
 | test_net_lobby | 37 | pass |
 | test_net_sim | 56 | pass |
 | test_net | 26 | pass |
@@ -68,6 +71,8 @@ contention resolved once with both clients agreeing; fall damage applied once; i
 movement rejected; placements once in arrival order; disconnect mid-race handled by bot takeover
 without crashing the server; rooms isolated from each other; results reach clients; host returns
 to the room; offline suites untouched by networking.
+
+**Environments:** each of the four builds seed 4242 with the same graph hash, boxes and hazards; lighting and fog applied; signature props placed; Dark Cave lamp present and only there; no theme too dark to navigate; rooms carry the environment; unknown ids fall back to Stone Age. Screenshots of all four were reviewed.
 
 **Build:** Windows export launched as the game (900 frames, no errors) and as a dedicated server
 with two clients racing through it; Docker image built and raced through; web export builds.

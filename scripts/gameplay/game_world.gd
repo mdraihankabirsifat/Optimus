@@ -37,6 +37,9 @@ const SPAWN_RING_RADIUS := 1.8
 var net_role: String = ""
 var net_config: Dictionary = {}
 var net_match: NetMatch
+## ART-012: the environment this race is dressed in. Never affects generation.
+var theme: CaveTheme
+@export var theme_id: String = "stone_age"
 
 var graph: CaveGraph
 var seed_value: int
@@ -90,7 +93,9 @@ func _ready() -> void:
 		cave_size = int(net_config.get("cave_size", 1))
 		bot_skill = int(net_config.get("bot_skill", 1))
 		_move_regen = bool(net_config.get("move_regen", false))
+		theme_id = String(net_config.get("theme", "stone_age"))
 	elif _from_menu:
+		theme_id = GameState.theme_id
 		seed_value = GameState.seed_value
 		bot_count = GameState.bot_count
 		bot_skill = GameState.bot_skill
@@ -111,7 +116,15 @@ func _ready() -> void:
 			% [generator.attempts_used, generator.last_failure])
 		return
 
-	CaveBuilder.new().build(graph, self, seed_value)
+	theme = CaveTheme.by_id(theme_id)
+	var builder := CaveBuilder.new()
+	builder.theme = theme
+	builder.build(graph, self, seed_value)
+	var world_env := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if world_env != null and world_env.environment != null:
+		# Duplicate: rooms on a server share the scene's resource otherwise.
+		world_env.environment = world_env.environment.duplicate()
+		theme.apply_environment(world_env.environment)
 	print("seed %d | %d cells | %d hops to exit | %d Moves required | %d loops" % [
 		seed_value,
 		graph.cell_count(),
@@ -197,8 +210,18 @@ func _ready() -> void:
 		for gate in gates:
 			(gate as SpawnGate).open())
 
+	if theme.personal_light_energy > 0.0:
+		# Dark Cave: a lamp that rides with the racer onto walls and ceilings.
+		var lamp := OmniLight3D.new()
+		lamp.name = "Lamp"
+		lamp.light_color = theme.personal_light_colour
+		lamp.light_energy = theme.personal_light_energy
+		lamp.omni_range = CaveBuilder.CELL_SIZE * 1.6
+		lamp.position = Vector3(0.0, 0.6, 0.0)
+		_player.add_child(lamp)
+
 	AudioManager.stop_music()
-	AudioManager.play_ambience()
+	AudioManager.play_ambience(theme.ambience_pitch, theme.ambience_volume_db)
 	match_controller.begin_countdown()
 	_prewarm_effects()
 
@@ -678,6 +701,7 @@ func _restart() -> void:
 	if net_role != "":
 		return
 	GameState.cave_size = cave_size
+	GameState.theme_id = theme_id
 	GameState.prepare_match(seed_value, bot_count)
 	AudioManager.stop_ambience()
 	SceneRouter.start_match()

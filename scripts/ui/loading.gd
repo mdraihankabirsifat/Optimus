@@ -38,7 +38,7 @@ func _ready() -> void:
 		mode = "%s  ·  %d humans, %d bots" % ["Mixed Race" if cfg.get("mode", "") == "mixed" else "Online Race",
 			humans, total - humans]
 	col.add_child(UiKit.title(mode, 44))
-	col.add_child(UiKit.title("%s cave  ·  seed %d%s" % [preset["name"], GameState.seed_value,
+	col.add_child(UiKit.title("%s  ·  %s cave  ·  seed %d%s" % [CaveTheme.by_id(GameState.theme_id).display_name, preset["name"], GameState.seed_value,
 		("  ·  room %s" % GameState.net_config.get("room", "")) if online else ""], 22, UiKit.TEXT_DIM))
 	var best := 0.0 if online else SettingsManager.best_for(GameState.seed_value, GameState.cave_size)
 	if best > 0.0:

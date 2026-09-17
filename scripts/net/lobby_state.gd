@@ -41,6 +41,8 @@ var seed_value: int = 0
 var cave_size: int = 1
 var bot_skill: int = 1
 var move_regen: bool = false
+## ART-012: environment, a CaveTheme id. Visual only.
+var theme_id: String = "stone_age"
 ## Mixed Race: a human who drops mid-race is taken over by a fresh bot that knows nothing.
 ## Online Race: they are marked disconnected and the race continues without them.
 var replace_disconnected_with_bot: bool = true
@@ -232,6 +234,7 @@ func snapshot() -> Dictionary:
 		"code": code, "mode": mode, "host_id": host_id, "total_slots": total_slots,
 		"slots": slots, "seed": seed_value, "cave_size": cave_size, "bot_skill": bot_skill,
 		"move_regen": move_regen, "replace_disconnected": replace_disconnected_with_bot,
+		"theme": theme_id,
 		"in_match": in_match, "start_problem": start_problem(),
 	}
 

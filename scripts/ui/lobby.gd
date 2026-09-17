@@ -7,6 +7,7 @@ const SKILLS: Array[String] = ["Easy", "Normal", "Hard"]
 var _bots := 2
 var _skill_buttons: Array[Button] = []
 var _size_buttons: Array[Button] = []
+var _theme_buttons: Array[Button] = []
 var _bot_label: Label
 var _seed_edit: LineEdit
 
@@ -56,6 +57,16 @@ func _ready() -> void:
 		_size_buttons.append(b)
 	inner.add_child(size_row)
 
+	var theme_row := HBoxContainer.new()
+	theme_row.add_theme_constant_override("separation", 10)
+	theme_row.add_child(_fixed(UiKit.label("Environment", 22), 140))
+	for id: String in CaveTheme.IDS:
+		var b := UiKit.button(CaveTheme.by_id(id).display_name, func() -> void: _set_theme(id), 118)
+		b.toggle_mode = true
+		theme_row.add_child(b)
+		_theme_buttons.append(b)
+	inner.add_child(theme_row)
+
 	var regen_row := HBoxContainer.new()
 	regen_row.add_theme_constant_override("separation", 14)
 	regen_row.add_child(_fixed(UiKit.label("Move regen", 22), 140))
@@ -94,6 +105,7 @@ func _ready() -> void:
 	_set_bots(_bots)
 	_set_skill(GameState.bot_skill)
 	_set_cave_size(GameState.cave_size)
+	_set_theme(GameState.theme_id)
 	start.grab_focus.call_deferred()
 
 
@@ -111,6 +123,12 @@ func _set_skill(i: int) -> void:
 	GameState.bot_skill = i
 	for k in _skill_buttons.size():
 		_skill_buttons[k].set_pressed_no_signal(k == i)
+
+
+func _set_theme(id: String) -> void:
+	GameState.theme_id = id if id in CaveTheme.IDS else "stone_age"
+	for k in _theme_buttons.size():
+		_theme_buttons[k].set_pressed_no_signal(CaveTheme.IDS[k] == GameState.theme_id)
 
 
 func _set_cave_size(i: int) -> void:

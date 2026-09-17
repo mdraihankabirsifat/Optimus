@@ -7,7 +7,11 @@ six cardinal gravities, the protected vacuum-180 rule, a seeded solvable cave, a
 know what they have discovered. Offline Bot Race must keep working with no network.
 
 
-1. ENVIRONMENT MODES (in this order, each only once the previous one is stable)
+1. ENVIRONMENT MODES
+
+Built in the jam as data (scripts/cave/cave_theme.gd): each environment sets materials,
+lighting, fog, ambience pitch and one signature prop. What remains is giving each its own
+decor set, hazards and sound, in this order:
 
 1.1 Jungle mode
     - Lift every Stone Age colour, material, light and decor choice out of cave_builder.gd into a

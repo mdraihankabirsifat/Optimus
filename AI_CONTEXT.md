@@ -51,7 +51,7 @@ These came from the team's design document. Do not alter them without an explici
 | Offline mode | `GameWorld.net_role == ""`. Never calls `NetManager`. This is the judging fallback. |
 | Rooms | Each server race runs in its own `SubViewport` world; group lookups go through `WorldScope`. |
 | Solvability | Built solvable by construction **and** checked by `CaveValidator` over (cell, gravity, Moves). |
-| Art | Stone Age only. Jungle / Dark Cave / City Drain are future work (`future_implementation_suggestion.txt`). |
+| Art | `CaveTheme` data: Stone Age, Jungle, Dark Cave, City Drain. Visual only; generation never reads it. |
 
 ## Current state (17 Sept, commit after 48b93d5)
 
@@ -67,8 +67,10 @@ Race) → lobby → race → results → rematch or back to the room, with no ed
 - Settings: volumes, sensitivity, invert Y, fullscreen, window size, quality, key remapping.
 - Windows exe verified as game and as dedicated server on the dev machine. Web export builds.
 
-Not done: Render deployment (needs an account), bots using 90° wall-walks, extra environment
-themes, the video, itch.io submission, a clean-machine Windows test, a browser test of the web
+Also built: bots plan over all six gravities (wall-walks when they save a Move) and four
+environments picked in the lobby.
+
+Not done: Render deployment (needs an account), the video, itch.io submission, a clean-machine Windows test, a browser test of the web
 build after networking.
 
 Check `docs/TASK_BOARD.md` for detail and `docs/TESTING.md` for the latest test results.

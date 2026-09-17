@@ -24,6 +24,7 @@ First to the hidden amber pillar wins.
 
 - Gravity-relative first-person movement, 90° and 180° Gravity Moves on any surface or mid-air
 - Seeded procedural cave: loops, branches, dead ends, shafts, landmarks, 3 sizes, daily seed
+- Four environments: Stone Age, Jungle, Dark Cave (carry a lamp), City Drain. Same seed, same cave in each
 - Gravity-aware solvability: every cave is proven reachable within 5 Moves, no loot needed
 - Hazards: fire, pistons, spiders, crumbling floors, wind; boost pads
 - Mystery boxes: Heart Refill, Move Refill, speed, shield, Second Chance, penalties, rare clues
@@ -129,6 +130,7 @@ godot --headless res://tests/test_match.tscn
 godot --headless res://tests/test_bot.tscn
 godot --headless res://tests/test_flow.tscn
 godot --headless res://tests/test_wallwalk.tscn
+godot --headless res://tests/test_themes.tscn
 godot --headless res://tests/test_net_lobby.tscn
 godot --headless res://tests/test_net_sim.tscn
 godot --headless res://tests/test_net.tscn         # real server + two clients over WebSocket
@@ -160,7 +162,7 @@ docs/            CORE_MECHANICS, ARCHITECTURE, NETWORKING, CAVE_GENERATION, TEST
 - Bots turn onto walls only when it saves a Move, which is rare, so most bot Moves are 180° flips.
 - The player capsule dips about 0.3 units into the floor mid-rotation; it corrects on completion.
 - Decor (stalagmites, crystals) has no collision.
-- Jungle, Dark Cave and City Drain environments are not built; Stone Age is the only environment.
+- Environments change the look only. Stone Age is the most polished; Jungle, Dark Cave and City Drain reuse its decor with new materials, lighting and one signature prop each.
 - The Windows build has been run on a development machine, not yet on a clean one.
 
 ## Credits and AI

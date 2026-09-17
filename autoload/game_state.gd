@@ -15,6 +15,8 @@ var bot_skill: int = 0
 var cave_size: int = 1
 ## AXIS-010: slow Move regeneration, off by default.
 var move_regen: bool = false
+## ART-012: environment for the next offline race, a CaveTheme id. Visual only.
+var theme_id: String = "stone_age"
 ## Set by the lobby so GameWorld knows to read this state instead of its export defaults.
 ## Test harnesses that instantiate game_world.tscn directly never set it.
 var launched_from_menu: bool = false

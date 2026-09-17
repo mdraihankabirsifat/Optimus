@@ -148,8 +148,8 @@ func _build_connect() -> void:
 	_url_edit.placeholder_text = "ws://127.0.0.1:8910  or  wss://your-server.onrender.com"
 	grid.add_child(_url_edit)
 
-	var hint := UiKit.label("Run a local server with  godot --headless --path . res://scenes/net/server.tscn  "
-		+ "(see README). A sleeping free Render server can take up to a minute to wake.", 16, UiKit.TEXT_DIM)
+	var hint := UiKit.label("Start a local server with  SixWaysDown.exe --headless -- --server  "
+		+ "(or from source: godot --headless --path . -- --server). A sleeping free Render server can take up to a minute to wake.", 16, UiKit.TEXT_DIM)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size = Vector2(760, 0)
 	_body.add_child(hint)
@@ -337,6 +337,16 @@ func _build_host_controls(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) ->
 		sizes.append(String(p["name"]))
 	cfg.add_child(_choice_row("Cave size", sizes, int(lobby["cave_size"]), "cave_size"))
 
+	var theme_row := HBoxContainer.new()
+	theme_row.add_theme_constant_override("separation", 6)
+	theme_row.add_child(_fixed(UiKit.label("Environment", 19), 150))
+	for id: String in CaveTheme.IDS:
+		var b := UiKit.button(CaveTheme.by_id(id).display_name, func() -> void: NetManager.host_action("theme", id), 90)
+		b.toggle_mode = true
+		b.set_pressed_no_signal(String(lobby.get("theme", "stone_age")) == id)
+		theme_row.add_child(b)
+	cfg.add_child(theme_row)
+
 	var seed_row := HBoxContainer.new()
 	seed_row.add_theme_constant_override("separation", 8)
 	seed_row.add_child(_fixed(UiKit.label("Cave seed", 19), 150))
@@ -368,6 +378,7 @@ func _build_guest_view(cfg: VBoxContainer, lobby: Dictionary, mixed: bool) -> vo
 	var lines := [
 		"Mode:  %s" % ("humans and bots" if mixed else "humans only"),
 		"Cave:  %s  ·  seed %d" % [size_name, int(lobby["seed"])],
+		"Environment:  %s" % CaveTheme.by_id(String(lobby.get("theme", "stone_age"))).display_name,
 		"Bot skill:  %s" % SKILLS[int(lobby["bot_skill"])] if mixed else "",
 		"Move regen:  %s" % ("on" if lobby["move_regen"] else "off"),
 		"If someone disconnects:  %s" % ("a bot takes over" if lobby["replace_disconnected"] else "they are out"),

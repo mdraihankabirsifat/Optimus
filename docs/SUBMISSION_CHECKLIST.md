@@ -61,6 +61,7 @@ produce some automatically; the rest are quickest by hand.
 8. **Online lobby** — room code, 2 humans + 2 bots, colours, ready states.
 9. **Main menu** with the logo (cover image source).
 10. **Discovered-only map (M)** — only visited cells, no exit.
+11. **The four environments** — the same corridor in each (`godot res://tests/theme_shot.tscn`).
 
 ## 60-90 second video shot list
 
@@ -111,6 +112,7 @@ exit), the major mechanics, and the theme connection.
 > - **Online Race** — 2-5 humans with a room code
 > - **Mixed Race** — humans and bots together; fill empty slots with bots
 > - Every cave is seeded and proven solvable within your five Moves
+> - Four environments: Stone Age, Jungle, Dark Cave and City Drain
 > - Ghost of your best run, daily cave, three cave sizes, three bot skills
 >
 > **Controls:** Mouse look · WASD walk · Shift sprint · Space jump · G+WASD turn 90° · G+Space flip 180° ·
@@ -137,4 +139,4 @@ local-multiplayer, godot, game-jam · **Engine:** Godot · **Platforms:** Window
 - Stalagmites and crystals have no collision.
 - Online: a free Render server can take up to a minute to wake; a dropped player cannot rejoin a race
   already running.
-- Jungle, Dark Cave and City Drain environments are planned, not built.
+- Jungle, Dark Cave and City Drain reuse Stone Age decor with their own materials, light and one signature prop.

@@ -95,11 +95,13 @@ func stop_music() -> void:
 	_music_tween.tween_callback(_music.stop)
 
 
-func play_ambience() -> void:
+## `pitch` and `volume_offset_db` let an environment colour the same ambience bed.
+func play_ambience(pitch: float = 1.0, volume_offset_db: float = 0.0) -> void:
+	_ambience.pitch_scale = pitch
+	_ambience.volume_db = -10.0 + volume_offset_db
 	if _ambience.playing:
 		return
 	_ambience.stream = _library.get("ambience")
-	_ambience.volume_db = -10.0
 	_ambience.play()
 
 

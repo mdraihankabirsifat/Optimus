@@ -23,6 +23,10 @@ const COLOUR_CEILING := Color(0.34, 0.39, 0.52)
 const COLOUR_WALL := Color(0.46, 0.45, 0.43)
 const COLOUR_FINISH := Color(1.0, 0.68, 0.22)
 
+## ART-012: the environment. Colours, stone, decor materials, lights and signature props all
+## come from here; the geometry, hazards and boxes never depend on it.
+var theme: CaveTheme = CaveTheme.stone_age()
+
 var _floor_slabs: Array[Transform3D] = []
 var _ceiling_slabs: Array[Transform3D] = []
 var _wall_slabs: Array[Transform3D] = []
@@ -54,9 +58,9 @@ func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 	root.name = "Cave"
 	parent.add_child(root)
 
-	root.add_child(_make_batch("FloorBatch", _floor_slabs, COLOUR_FLOOR, 0.18))
-	root.add_child(_make_batch("CeilingBatch", _ceiling_slabs, COLOUR_CEILING, 0.18))
-	root.add_child(_make_batch("WallBatch", _wall_slabs, COLOUR_WALL, 0.14))
+	root.add_child(_make_batch("FloorBatch", _floor_slabs, theme.floor_colour, 0.18))
+	root.add_child(_make_batch("CeilingBatch", _ceiling_slabs, theme.ceiling_colour, 0.18))
+	root.add_child(_make_batch("WallBatch", _wall_slabs, theme.wall_colour, 0.14))
 	root.add_child(_make_collision())
 	root.add_child(_make_finish(graph))
 	_add_lights(graph, root)
@@ -66,6 +70,7 @@ func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 		_add_spawn_gates(graph, root)
 		_stage_finish(graph, root)
 		_stage_shafts(graph, root)
+		_add_signature_props(graph, root)
 
 
 ## Pads, wind, pistons, spiders, crumbling covers, shortcut markers and landmarks.
@@ -356,28 +361,27 @@ func _add_features(graph: CaveGraph, root: Node3D, match_seed: int) -> void:
 
 func _decor_kit() -> Dictionary:
 	var rock := StandardMaterial3D.new()
-	rock.albedo_color = Color(0.40, 0.34, 0.28)
+	rock.albedo_color = theme.rock_colour
 	rock.roughness = 1.0
 	var moss := StandardMaterial3D.new()
-	moss.albedo_color = Color(0.25, 0.42, 0.18)
+	moss.albedo_color = theme.moss_colour
 	moss.emission_enabled = true
-	moss.emission = Color(0.2, 0.5, 0.15)
-	moss.emission_energy_multiplier = 0.25
+	moss.emission = theme.moss_colour.lightened(0.1)
+	moss.emission_energy_multiplier = theme.moss_glow
 	var ember := _glow(Color(0.9, 0.35, 0.08), 1.3)
 	var wood := StandardMaterial3D.new()
 	wood.albedo_color = Color(0.3, 0.18, 0.09)
-	var crystals: Array[StandardMaterial3D] = [
-		_glow(Color(0.25, 0.6, 0.85), 0.8), _glow(Color(0.55, 0.3, 0.85), 0.8),
-		_glow(Color(0.3, 0.8, 0.45), 0.7), _glow(Color(0.85, 0.35, 0.55), 0.7),
-	]
+	var crystals: Array[StandardMaterial3D] = []
+	for colour: Color in theme.crystal_colours:
+		crystals.append(_glow(colour, 0.8))
 	var crack := StandardMaterial3D.new()
 	crack.albedo_color = Color(0.08, 0.06, 0.05)
 	var streaks: Array[StandardMaterial3D] = [
 		_glow(Color(0.35, 0.55, 0.5), 0.25), _glow(Color(0.6, 0.4, 0.25), 0.2), _glow(Color(0.5, 0.5, 0.6), 0.2),
 	]
 	return {"rock": rock, "moss": moss, "ember": ember, "wood": wood,
-		"flame": _glow(Color(1.0, 0.55, 0.15), 1.6), "crystals": crystals,
-		"torch_cone": _beam_material(Color(1.0, 0.6, 0.25), 0.02), "crack": crack, "streaks": streaks}
+		"flame": _glow(theme.flame_colour, 1.6), "crystals": crystals,
+		"torch_cone": _beam_material(theme.torch_light_colour, 0.02), "crack": crack, "streaks": streaks}
 
 
 func _glow(colour: Color, energy: float) -> StandardMaterial3D:
@@ -630,7 +634,7 @@ func _make_batch(name: String, slabs: Array[Transform3D], colour: Color,
 func _stone_material(colour: Color, uv_scale: float) -> StandardMaterial3D:
 	var noise := FastNoiseLite.new()
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	noise.frequency = 0.02
+	noise.frequency = theme.stone_frequency
 	noise.fractal_octaves = 5
 
 	# Raw noise runs the full 0-1 range, which multiplies the albedo down to black in the
@@ -649,11 +653,11 @@ func _stone_material(colour: Color, uv_scale: float) -> StandardMaterial3D:
 
 	var bump_noise := FastNoiseLite.new()
 	bump_noise.noise_type = FastNoiseLite.TYPE_CELLULAR
-	bump_noise.frequency = 0.045
+	bump_noise.frequency = theme.bump_frequency
 	var bump := NoiseTexture2D.new()
 	bump.noise = bump_noise
 	bump.as_normal_map = true
-	bump.bump_strength = 6.0
+	bump.bump_strength = theme.bump_strength
 	bump.width = 256
 	bump.height = 256
 	bump.seamless = true
@@ -667,7 +671,7 @@ func _stone_material(colour: Color, uv_scale: float) -> StandardMaterial3D:
 	mat.normal_scale = 0.7
 	mat.uv1_scale = Vector3(uv_scale, uv_scale, uv_scale)
 	mat.uv1_triplanar = true
-	mat.roughness = 0.95
+	mat.roughness = theme.roughness
 	return mat
 
 
@@ -739,7 +743,88 @@ func _add_lights(graph: CaveGraph, root: Node3D) -> void:
 	for i in range(0, graph.spine.size(), step):
 		var light := OmniLight3D.new()
 		light.position = cell_to_world(graph.spine[i]) + Vector3(0.0, 1.5, 0.0)
-		light.light_energy = 2.4
+		light.light_energy = theme.route_light_energy
 		light.omni_range = CELL_SIZE * 1.8
-		light.light_color = Color(1.0, 0.92, 0.78)
+		light.light_color = theme.route_light_colour
 		holder.add_child(light)
+
+
+## ART-012: the one prop each environment adds on top of the shared decor. Placement is a
+## pure function of the cell, never random, so every machine dresses the cave identically.
+func _add_signature_props(graph: CaveGraph, root: Node3D) -> void:
+	if theme.signature_props == "":
+		return
+	var holder := Node3D.new()
+	holder.name = "ThemeProps"
+	root.add_child(holder)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = theme.prop_colour
+	mat.roughness = 0.9
+	if theme.prop_glow > 0.0:
+		mat.emission_enabled = true
+		mat.emission = theme.prop_colour
+		mat.emission_energy_multiplier = theme.prop_glow
+	var glow_points: Array[Vector3] = []
+	for c: Vector3i in graph.sorted_cells():
+		if c == graph.spawn_cell or c == graph.finish_cell:
+			continue
+		var h: int = absi(hash(Vector4i(c.x, c.y, c.z, 91)))
+		var centre := cell_to_world(c)
+		match theme.signature_props:
+			"roots":
+				if h % 3 != 0 or graph.is_linked(c, CaveGraph.DIR_UP):
+					continue
+				for k in 3 + h % 3:
+					var strand_len := 1.2 + float((h >> (k * 3)) % 5) * 0.35
+					var strand := CylinderMesh.new()
+					strand.top_radius = 0.09
+					strand.bottom_radius = 0.02
+					strand.height = strand_len
+					strand.radial_segments = 5
+					var x := float((h >> (k * 2)) % 7 - 3) * 0.8
+					var z := float((h >> (k * 2 + 5)) % 7 - 3) * 0.8
+					var node := _mesh(strand, mat, centre + Vector3(x, CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - strand_len * 0.5, z))
+					node.rotation = Vector3(0.12 * float(k % 3 - 1), 0.0, 0.1 * float((k + 1) % 3 - 1))
+					holder.add_child(node)
+			"glowworms":
+				if h % 2 != 0 or graph.is_linked(c, CaveGraph.DIR_UP):
+					continue
+				for k in 14:
+					var hk: int = absi(hash(Vector2i(h, k)))
+					glow_points.append(centre + Vector3(float(hk % 70) / 10.0 - 3.5,
+						CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.08, float((hk / 70) % 70) / 10.0 - 3.5))
+			"pipes":
+				if h % 2 != 0:
+					continue
+				for wall: int in [CaveGraph.DIR_PLUS_X, CaveGraph.DIR_MINUS_X, CaveGraph.DIR_PLUS_Z, CaveGraph.DIR_MINUS_Z]:
+					if graph.is_linked(c, wall):
+						continue
+					var n := Vector3(CaveGraph.DIRS[wall])
+					var pipe := CylinderMesh.new()
+					pipe.top_radius = 0.28
+					pipe.bottom_radius = 0.28
+					pipe.height = CELL_SIZE
+					pipe.radial_segments = 10
+					var node := _mesh(pipe, mat, centre + n * (CELL_SIZE * 0.5 - WALL_THICKNESS * 0.5 - 0.35)
+						+ Vector3(0, -CELL_SIZE * 0.5 + 3.0, 0))
+					# Lie along the wall: X walls run pipes along Z, Z walls along X.
+					node.rotation = Vector3(PI * 0.5, 0, 0) if absf(n.x) > 0.5 else Vector3(0, 0, PI * 0.5)
+					holder.add_child(node)
+					break
+	if not glow_points.is_empty():
+		var dot := SphereMesh.new()
+		dot.radius = 0.05
+		dot.height = 0.1
+		dot.radial_segments = 4
+		dot.rings = 2
+		dot.material = mat
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = dot
+		mm.instance_count = glow_points.size()
+		for i in glow_points.size():
+			mm.set_instance_transform(i, Transform3D(Basis(), glow_points[i]))
+		var inst := MultiMeshInstance3D.new()
+		inst.name = "GlowWorms"
+		inst.multimesh = mm
+		holder.add_child(inst)
