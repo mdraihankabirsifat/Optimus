@@ -247,7 +247,7 @@ static func controls_table() -> Control:
 	var rows := [
 		["Look", "Mouse"],
 		["Walk", "%s %s %s %s" % [key_for("move_forward"), key_for("move_left"), key_for("move_back"), key_for("move_right")]],
-		["Sprint", key_for("sprint")],
+		["Sprint (only with a Sprint Gift, 5 s)", key_for("sprint")],
 		["Jump (tap for a hop)", key_for("jump")],
 		["Gravity Move 90 degrees", "%s + walk key" % key_for("gravity_mod")],
 		["Gravity Move 180 degrees", "%s + %s" % [key_for("gravity_mod"), key_for("jump")]],
@@ -269,6 +269,8 @@ static func controls_table() -> Control:
 
 ## "Normal" or "Rush, 5 minutes" -- one wording for lobbies, loading and results.
 static func ruleset_text(ruleset: String, rush_seconds: int) -> String:
+	if ruleset == AppConfig.RULESET_BATTLE:
+		return "Battle, %d minutes (free-for-all, most kills wins)" % (rush_seconds / 60)
 	if ruleset == AppConfig.RULESET_RUSH:
 		return "Rush, %d minutes" % (rush_seconds / 60)
 	return "Normal, no time limit"
@@ -342,7 +344,7 @@ static func _option_row(text: String, property: String, names: Array[String]) ->
 
 const ACTION_LABELS := {
 	"move_forward": "Forward", "move_back": "Back", "move_left": "Left", "move_right": "Right",
-	"jump": "Jump / flip", "sprint": "Sprint", "gravity_mod": "Gravity Move",
+	"jump": "Jump / flip", "sprint": "Sprint (with a Sprint Gift)", "gravity_mod": "Gravity Move",
 	"interact": "Open box", "toggle_map": "Map", "exchange_heart": "Heart for a Move",
 	"duel_fire": "Duel: fire", "duel_lock": "Duel: Axis Lock",
 }

@@ -74,7 +74,7 @@ func _process(delta: float) -> void:
 	var planar_speed := planar.length()
 
 	var want := base_fov
-	if _player.sprint_input and planar_speed > AppConfig.WALK_SPEED + 0.5:
+	if _player.is_sprinting() and planar_speed > AppConfig.WALK_SPEED + 0.5:
 		want += sprint_fov_add
 	if _player.speed_multiplier > 1.05:
 		want += 3.0

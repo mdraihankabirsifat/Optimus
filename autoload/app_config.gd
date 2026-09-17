@@ -24,7 +24,13 @@ const MATCH_COUNTDOWN_SECONDS := 3
 ## Normal: the full cave and no cave time limit at all. Rush: an easier cave and a clock.
 const RULESET_NORMAL := "normal"
 const RULESET_RUSH := "rush"
-const RULESETS: Array[String] = ["normal", "rush"]
+## Master Prompt 4: Battle Timer Mode -- online/mixed free-for-all, kills for score, no exit.
+const RULESET_BATTLE := "battle"
+const RULESETS: Array[String] = ["normal", "rush", "battle"]
+## Offline Bot Race offers only the racing rulesets; Battle needs an arena.
+const RACING_RULESETS: Array[String] = ["normal", "rush"]
+const BATTLE_RESPAWN_DELAY := 3.0
+const BATTLE_SPAWN_PROTECTION := 2.0
 ## The only Rush lengths a lobby may pick, in seconds.
 const RUSH_DURATIONS: Array[int] = [180, 300, 480]
 const RUSH_DEFAULT := 300
@@ -45,6 +51,13 @@ const CAVE_TUNNEL_WIDTH := 4.0
 # --- Movement -----------------------------------------------------------------
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 9.5
+## Master Prompt 4: Sprint only works inside a Sprint Gift's window. Picking one up opens
+## (or refreshes to) exactly this long; gifts grow back after SPRINT_GIFT_RESPAWN.
+const SPRINT_GIFT_TIME := 5.0
+const SPRINT_GIFT_RESPAWN := 15.0
+## One gift per this many cells, never fewer than 3, spread at least this many hops apart.
+const SPRINT_GIFT_CELLS_PER := 12
+const SPRINT_GIFT_MIN_HOPS := 4
 const ACCELERATION := 12.0
 const FRICTION := 14.0
 const JUMP_VELOCITY := 8.0

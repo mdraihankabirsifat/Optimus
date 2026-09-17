@@ -70,7 +70,7 @@ func _process(delta: float) -> void:
 
 	lines.append_array([
 		"",
-		"%s %s %s %s move   %s sprint   %s jump" % [UiKit.binding_text("move_forward"), UiKit.binding_text("move_left"),
+		"%s %s %s %s move   %s sprint (with gift)   %s jump" % [UiKit.binding_text("move_forward"), UiKit.binding_text("move_left"),
 			UiKit.binding_text("move_back"), UiKit.binding_text("move_right"), UiKit.binding_text("sprint"), UiKit.binding_text("jump")],
 		"%s + move = 90 degree gravity shift" % UiKit.binding_text("gravity_mod"),
 		"%s = 180 degree inversion" % UiKit.chord_text("gravity_mod", "jump"),

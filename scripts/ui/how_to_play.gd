@@ -16,7 +16,7 @@ func _ready() -> void:
 			+ "and the duel decides the [b]Champion[/b].",
 		"",
 		"[font_size=24]%sMove[/color][/font_size]" % E,
-		"[b]Mouse[/b] look    [b]%s %s %s %s[/b] walk    [b]%s[/b] sprint    [b]%s[/b] jump (tap for a hop)    " % [k("move_forward"), k("move_left"), k("move_back"), k("move_right"), k("sprint"), k("jump")]
+		"[b]Mouse[/b] look    [b]%s %s %s %s[/b] walk    [b]%s[/b] sprint (needs a Sprint Gift)    [b]%s[/b] jump (tap for a hop)    " % [k("move_forward"), k("move_left"), k("move_back"), k("move_right"), k("sprint"), k("jump")]
 			+ "[b]%s[/b] open a mystery box    [b]%s[/b] trade a heart for a Move" % [k("interact"), k("exchange_heart")],
 		"[b]%s[/b] map    [b]%s %s %s[/b] emotes    [b]%s[/b] pause    [b]%s[/b] / [b]%s[/b] after you finish: next racer / end the race" % [k("toggle_map"), k("emote_1"), k("emote_2"), k("emote_3"), k("pause"), k("spectate_next"), k("skip_wait")],
 		"",
@@ -49,6 +49,11 @@ func _ready() -> void:
 			+ "or a slow, or a drained Move. Very rarely, a [b]clue[/b] points roughly toward the exit.",
 		"Dead ends hide boxes more often than corridors do.",
 		"",
+		"[font_size=24]%sSprint Gifts[/color][/font_size]" % E,
+		"[b]%s does nothing on its own.[/b] Walk into a glowing green [b]SPRINT[/b] gift and for [b]5 seconds[/b] holding %s sprints. " % [k("sprint"), k("sprint")]
+			+ "Let go and you walk; press again and you sprint, while the 5 seconds keep counting. "
+			+ "Another gift in that time refreshes it to 5 seconds (it never stacks). Gifts grow back after a while.",
+		"",
 		"[font_size=24]%sTrading a heart for a Move[/color][/font_size]" % E,
 		"Out of Moves? Press [b]%s[/b] to trade [b]one full heart[/b] for [b]one Move[/b]. " % k("exchange_heart")
 			+ "You need a whole heart (half a heart is not enough) and room for another Move.",
@@ -56,6 +61,17 @@ func _ready() -> void:
 			+ "You must press twice to do it, and [b]the countdown cannot be cancelled[/b] -- not even by a Heart Refill. "
 			+ "Reach the exit in time and you qualify as normal.",
 		"When the lobby turns on [b]Move regen[/b] (+1 Move every 25 s) trading hearts is switched off.",
+		"",
+		"[font_size=24]%sBattle Mode[/color][/font_size]" % S,
+		"An [b]online or mixed room[/b] can play [b]Battle[/b] instead of a race: [b]3, 5 or 8 minutes[/b] in a cave with "
+			+ "[b]no exit[/b]. Everyone starts far apart. Hit a rival with the [b]Pulse Blaster[/b] ([b]%s[/b]) until their hearts "
+			% UiKit.binding_text("duel_fire")
+			+ "are gone and you score [b]one kill[/b].",
+		"Losing your hearts is [b]not elimination[/b]. You come back [b]3 seconds[/b] later, far from whoever got you, with "
+			+ "full hearts, full Moves and [b]2 seconds[/b] of spawn protection. The cave can kill you too -- that costs you a "
+			+ "death and gives nobody a point.",
+		"[b]Most kills when the clock stops wins.[/b] Level on kills? Fewer deaths wins; still level, whoever got there first. "
+			+ "Dead level all the way is a draw. There is no qualifying, no Freedom Duel, no Champion and no heart trading in Battle.",
 		"",
 		"[font_size=24]%sNormal and Rush[/color][/font_size]" % S,
 		"[b]Normal[/b]: the full cave -- winding tunnels, loops, dead ends -- and [b]no time limit[/b]. The clock counts up.",

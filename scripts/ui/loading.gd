@@ -16,6 +16,7 @@ const TIPS := [
 	"Bots know only what they have seen. They get lost too.",
 	"Out of Moves? Mystery boxes can refill one. So can Move regen, if the lobby turned it on.",
 	"No Move regen? {exchange_heart} trades a full heart for a Move. Your last heart gives you 20 seconds.",
+	"{sprint} only sprints after you grab a green Sprint Gift, and only for 5 seconds.",
 ]
 
 var _leaving := false

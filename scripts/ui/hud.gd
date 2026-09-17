@@ -27,6 +27,7 @@ var _banner_label: Label
 ## Prompt 3: the last-heart deadline and the heart-trade hint.
 var _grace_label: Label
 var _exchange_hint: Label
+var _gift_label: Label
 var _toasts: VBoxContainer
 var _preview: Dictionary = {}
 
@@ -74,6 +75,7 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 	_banner_label = _anchored_label(Control.PRESET_CENTER_BOTTOM, 22, Vector2(0, -70))
 	_grace_label = _anchored_label(Control.PRESET_CENTER_TOP, 30, Vector2(0, 96), UiKit.DANGER)
 	# Sits in the left column above the racer list; the list starts below it.
+	_gift_label = _anchored_label(Control.PRESET_CENTER_BOTTOM, 24, Vector2(0, -118), Color(0.55, 1.0, 0.6))
 	_exchange_hint = _anchored_label(Control.PRESET_TOP_LEFT, 16, Vector2(20, 176), UiKit.SKY)
 	_banner_label.add_theme_constant_override("outline_size", 6)
 
@@ -120,6 +122,11 @@ func setup(world: Node, player: PlayerController, match_controller: MatchControl
 	_player.health.shield_absorbed.connect(func() -> void:
 		_flash = Color(0.6, 0.9, 1.0, 0.3)
 		toast("Shield absorbed the hit", UiKit.SKY))
+	_player.sprint_gift_changed.connect(func(active: bool) -> void:
+		if active:
+			AudioManager.play_sfx("speed", -4.0)
+		else:
+			toast("Sprint Gift used up", UiKit.TEXT_DIM, 1.5))
 	_player.health.last_heart_started.connect(func(_s: float) -> void:
 		_flash = Color(1.0, 0.1, 0.05, 0.4)
 		AudioManager.play_sfx("heartbeat")
@@ -230,7 +237,7 @@ func _process(delta: float) -> void:
 
 	if _match.cave_time_limit > 0.0 and not _match.cave_expired:
 		var left := maxf(0.0, _match.cave_time_limit - _match.elapsed)
-		_timer_label.text = "RUSH  %s" % MatchController.format_time(left)
+		_timer_label.text = "%s  %s" % ["BATTLE" if _match.battle != null else "RUSH", MatchController.format_time(left)]
 		_timer_label.add_theme_color_override("font_color", UiKit.DANGER if left <= 30.0 else UiKit.EMBER)
 	else:
 		_timer_label.text = "Elapsed  %s" % MatchController.format_time(_match.elapsed)
@@ -259,6 +266,11 @@ func _process(delta: float) -> void:
 		_grace_label.modulate = Color(1, 1, 1, pulse)
 	else:
 		_grace_label.text = ""
+	if _player.sprint_gift_left > 0.0:
+		_gift_label.text = "SPRINT GIFT  %.1fs   hold %s to sprint" % [_player.sprint_gift_left, UiKit.binding_text("sprint")]
+		_gift_label.modulate.a = 1.0 if _player.sprint_gift_left > 1.5 else 0.55 + 0.45 * sin(_time * 14.0)
+	else:
+		_gift_label.text = ""
 	_exchange_hint.text = ""
 	if _exchange_allowed() and _player.gravity.charges < AppConfig.MOVE_CHARGES_MAX and h.hearts >= AppConfig.HEART_EXCHANGE_COST:
 		if _player.gravity.charges == 0:
@@ -300,6 +312,10 @@ func _update_preview() -> void:
 ## UI-011: who is still out there. Finished racers show their place and time; racers still
 ## searching are listed with their hearts, never with any hint of how close they are.
 func _update_racer_list() -> void:
+	if _match.battle != null:
+		# The Battle HUD's scoreboard takes this place.
+		_racer_list.visible = false
+		return
 	var rows: Array = []
 	for r: Dictionary in _match.racers:
 		rows.append(r)

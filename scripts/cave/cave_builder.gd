@@ -97,10 +97,51 @@ func build(graph: CaveGraph, parent: Node3D, match_seed: int = 0) -> void:
 		_add_features(graph, root, match_seed)
 		_add_gameplay_features(graph, root)
 		_add_spawn_gates(graph, root)
+		_add_sprint_gifts(graph, root, match_seed)
 		_stage_finish(graph, root)
 		_stage_shafts(graph, root)
 		_add_signature_props(graph, root)
 	_add_rock_dressing(graph, root)
+
+
+## Master Prompt 4: Sprint Gifts. Chosen from the graph and the match seed only, so every
+## machine places the same gifts at the same indices and the cave itself is unchanged.
+## Never in the spawn or exit cell, never where something already stands, never over a hole,
+## and spread out so a racer cannot chain them down one corridor.
+func _add_sprint_gifts(graph: CaveGraph, root: Node3D, match_seed: int) -> void:
+	var taken := {graph.spawn_cell: true, graph.finish_cell: true}
+	for h: Dictionary in graph.hazards:
+		taken[h["cell"]] = true
+	for b: Dictionary in graph.boxes:
+		taken[b["cell"]] = true
+	for f: Dictionary in graph.features:
+		taken[f["cell"]] = true
+	var candidates: Array[Vector3i] = []
+	for c: Vector3i in graph.sorted_cells():
+		if not taken.has(c) and not graph.is_linked(c, CaveGraph.DIR_DOWN):
+			candidates.append(c)
+	candidates.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		var ha: int = absi(hash([a, match_seed, "gift"]))
+		var hb: int = absi(hash([b, match_seed, "gift"]))
+		return ha < hb if ha != hb else (a < b))
+	var want := maxi(3, graph.cell_count() / AppConfig.SPRINT_GIFT_CELLS_PER)
+	var chosen: Array[Vector3i] = []
+	for c: Vector3i in candidates:
+		if chosen.size() >= want:
+			break
+		var far := true
+		var dist := graph.distances_from(c)
+		for other: Vector3i in chosen:
+			if int(dist.get(other, 999)) < AppConfig.SPRINT_GIFT_MIN_HOPS:
+				far = false
+				break
+		if far:
+			chosen.append(c)
+	var holder := Node3D.new()
+	holder.name = "SprintGifts"
+	root.add_child(holder)
+	for i in chosen.size():
+		holder.add_child(SprintGift.create(i, chosen[i]))
 
 
 ## Pads, wind, pistons, spiders, crumbling covers, shortcut markers and landmarks.

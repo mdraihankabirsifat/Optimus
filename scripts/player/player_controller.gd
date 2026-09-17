@@ -36,6 +36,9 @@ var input_enabled: bool = true
 ## guarantees a bot cannot out-accelerate, out-run, or clip past a human.
 var move_input: Vector2 = Vector2.ZERO
 var sprint_input: bool = false
+## Master Prompt 4: seconds left on this racer's Sprint Gift. Sprint only works while > 0.
+var sprint_gift_left: float = 0.0
+signal sprint_gift_changed(active: bool)
 var jump_requested: bool = false
 
 ## World-space velocity pushed onto the racer this frame by wind. Cleared after each move,
@@ -142,6 +145,10 @@ func _physics_process(delta: float) -> void:
 		gravity_armed = false
 
 	_tick_speed_effect(delta)
+	if sprint_gift_left > 0.0:
+		sprint_gift_left = maxf(0.0, sprint_gift_left - delta)
+		if sprint_gift_left <= 0.0:
+			sprint_gift_changed.emit(false)
 
 	var up := gravity.local_up()
 	up_direction = up
@@ -201,7 +208,7 @@ func _apply_planar_movement(planar: Vector3, up: Vector3, delta: float) -> Vecto
 	if duel_dof == 1 and duel_axis != Vector3.ZERO:
 		wish = duel_axis * wish.dot(duel_axis)
 
-	var speed: float = AppConfig.SPRINT_SPEED if sprint_input else AppConfig.WALK_SPEED
+	var speed: float = AppConfig.SPRINT_SPEED if is_sprinting() else AppConfig.WALK_SPEED
 	speed *= speed_multiplier * duel_speed
 
 	if wish.length_squared() > 0.001:
@@ -241,6 +248,20 @@ func _puppet_step(delta: float) -> void:
 ## stands on the world.
 func set_solid(solid: bool) -> void:
 	collision_layer = CaveBuilder.LAYER_RACERS if solid else 0
+
+
+## Sprint needs both: the key held AND an active Sprint Gift. The moment the gift runs out
+## this is false, even with the key still down.
+func is_sprinting() -> bool:
+	return sprint_input and sprint_gift_left > 0.0
+
+
+## A Sprint Gift was picked up: open, or refresh to, exactly SPRINT_GIFT_TIME. Never stacks.
+func grant_sprint_gift() -> void:
+	var was := sprint_gift_left > 0.0
+	sprint_gift_left = AppConfig.SPRINT_GIFT_TIME
+	if not was:
+		sprint_gift_changed.emit(true)
 
 
 ## Jumping is the third degree of freedom in the duel. The cave always allows it.
