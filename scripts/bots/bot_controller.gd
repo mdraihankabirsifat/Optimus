@@ -371,8 +371,27 @@ func _execute_step(cell: Vector3i, target: Vector3i) -> void:
 			_body.move_input = Vector2.ZERO
 		return
 
-	_steer_towards(CaveBuilder.cell_to_world(target))
+	_steer_towards(_doorway_aim(cell, dir_index, CaveBuilder.cell_to_world(target)))
 	_body.sprint_input = skill >= 2 or (skill == 1 and _path.size() >= 3)
+
+
+## Prompt 3: the openings between cells are tunnel-sized (4 units) even out of a 7-unit chamber.
+## A bot that heads straight for the next cell's centre from a corner of a chamber scrapes the
+## frame beside the opening and stalls. Off the centre line, aim at a point ahead ON the line
+## first, so it lines up with the mouth before going through it.
+func _doorway_aim(cell: Vector3i, dir_index: int, target_centre: Vector3) -> Vector3:
+	var dir := Vector3(CaveGraph.DIRS[dir_index])
+	var centre := CaveBuilder.cell_to_world(cell)
+	var rel := _body.global_position - centre
+	var up := _body.gravity.local_up()
+	var lateral := rel - dir * rel.dot(dir)
+	lateral -= up * lateral.dot(up)
+	if lateral.length() < CaveBuilder.TUNNEL_HALF - 1.0:
+		return target_centre
+	var along := rel.dot(dir)
+	# A point on the axis a little ahead, kept inside this cell until lined up.
+	var ahead := clampf(along + 1.5, -CaveBuilder.CELL_SIZE * 0.5, CaveBuilder.CELL_SIZE * 0.5 - 1.5)
+	return centre + dir * ahead + (rel - lateral - dir * rel.dot(dir))
 
 
 ## Distance from `world_target` measured in the plane perpendicular to a grid axis.

@@ -6,17 +6,23 @@ func _ready() -> void:
 	await get_tree().process_frame
 	var s := 1000
 	var secs := 12
+	var rush := 0
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("seed="):
 			s = int(arg.trim_prefix("seed="))
 		if arg.begins_with("secs="):
 			secs = int(arg.trim_prefix("secs="))
+		if arg.begins_with("rush="):
+			rush = int(arg.trim_prefix("rush="))
 	var world: Node3D = load("res://scenes/game/game_world.tscn").instantiate()
 	world.randomise_seed = false
 	world.fixed_seed = s
 	world.bot_count = 4
 	world.duel_enabled = false
 	world.bot_skill = 2
+	if rush > 0:
+		world.ruleset = AppConfig.RULESET_RUSH
+		world.rush_seconds = rush
 	add_child(world)
 	await get_tree().process_frame
 	(world.get("_player") as PlayerController).set_physics_process(false)
