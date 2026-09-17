@@ -277,6 +277,19 @@ static func ruleset_text(ruleset: String, rush_seconds: int) -> String:
 ## Prompt 3: THE one place that turns an action into the text a player reads. Every hint in
 ## the game (box prompt, gravity preview, spectator and duel lines, map, tips, How to Play,
 ## controls table) calls this, so a remap in Settings shows everywhere at once. Keyboard,
+## Whether this platform can map a physical key to the label the player's layout prints.
+## The web and headless display servers cannot, and asking them logs an error every call --
+## and key hints are rebuilt every frame, so that is a steady stream of errors in a browser.
+static var _layout_lookup: int = -1
+
+
+static func _has_layout_lookup() -> bool:
+	if _layout_lookup == -1:
+		var server := DisplayServer.get_name()
+		_layout_lookup = 0 if server == "headless" or server == "web" else 1
+	return _layout_lookup == 1
+
+
 ## mouse and pad bindings; several bindings joined with " / "; nothing bound says so.
 static func binding_text(action: String) -> String:
 	if not InputMap.has_action(action):
@@ -287,9 +300,8 @@ static func binding_text(action: String) -> String:
 		if event is InputEventKey:
 			var key := event as InputEventKey
 			var code := key.physical_keycode if key.physical_keycode != KEY_NONE else key.keycode
-			if key.physical_keycode != KEY_NONE:
-				code = DisplayServer.keyboard_get_keycode_from_physical(key.physical_keycode) \
-					if DisplayServer.get_name() != "headless" else key.physical_keycode
+			if key.physical_keycode != KEY_NONE and _has_layout_lookup():
+				code = DisplayServer.keyboard_get_keycode_from_physical(key.physical_keycode)
 			text = OS.get_keycode_string(code)
 		elif event is InputEventMouseButton:
 			text = {MOUSE_BUTTON_LEFT: "Left mouse", MOUSE_BUTTON_RIGHT: "Right mouse",

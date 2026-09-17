@@ -8,7 +8,7 @@ var _leaving := false
 
 
 func _ready() -> void:
-	# Dedicated server launch: `SixWaysDown.exe --headless -- --server --port=8910`.
+	# Dedicated server launch: `Escave.exe --headless -- --server --port=8910`.
 	# Exported release builds refuse a scene path on the command line, so the flag is read
 	# here, in the main scene, and works the same from source and from an exported build.
 	if "--server" in OS.get_cmdline_user_args():

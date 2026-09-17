@@ -35,6 +35,29 @@ All core automated verification suites were executed against the headless engine
 
 ---
 
+## 1b. Status of this report
+
+**All ten bugs below were fixed on 17 September** (commit `44b79e5` and the one after it), each
+with a test or a measurement:
+
+| Bug | Fix |
+|---|---|
+| 1 Exchange hint overlap | The hint sits above the racer list; the list starts below it |
+| 2 Ghost directory | Created through `DirAccess.open("user://")`, which works when `user://` is sandboxed |
+| 3 Duel keys not rebindable | `duel_fire` and `duel_lock` are remappable, and a rebind keeps the action's mouse button |
+| 4 Leaks | The real leak was unplaced decor nodes in `CaveBuilder._make_decor`. Six races leaked 347 `Node3D`s; object count is now flat across races and exit leaks fell 350 -> 15. Animated materials (fire, boxes, pads) were deliberately left per-instance: sharing them would break their animation |
+| 5 `_restart()` state | Move regen and bot skill now carry into a restart |
+| 6 `_prewarm_effects()` | Guards `is_instance_valid(_player)` after the await |
+| 7 Online clue | `net_apply_open` emits `clue_granted` on the client |
+| 8 Compass vs map | The compass lifts while the map is open |
+| 9 Spider `looking_at` | Skipped when the direction is collinear with world up |
+| 10 Bot yield cycle | Right of way goes to the racer with less left to walk; humans always have it. Physical races 68/80 |
+
+Also from this pass: ART-008 depth fog per environment, a macOS frame-pacing fix, a web-only
+error storm in the key-label lookup, and the game renamed to **Escave**.
+
+---
+
 ## 2. Identified Bugs & Edge-Case Vulnerabilities
 
 ### Bug 1: HUD UI Overlap — Exchange Hint Collides with Racer List

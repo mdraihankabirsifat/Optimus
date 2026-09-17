@@ -1,4 +1,4 @@
-# Six Ways Down
+# Escave
 
 A race through a procedurally generated cave where **gravity is yours alone**.
 Made by Team Optimus for the BUET Robotics Society GameJam, Intra BUET Robo Challenge 2026.
@@ -112,7 +112,7 @@ shows only your own facing, never the exit.
 
 ## Run it
 
-**Exported builds:** `builds/windows/SixWaysDown.exe` (single file), or serve `builds/web/` over HTTP.
+**Exported builds:** `builds/windows/Escave.exe` (single file), or serve `builds/web/` over HTTP.
 
 **From source:** install Godot 4.7.2 (standard build, GL Compatibility renderer).
 
@@ -135,13 +135,13 @@ godot --path .                                             # client 2
 
 In each client: Play, Mixed Race or Online Race, server `ws://127.0.0.1:8910`, Connect. One
 creates a room; the other types its code. With the exported exe:
-`SixWaysDown.exe --headless -- --server --port=8910`.
+`Escave.exe --headless -- --server --port=8910`.
 
 ### Docker and Render
 
 ```bash
-docker build -t six-ways-down-server .
-docker run --rm -p 8910:8910 six-ways-down-server
+docker build -t escave-server .
+docker run --rm -p 8910:8910 escave-server
 ```
 
 Render: New, Blueprint, pick this repository (`render.yaml`), or a Docker web service from the
@@ -153,7 +153,7 @@ caveats: [docs/NETWORKING.md](docs/NETWORKING.md). No secrets are needed or stor
 Needs the 4.7.2 export templates (Editor, Manage Export Templates):
 
 ```bash
-godot --headless --export-release "Windows Desktop" builds/windows/SixWaysDown.exe
+godot --headless --export-release "Windows Desktop" builds/windows/Escave.exe
 godot --headless --export-release "Web" builds/web/index.html
 ```
 

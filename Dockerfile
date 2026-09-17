@@ -1,7 +1,7 @@
-# Six Ways Down -- headless authoritative game server.
+# Escave -- headless authoritative game server.
 #
-# Build:  docker build -t six-ways-down-server .
-# Run:    docker run --rm -p 8910:8910 six-ways-down-server
+# Build:  docker build -t escave-server .
+# Run:    docker run --rm -p 8910:8910 escave-server
 # Client: connect to ws://127.0.0.1:8910 from Play > Online Race.
 #
 # On Render this runs as a Web Service. Render injects PORT and terminates TLS, so players

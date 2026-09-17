@@ -152,7 +152,7 @@ In each game: Play, then Mixed Race (or Online Race), connect to `ws://127.0.0.1
 One creates a room; the other joins with its code. The exported exe works the same way:
 
 ```bash
-SixWaysDown.exe --headless -- --server --port=8910
+Escave.exe --headless -- --server --port=8910
 ```
 
 Release exports refuse a scene path on the command line, which is why `--server` exists.
@@ -160,8 +160,8 @@ Release exports refuse a scene path on the command line, which is why `--server`
 ## Docker
 
 ```bash
-docker build -t six-ways-down-server .
-docker run --rm -p 8910:8910 six-ways-down-server
+docker build -t escave-server .
+docker run --rm -p 8910:8910 escave-server
 ```
 
 Verified on this project: image builds, server starts, two Windows clients raced through it.
@@ -172,10 +172,10 @@ Not deployed by the team yet: it needs a Render account. Steps:
 
 1. Push the repository to GitHub (done).
 2. Render dashboard: New, Blueprint, pick the repository. `render.yaml` creates a free Docker
-   web service named `six-ways-down-server`. (Or: New, Web Service, Docker runtime, root
+   web service named `escave-server`. (Or: New, Web Service, Docker runtime, root
    Dockerfile, no start command.)
 3. Render sets `PORT` and terminates TLS. The server listens on `PORT` automatically.
-4. When it is live, players connect to `wss://six-ways-down-server.onrender.com`.
+4. When it is live, players connect to `wss://escave-server.onrender.com`.
 5. Optional: put that address in `AppConfig.PUBLIC_SERVER_URL` so it is the default, or open the
    web build with `?server=wss://...`, or run the exe with `-- --server-url=wss://...`.
 

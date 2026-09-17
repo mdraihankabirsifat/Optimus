@@ -5,7 +5,7 @@ extends Node
 
 # --- Identity -----------------------------------------------------------------
 ## Change the public title here and nowhere else.
-const GAME_TITLE := "SIX WAYS DOWN"
+const GAME_TITLE := "ESCAVE"
 const TEAM_NAME := "Team Optimus"
 
 # --- Gravity Move (see docs/CORE_MECHANICS.md) --------------------------------

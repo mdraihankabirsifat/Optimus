@@ -200,8 +200,24 @@ everything above is complete and committed, and it is bound by the abort gate in
 |---|---|---|---|
 | NET-007 | Deploy the server to Render | P2 | Needs the team's Render account. Steps in docs/NETWORKING.md |
 | SHIP-001 | Windows exe on a machine without Godot | P0 | Plays a race to results |
-| SHIP-006 | 60-90 s video | P0 | Shot list in docs/SUBMISSION_CHECKLIST.md |
 | SHIP-007 | itch.io submission | P0 | Before 11:59 PM, 17 Sept |
+| SHIP-008 | Performance on a modest machine | P1 | Measured on an M4 only: 60 fps capped, 104 draw calls, 65 MB |
+| FEEL-005/006 | Turn time and acceleration | P0/P1 | Sliders are in Settings; a human has to play and pick the values |
+| SHIP-P2-2 | Human playtest of the duel | P0 | Weapon timing, bot difficulty, arena readability |
+| P3-10 | Title bar on the Windows exe | P1 | Built; confirm on a standalone exe |
+
+### Done 17 September (audit, fog, Mac pacing, assets)
+
+| ID | Note |
+|---|---|
+| — | The ten bugs in `GAME_ANALYSIS_BUGS_AND_FEATURES.md`, all fixed and covered by tests |
+| — | Real leak found by `tests/leak_probe`: unplaced decor nodes. Six races leaked 347 Node3Ds; object count is now flat |
+| ART-008 | Fog is a depth gradient per environment. `test_themes` checks near/mid/far readability for all four |
+| — | macOS frame pacing: the frame rate now follows the display refresh. 95% of frames 15.9-17.5 ms (was 6.5-18.7), late frames 9.8% -> 0.5% |
+| SHIP-002 | Web build driven in headless Chrome: menu, name, lobby, a real race. Fixed a web-only error storm from the key-label lookup |
+| SHIP-005 | 14 store screenshots in `builds/trailer/`, including the duel and the Champion |
+| SHIP-006 | 80 s trailer recorded to the Prompt-3 shot list, ending on the Champion (`tests/trailer.gd`) |
+| — | Renamed the game to **Escave** (`AppConfig.GAME_TITLE`, window title, exe, bundle id, docs, Docker and Render) |
 
 ---
 

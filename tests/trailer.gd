@@ -1,182 +1,251 @@
 extends Node
-## SHIP-005 / SHIP-006: a scripted gameplay trailer and store screenshots.
+## SHIP-005 / SHIP-006: the submission trailer and store screenshots, scripted to the shot
+## list in docs/SUBMISSION_CHECKLIST.md. It ends where every race now ends: the Freedom
+## Duel and the Champion.
 ##
-## Record the video (Godot's movie writer runs on a fixed clock, so this is frame-exact):
+## Record (the movie writer runs on a fixed clock, so this is frame-exact):
 ##   godot --write-movie builds/trailer/trailer.avi --fixed-fps 30 res://tests/trailer.tscn
-## Screenshots are written to builds/trailer/*.png on the way through.
+## Screenshots land in builds/trailer/ on the way through.
 
 const SEED := 4242
 const OUT := "res://builds/trailer"
 
 var world: Node3D
+var player: PlayerController
+var mc: MatchController
 var cam: Camera3D
 var caption: Label
 var card: ColorRect
 var card_title: Label
 var card_sub: Label
-var logo: Control
 var _follow: Node3D
-var _follow_offset := Vector3.ZERO
+var _drive := false
 
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT)
-	SettingsManager.camera_effects = true
 	GameState.cave_size = 1
 	GameState.bot_skill = 2
-	GameState.prepare_match(SEED, 4)
+	GameState.theme_id = "stone_age"
+	GameState.prepare_match(SEED, 3)
 	world = load("res://scenes/game/game_world.tscn").instantiate()
+	# The root is still setting up its children during _ready, so this has to be deferred.
 	get_tree().root.add_child.call_deferred(world)
 	await get_tree().process_frame
 	await get_tree().process_frame
 	get_tree().current_scene = world
-	_build_overlay()
+	await get_tree().process_frame
+	player = world.local_player()
+	mc = world.match_controller
 	cam = Camera3D.new()
-	cam.fov = 70.0
+	cam.fov = 72.0
 	world.add_child(cam)
-	world.hud.visible = false
+	_build_overlay()
 
-	# --- 0: title card while the countdown runs underneath
+	# 0-4  title card, countdown running underneath
 	_card(true, AppConfig.GAME_TITLE, "a race where gravity is yours alone")
-	await _wait(4.2)
+	await _beat(4.0)
 	_card(false)
 
-	# --- 1: chase a bot through the cave
-	var bots: Array = world.bots
-	_chase(bots[0])
-	_caption("Race bots through a cave none of you has seen.")
-	await _wait(6.0)
-	_shot("store_1_chase")
-	_chase(bots[2])
-	_caption("They only know what they have explored. So do you.")
-	await _wait(5.0)
+	# 4-9  the spawn chamber and GO
+	_hud(false)
+	var spawn := CaveBuilder.cell_to_world(world.graph.spawn_cell)
+	cam.global_position = spawn + Vector3(0, 1.0, 6.5)
+	cam.look_at(spawn, Vector3.UP)
+	cam.make_current()
+	_caption("Race four rivals to an exit none of you has seen.")
+	await _beat(5.0)
+	_shot("store_01_spawn")
 
-	# --- 2: three racers, three floors, one corridor
-	_follow = null
-	var stage := _three_surfaces(bots)
-	_caption("Gravity is personal. Floor, wall, ceiling -- same corridor, each one upright.")
-	var t := 0.0
-	while t < 7.0:
-		var a := t / 7.0
-		# From the far end of the corridor, drifting in: floor, wall and ceiling all in frame.
-		cam.global_position = stage["centre"] - stage["axis"] * (7.5 - 2.0 * a) - stage["side"] * 1.2 + Vector3(0, -0.4, 0)
-		cam.look_at(stage["centre"] + stage["side"] * 0.6, Vector3.UP)
-		if absf(t - 3.5) < 0.02:
-			_shot("store_2_three_surfaces")
-		t += await _step()
-	for b in bots:
-		(b as PlayerController).get_node("BotController").set_physics_process(true)
-
-	# --- 3: first person, the flip
-	var player: PlayerController = get_tree().get_first_node_in_group("local_player")
+	# 9-17  first person: hold G, read the preview, turn onto the wall
 	player.camera.make_current()
-	world.hud.visible = true
-	_caption("Hold G. The HUD shows where each key will send you.")
-	player.head.rotation.x = -0.1
+	_hud(true)
+	_drive = true
+	_caption("Five Gravity Moves. Yours alone.")
+	await _beat(3.0)
+	_drive = false
 	Input.action_press("gravity_mod")
-	await _wait(2.4)
-	_shot("store_3_gravity_preview")
+	await _beat(1.6)
+	_shot("store_02_gravity_preview")
 	Input.action_release("gravity_mod")
-	world.hud.visible = false
-	# The flip, seen from outside: a bot on the floor turns the ceiling into its floor.
-	var flipper := bots[3] as PlayerController
-	flipper.get_node("BotController").set_physics_process(false)
-	flipper.move_input = Vector2.ZERO
-	flipper.global_position = stage["centre"] + Vector3(0, -2.6, 0)
-	flipper.velocity = Vector3.ZERO
-	flipper.gravity.charges = 5
+	var axes: Dictionary = player.movement_axes()
+	player.gravity.request_shift(axes["right"])
+	await _beat(3.4)
+	_shot("store_03_on_the_wall")
+
+	# 17-23  walking the wall
+	_caption("Walls become floors. You walk where you look.")
+	_drive = true
+	await _beat(6.0)
+	_drive = false
+
+	# 23-30  flip at a shaft and fall upward
+	var shaft := _find_shaft()
+	if shaft != Vector3i.MAX:
+		player.global_position = CaveBuilder.floor_position(shaft)
+		player.velocity = Vector3.ZERO
+	_caption("Ceilings become roads. A shaft only climbs if you flip.")
+	await _beat(1.6)
+	player.gravity.request_inversion()
+	await _beat(5.4)
+	_shot("store_04_ceiling")
+
+	# 30-36  three racers, three surfaces, from outside
+	_hud(false)
+	var stage := _three_surfaces()
+	# Keep the local racer out of a shot that is about the other three.
+	player.global_position = CaveBuilder.floor_position(world.graph.spawn_cell)
+	player.velocity = Vector3.ZERO
 	cam.make_current()
-	cam.global_position = stage["centre"] - stage["axis"] * 5.5 + stage["side"] * 2.0
-	cam.look_at(stage["centre"], Vector3.UP)
-	_caption("G + Space: the ceiling becomes your floor. Five Moves. Spend them anywhere.")
-	await _wait(1.0)
-	flipper.gravity.request_inversion()
-	await _wait(0.3)
-	_shot("store_4_the_flip")
-	await _wait(2.4)
-	flipper.get_node("BotController").set_physics_process(true)
+	_caption("Freedom is personal: same chamber, three floors.")
+	# A chamber is 7 units across, so the camera has to sit inside it, in a corner, wide.
+	cam.fov = 100.0
+	var t := 0.0
+	while t < 6.0:
+		var a := t / 6.0
+		var swing := lerpf(-0.5, 0.5, a)
+		cam.global_position = stage["centre"] - stage["axis"] * 2.2 \
+			- stage["side"] * (2.2 - swing) + Vector3(0, 0.3 * swing, 0)
+		cam.look_at(stage["centre"], Vector3.UP)
+		if absf(t - 3.0) < 0.05:
+			_shot("store_05_three_surfaces")
+		t += await _step()
+	cam.fov = 72.0
+	_release_bots()
 
-	# --- 4: hazards montage
-	for kind in ["fire", "piston", "spider"]:
-		var target := _find_hazard(kind)
-		if target == null:
-			continue
-		cam.make_current()
-		_follow = null
-		var text: String = {"fire": "Fire burns the floor -- walk the wall past it.",
-			"piston": "Pistons slam on a beat.",
-			"spider": "Spiders own the floor. Not the ceiling."}[kind]
-		_caption(text)
-		var base: Vector3 = target.global_position
-		var d := 0.0
-		while d < 3.2:
-			var ang := 0.6 + d * 0.25
-			cam.global_position = base + Vector3(cos(ang) * 4.5, 1.0 if kind != "piston" else -1.5, sin(ang) * 4.5)
-			cam.look_at(base + Vector3(0, -1.5 if kind == "piston" else 0.3, 0), Vector3.UP)
-			d += await _step()
-		_shot("store_5_%s" % kind)
-
-	# --- 5: DOF
+	# 36-41  the theme, measured live
 	player.camera.make_current()
-	world.hud.visible = true
-	# Stage an explored neighbourhood so the map has something to show.
-	var near: Dictionary = world.graph.distances_from(world.graph.spawn_cell)
-	for c: Vector3i in near:
-		if int(near[c]) <= 5 and c.y == world.graph.spawn_cell.y:
-			world.visited_cells[c] = true
-	player.global_position = CaveBuilder.floor_position(world.graph.spawn_cell) + Vector3(0, 0.3, 0)
-	_caption("DOF: the degrees of freedom around you, counted live from the real cave.")
-	await _wait(4.0)
+	_hud(true)
+	var junction := _find_junction()
+	if junction != Vector3i.MAX:
+		player.global_position = CaveBuilder.floor_position(junction)
+		player.velocity = Vector3.ZERO
+	_caption("DOF: the degrees of freedom around you, counted from the real cave.")
+	await _beat(3.0)
+	_shot("store_06_dof")
 	world.hud.toggle_map()
-	_caption("Your map only knows where you have been. The exit is never on it.")
-	await _wait(3.0)
-	_shot("store_6_hud_map")
+	await _beat(2.0)
+	_shot("store_07_map")
 	world.hud.toggle_map()
-	world.hud.visible = false
 
-	# --- 6: the finish
-	cam.make_current()
-	var finish := CaveBuilder.cell_to_world(world.graph.finish_cell)
-	_caption("First to the amber pillar wins.")
-	var f := 0.0
-	while f < 5.0:
-		cam.global_position = finish + Vector3(cos(f * 0.4) * 3.4, -1.4 + f * 0.12, sin(f * 0.4) * 3.4)
-		cam.look_at(finish + Vector3(0, -2.0, 0), Vector3.UP)
-		f += await _step()
-	_shot("store_7_finish")
+	# 41-46  qualify first
+	player.global_position = CaveBuilder.floor_position(world.graph.finish_cell)
+	await _beat(1.2)
+	_caption("First to the pillar qualifies.")
+	mc._on_finish_body_entered(player)
+	await _beat(4.0)
+	_shot("store_08_qualified")
 
-	# --- 7: end card
+	# 46-50  the challenger arrives, the duel begins
+	_caption("The second racer out is the challenger.")
+	mc._on_finish_body_entered(world.bots[0])
+	await _beat(4.0)
+	_shot("store_09_duel_intro")
+
+	# 50-60  the fight
+	var foe: PlayerController = world.bots[0]
+	_caption("Pulse Blaster. Qualified 1st keeps three degrees of freedom.")
+	for i in 7:
+		_aim_and_fire(foe, "pulse")
+		# A trailer should end on a win: keep the demo racer standing through the exchange.
+		if _duel_running():
+			player.health.hearts = AppConfig.DUEL_HEARTS
+		await _beat(1.3)
+		if i == 3:
+			_shot("store_10_duel_fight")
+
+	# 60-66  Axis Lock and the Freedom Core
+	_caption("Take a freedom away. Win one back.")
+	_aim_and_fire(foe, "lock")
+	await _beat(2.2)
+	_shot("store_11_axis_lock")
+	if _duel_running():
+		world.duel._core_timer = 0.2
+		player.health.hearts = AppConfig.DUEL_HEARTS
+	await _beat(3.8)
+
+	# 66-71  sudden death
+	if _duel_running() and not world.duel.sudden_death:
+		world.duel.duel_time = AppConfig.SUDDEN_DEATH_AT - 0.2
+	_caption("Sudden death: every hit counts double." if _duel_running() else "The duel decides the Champion.")
+	if _duel_running():
+		player.health.hearts = AppConfig.DUEL_HEARTS
+	await _beat(4.6)
+	_shot("store_12_sudden_death")
+
+	# 71-76  the last hit, the Champion, then the real results screen
+	if _duel_running() and foe.health.hearts > 1.0:
+		foe.health.hearts = 0.5
 	_caption("")
-	_card(true, AppConfig.GAME_TITLE, "%s  ·  BUET Robotics Society GameJam 2026  ·  Theme: Degree of Freedom" % AppConfig.TEAM_NAME)
-	await _wait(4.0)
+	for i in 4:
+		if not _duel_running():
+			break
+		player.health.hearts = AppConfig.DUEL_HEARTS
+		_aim_and_fire(foe, "pulse")
+		await _beat(0.9)
+	# In-world CHAMPION callout first; the results screen replaces it a moment later.
+	await _beat(1.2)
+	_shot("store_13_champion")
+	# GameWorld routes to the results screen once the match ends, which frees the world.
+	var waited := 0.0
+	while waited < 8.0 and not _on_results():
+		waited += await _step()
+	await _beat(1.2)
+	_shot("store_14_results")
+
+	# 76-80  end card
+	_caption("")
+	_card(true, AppConfig.GAME_TITLE,
+		"%s  ·  Bot Race offline, Online and Mixed  ·  BUET Robotics Society GameJam 2026" % AppConfig.TEAM_NAME)
+	await _beat(4.0)
 	get_tree().quit()
 
 
-## Freeze three bots in one straight corridor: one on the floor, one on a wall, one on the
-## ceiling. Returns the corridor centre and axes for the camera move.
-func _three_surfaces(bots: Array) -> Dictionary:
+## True while the duel is still being fought and nothing has been freed under us.
+func _duel_running() -> bool:
+	return is_instance_valid(world) and world.duel != null \
+		and world.duel.phase == FreedomDuel.Phase.FIGHT and is_instance_valid(player)
+
+
+func _on_results() -> bool:
+	var scene := get_tree().current_scene
+	return scene != null and scene.scene_file_path.ends_with("results.tscn")
+
+
+func _aim_and_fire(target: PlayerController, kind: String) -> void:
+	if not _duel_running() or not is_instance_valid(target):
+		return
+	var eye := player.head.global_position
+	var dir := (target.global_position + Vector3(0, 0.6, 0) - eye).normalized()
+	player.head.look_at(target.global_position + Vector3(0, 0.6, 0), Vector3.UP)
+	world.duel.fighters[player]["pulse_cd" if kind == "pulse" else "lock_cd"] = 0.0
+	world.duel.fire(player, kind, eye, dir)
+
+
+## Three bots on three surfaces of one chamber: floor, wall and ceiling. It has to be a
+## chamber -- in a 4-unit tunnel a racer on the floor and one on the ceiling nearly touch --
+## and the camera stands inside it, in a corner, with a wide lens.
+func _three_surfaces() -> Dictionary:
 	var g: CaveGraph = world.graph
-	var cell := g.spine[3]
-	var axis_index := -1
-	for c: Vector3i in g.sorted_cells():
-		var ax := g.straight_axis(c)
-		if ax != -1 and not g.features_at(c).any(func(fe: Dictionary) -> bool: return fe["kind"] in ["piston", "spider", "wind"]):
-			var fire := false
-			for h: Dictionary in g.hazards:
-				fire = fire or h["cell"] == c
-			if not fire:
-				cell = c
-				axis_index = ax
-				break
+	var cell := g.spawn_cell
+	for f: Dictionary in g.features:
+		if f["kind"] == "landmark" and not _has_fire(f["cell"]):
+			cell = f["cell"]
+			break
 	var centre := CaveBuilder.cell_to_world(cell)
-	var axis := Vector3(CaveGraph.DIRS[maxi(axis_index, 0)])
+	var axis := Vector3(CaveGraph.DIRS[CaveGraph.DIR_PLUS_X])
+	for d: int in CaveGraph.FLAT_DIRS:
+		if g.is_linked(cell, d):
+			axis = Vector3(CaveGraph.DIRS[d])
+			break
 	var side := Vector3.UP.cross(axis).normalized()
+	var reach := CaveBuilder.CHAMBER_HALF - 1.0
 	var dirs := [Vector3.DOWN, side, Vector3.UP]
-	for i in 3:
-		var b := bots[i] as PlayerController
+	for i in mini(3, world.bots.size()):
+		var b := world.bots[i] as PlayerController
 		b.get_node("BotController").set_physics_process(false)
 		b.move_input = Vector2.ZERO
-		b.global_position = centre + dirs[i] * 2.8 + axis * (float(i) - 1.0) * 1.6
+		b.global_position = centre + dirs[i] * reach + axis * (float(i) - 1.0) * 2.0
 		b.velocity = Vector3.ZERO
 		b.gravity.charges = 5
 		if i == 1:
@@ -186,32 +255,52 @@ func _three_surfaces(bots: Array) -> Dictionary:
 	return {"centre": centre, "axis": axis, "side": side}
 
 
-func _find_hazard(kind: String) -> Node3D:
-	for n in get_tree().get_nodes_in_group("hazards"):
-		if kind == "fire" and n is FireHazard:
-			return n
-		if kind == "piston" and n is PistonHazard:
-			return n
-		if kind == "spider" and n is SpiderEnemy:
-			return n
-	return null
+func _has_fire(cell: Vector3i) -> bool:
+	for h: Dictionary in world.graph.hazards:
+		if h["cell"] == cell:
+			return true
+	return false
 
 
-func _chase(target: Node3D) -> void:
-	_follow = target
-	cam.make_current()
+func _release_bots() -> void:
+	for b: Node3D in world.bots:
+		var c := b.get_node_or_null("BotController")
+		if c != null:
+			c.set_physics_process(true)
 
 
-func _process(delta: float) -> void:
-	if _follow == null or cam == null:
+func _find_shaft() -> Vector3i:
+	for c: Vector3i in world.graph.sorted_cells():
+		if world.graph.is_linked(c, CaveGraph.DIR_UP):
+			return c
+	return Vector3i.MAX
+
+
+func _find_junction() -> Vector3i:
+	for c: Vector3i in world.graph.sorted_cells():
+		if world.graph.degrees_of_freedom(c) >= 3:
+			return c
+	return Vector3i.MAX
+
+
+func _process(_delta: float) -> void:
+	if _drive and is_instance_valid(player) and is_instance_valid(world):
+		player.move_input = Vector2(0, -1)
+		player.sprint_input = true
+	if _follow != null and cam != null and cam.current:
+		var racer := _follow as PlayerController
+		var up := racer.gravity.local_up()
+		cam.global_position = racer.global_position + up * 2.0 + racer.global_basis.z * 4.2
+		cam.look_at(racer.global_position + up * 0.5, up)
+
+
+func _hud(on: bool) -> void:
+	if not is_instance_valid(world):
 		return
-	var racer := _follow as PlayerController
-	var up := racer.gravity.local_up()
-	var v := racer.velocity - up * racer.velocity.dot(up)
-	var fwd := v.normalized() if v.length() > 1.0 else -racer.global_basis.z
-	var want := racer.global_position + up * 2.0 - fwd * 4.2
-	cam.global_position = cam.global_position.lerp(want, 1.0 - exp(-5.0 * delta))
-	cam.look_at(racer.global_position + up * 0.5 + fwd * 1.5, up)
+	if world.hud != null:
+		world.hud.visible = on
+	if world.duel_hud != null:
+		world.duel_hud.visible = on
 
 
 func _build_overlay() -> void:
@@ -236,11 +325,10 @@ func _build_overlay() -> void:
 	card.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(card)
 	var col := UiKit.centre_column(card, 16)
-	logo = UiKit.logo(180.0)
-	col.add_child(logo)
+	col.add_child(UiKit.logo(180.0))
 	card_title = UiKit.title("", 104)
 	col.add_child(card_title)
-	card_sub = UiKit.title("", 26, UiKit.TEXT_DIM)
+	card_sub = UiKit.title("", 24, UiKit.TEXT_DIM)
 	col.add_child(card_sub)
 
 
@@ -259,8 +347,10 @@ func _step() -> float:
 	return get_process_delta_time()
 
 
-func _wait(seconds: float) -> void:
-	await get_tree().create_timer(seconds).timeout
+func _beat(seconds: float) -> void:
+	var left := seconds
+	while left > 0.0:
+		left -= await _step()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 

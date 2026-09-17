@@ -2,7 +2,7 @@ extends Node
 ## Dedicated server entry point. Run headless with --server after the "--" separator:
 ##
 ##     godot --headless --path . -- --server --port=8910          (from source)
-##     SixWaysDown.exe --headless -- --server --port=8910          (exported build)
+##     Escave.exe --headless -- --server --port=8910          (exported build)
 ##
 ## From source, passing this scene directly also works:
 ##     godot --headless --path . res://scenes/net/server.tscn -- --port=8910

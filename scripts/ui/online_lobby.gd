@@ -155,7 +155,7 @@ func _build_connect() -> void:
 	if _show_server:
 		grid.add_child(UiKit.label("Server", 22))
 		grid.add_child(_url_edit)
-		var hint := UiKit.label("Start a local server with  SixWaysDown.exe --headless -- --server  "
+		var hint := UiKit.label("Start a local server with  Escave.exe --headless -- --server  "
 			+ "(or from source: godot --headless --path . -- --server). A sleeping free Render server can take up to a minute to wake.", 16, UiKit.TEXT_DIM)
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		hint.custom_minimum_size = Vector2(760, 0)
